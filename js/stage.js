@@ -103,7 +103,8 @@ export function createStage(ctx) {
 
   // opponent slot
   let opp = null, hpBar = null;
-  const oppPos = new THREE.Vector3(0, 0, -6.5);
+  const oppPos = new THREE.Vector3(0, 1.1, -8);
+  { const dais = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(2.6, 3, 1.1, 24), M(0xe0d6c0))); dais.position.set(0, 0.55, -8); island.add(dais); }
   function hpSprite(frac) {
     const c = document.createElement('canvas'); c.width = 256; c.height = 36; const x = c.getContext('2d');
     x.fillStyle = 'rgba(20,20,30,.8)'; x.beginPath(); x.roundRect(0, 0, 256, 36, 18); x.fill();
@@ -739,7 +740,7 @@ export function createStage(ctx) {
     clearUI();
     if (win) {
       for (let i = 0; i < 4; i++) setTimeout(() => particles(new THREE.Vector3((Math.random() - 0.5) * 10, 4 + Math.random() * 3, -2 + Math.random() * 4), U.pick([0xffd166, 0x7fd0ff, 0xff8fab, 0x7ed58f]), 60, 8), i * 220);
-      if (opp && ['guardian', 'shade', 'dummy', 'imp', 'rival'].includes(S.oppKind)) tween(1.2, t => { opp.rotation.x = -t * 0.5; opp.position.y = -t * 2; opp.scale.setScalar((S.oppKind === 'shade' ? 2.6 : S.oppKind === 'guardian' ? 1.25 : 1) * (1 - t * 0.5)); });
+      if (opp && ['guardian', 'shade', 'dummy', 'imp', 'rival'].includes(S.oppKind)) tween(1.2, t => { opp.rotation.x = -t * 0.5; opp.position.y = oppPos.y - t * 2; opp.scale.setScalar((S.oppKind === 'shade' ? 2.6 : S.oppKind === 'guardian' ? 1.25 : 1) * (1 - t * 0.5)); });
       else if (opp && opp.userData.body) nod();
       tween(0.8, t => { hero.position.y = Math.sin(t * Math.PI) * 1.2; hero.rotation.y = Math.PI + t * Math.PI * 2; });
     } else {
@@ -759,8 +760,9 @@ export function createStage(ctx) {
   };
 
   S.update = (dt, t) => {
-    camera.position.set(0, 4.6, 12.5);
-    camera.lookAt(0, 3.6, -2);
+    // framed so the challenger stands above the answer tablets
+    camera.position.set(0, 3.4, 12.5);
+    camera.lookAt(0, 1.2, -2);
     if (S.shake > 0) { S.shake -= dt; camera.position.x += (Math.random() - 0.5) * S.shake; camera.position.y += (Math.random() - 0.5) * S.shake; }
     sky.position.copy(camera.position);
     camera.updateMatrixWorld();
@@ -768,7 +770,7 @@ export function createStage(ctx) {
     for (const f of S.flames) { const s = 1 + Math.sin(t * 13 + f.position.x) * 0.12; f.scale.set(s, 1 + Math.sin(t * 9) * 0.18, s); f.userData.light.intensity = 5 + Math.sin(t * 17) * 1.2; }
     for (const c of clouds) { c.position.x += dt * 1.2; if (c.position.x > 90) c.position.x = -90; }
     if (opp) {
-      if (opp.userData.float) opp.position.y = 1.2 + Math.sin(t * 2) * 0.3;
+      if (opp.userData.float) opp.position.y = oppPos.y + 1.2 + Math.sin(t * 2) * 0.3;
       if (opp.userData.spin) opp.userData.spin.rotation.y += dt * 1.2;
       if (opp.userData.legs) ctx.animatePerson(opp, 0, dt);
       if (opp.userData.flap) { opp.userData.book.position.y = 2.6 + Math.sin(t * 3) * 0.35; opp.userData.flap.forEach(h => { h.rotation.z = h.userData.sd * (0.35 + Math.sin(t * 9) * 0.45); }); }

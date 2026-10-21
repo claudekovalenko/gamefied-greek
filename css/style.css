@@ -481,3 +481,5 @@ body.in-stage .main > .s3 { pointer-events: none; }
 .wr-ic { font-size: 1.4rem; }
 .wbt-box.elite { border-color: #e0453a; box-shadow: 0 0 40px rgba(224, 69, 58, .45); }
 .wbt-box.elite .wbt-h { color: #c9302b; }
+.wvig { position: absolute; inset: 0; pointer-events: none; z-index: 1; background: radial-gradient(ellipse at center, transparent 55%, rgba(20, 10, 0, .28) 100%); }
+.world .whud { z-index: 2; }

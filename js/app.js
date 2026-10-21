@@ -309,6 +309,21 @@
     const at = P.i; clearTimeout(P.autoT);
     P.autoT = setTimeout(() => { if (P && P.i === at) next(); }, 2200);
   }
+  const MINI_HELP = {
+    rain: 'Tap the falling stone that matches the meaning before it hits the ground!',
+    defense: 'Tap the case of each Greek form before it reaches you!',
+    forge: 'Tap the tense, then the person and number.',
+    race: 'Tap the next piece of the translation. Wrong picks cost time!',
+  };
+  function renderMini(q) {
+    main.innerHTML = `<div class="s3">${header()}<div class="s3center"><div class="minititle">🎮 ${esc(q.title)}</div></div><div class="foot s3foot" id="foot"><div class="muted center s3help">${MINI_HELP[q.game]}</div></div></div>`;
+    sfx('combo');
+    ST().mini(q, res => {
+      if (!P || P.q !== q) return;
+      P.xp += res.hits * 3;
+      answer(res.ok, Object.assign({}, q, { explain: res.text, retry: true }));
+    });
+  }
   function renderQ3D(q) {
     const R = q.reading ? KG.readings[q.reading] : null;
     readerReading = R;
@@ -332,6 +347,10 @@
     const q = P.qs[P.i]; P.answered = false; P.q = q;
     if (q.type === 'teach') return renderTeach(q);
     if (q.type === 'trial') return renderTrial(q);
+    if (q.type === 'mini') {
+      if (!P.is3D) { P.qs.splice(P.i, 1, ...q.fallback); return renderQ(); }
+      return renderMini(q);
+    }
     if (P.is3D) return renderQ3D(q);
     let body = '';
     if (q.type === 'mc') {

@@ -375,7 +375,8 @@ window.KG = window.KG || {};
       qs.push(mc('Parse this word', w.parse, others(w.parse, same), { big: w.w, explain: `${gk(w.w)} from ${gk(w.lemma)} "${U.esc(w.gloss)}"` }));
     }
     const out = shuffle(qs);
-    out.push({ type: 'order', prompt: 'Build the translation', reading: id, chunks: R.chunks, extras: R.extras || [] });
+    const order = { type: 'order', prompt: 'Build the translation', reading: id, chunks: R.chunks, extras: R.extras || [] };
+    out.push(R.chunks.length >= 3 ? { type: 'mini', game: 'race', title: 'Verse Race', reading: id, chunks: R.chunks, extras: R.extras || [], fallback: [order] } : order);
     out.push({ type: 'free', prompt: 'Now translate it in your own words', reading: id });
     return out;
   }
@@ -418,6 +419,66 @@ window.KG = window.KG || {};
     return { type: 'trial', foe: f[0], title: f[1], say: f[2] };
   }
   const chunks = (a, sizes) => { const out = []; let i = 0; for (const n of sizes) { if (i < a.length) out.push(a.slice(i, i + n)); i += n; } if (i < a.length) out.push(a.slice(i)); return out; };
+  // ── mini-games (3D); each carries a plain-question fallback for 2D ──
+  const NOUN_LESSONS = ['article', 'n2m', 'n2n', 'n1', 'n3', 'adj', 'pron', 'demo', 'pas', 'rel'];
+  const VERB_LESSONS = ['pai', 'eimi', 'impf', 'fut', 'aor1', 'aor2', 'contract', 'mp', 'aorp', 'perf'];
+  const TENSES = ['present', 'imperfect', 'future', 'aorist', 'perfect'];
+  function tenseOf(p) {
+    const t = (p.title + ' ' + (p.tag || '')).toLowerCase();
+    return TENSES.find(x => t.includes(x)) || (/aor/.test(t) ? 'aorist' : /perf/.test(t) ? 'perfect' : /impf/.test(t) ? 'imperfect' : 'present');
+  }
+  // verb forms with every (tense, person-number) reading they allow
+  E.verbForms = lessons => {
+    const map = new Map();
+    for (const k of lessons) for (const p of KG.grammar[k].paradigms || []) {
+      if (p.rows.length !== 6 || !/^1st Sg/.test(p.rows[0])) continue;
+      const tense = tenseOf(p);
+      p.rows.forEach((r, i) => {
+        const f = p.forms[i][0], e = map.get(f) || { form: f, lemma: p.lemma, reads: [] };
+        e.reads.push({ tense: tense[0].toUpperCase() + tense.slice(1), pn: r });
+        map.set(f, e);
+      });
+    }
+    return [...map.values()];
+  };
+  // noun-like forms with every case they can be
+  E.caseForms = lessons => {
+    const map = new Map();
+    for (const k of lessons) for (const c of cells(KG.grammar[k])) {
+      const cs = c.label.split(' ')[0];
+      if (!['Nominative', 'Genitive', 'Dative', 'Accusative'].includes(cs)) continue;
+      const e = map.get(c.form) || { form: c.form, lemma: c.lemma, cases: [] };
+      if (!e.cases.includes(cs)) e.cases.push(cs);
+      map.set(c.form, e);
+    }
+    return [...map.values()];
+  };
+  const learnedUpTo = (list, node) => list.filter(k => { const n = E.nodes.find(x => x.lesson === k); return n && (n.index <= node.index); });
+  function miniFor(node) {
+    if (node.type === 'vocab') {
+      const words = E.vocabSet(node.set), pool = KG.vocab.slice(Math.max(0, node.set * 10 - 30), node.set * 10 + 20);
+      return { type: 'mini', game: 'rain', title: 'Word Rain', targets: sample(words, 6).map(w => ({ g: w.g, en: w.en })), pool: pool.map(w => w.g),
+        fallback: sample(words, 3).map(w => vocabQ(w, pool, 'g2e')) };
+    }
+    if (node.type === 'grammar' && NOUN_LESSONS.includes(node.lesson)) {
+      const forms = E.caseForms(learnedUpTo(NOUN_LESSONS, node));
+      const mine = E.caseForms([node.lesson]);
+      const stones = sample(mine, 5).concat(sample(forms.filter(f => !mine.includes(f)), 3));
+      return { type: 'mini', game: 'defense', title: 'Declension Defense', stones: U.shuffle(stones),
+        fallback: sample(cells(KG.grammar[node.lesson]), 3).map(c => E.parseQ(c, cells(KG.grammar[node.lesson]))) };
+    }
+    if (node.type === 'grammar' && VERB_LESSONS.includes(node.lesson)) {
+      const mine = E.verbForms([node.lesson]);
+      if (mine.length < 4) return null;
+      const all = E.verbForms(learnedUpTo(VERB_LESSONS, node));
+      const items = sample(mine, 4).concat(sample(all.filter(f => !mine.includes(f)), 1));
+      return { type: 'mini', game: 'forge', title: 'Parsing Forge', items, tenses: TENSES.map(t => t[0].toUpperCase() + t.slice(1)).filter(t => all.some(f => f.reads.some(r => r.tense === t))),
+        fallback: sample(cells(KG.grammar[node.lesson]), 3).map(c => E.parseQ(c, cells(KG.grammar[node.lesson]))) };
+    }
+    return null;
+  }
+  E.miniFor = miniFor;
+
   E.planFor = node => {
     const first = !E.stars(node.id);
     const plan = [];
@@ -428,16 +489,18 @@ window.KG = window.KG || {};
         plan.push(guided(mc(b.check.q, b.check.a, b.check.w, { explain: b.check.ex || '' })));
       });
       plan.push(trial(node));
-      return plan.concat(grammarQuestions(node.lesson, first ? 8 : 10));
+      const mg = miniFor(node);
+      return plan.concat(mg ? [mg] : [], grammarQuestions(node.lesson, first ? 7 : 9));
     }
     if (node.type === 'vocab') {
       const words = E.vocabSet(node.set), pool = KG.vocab.slice(Math.max(0, node.set * 10 - 30), node.set * 10 + 20);
-      if (!first) return [trial(node)].concat(vocabLessonQuestions(node.set));
+      if (!first) return [trial(node), miniFor(node)].concat(vocabLessonQuestions(node.set));
       for (const c of chunks(U.shuffle(words), [3, 3, 4])) {
         plan.push(teach({ words: c.map(w => ({ g: w.g, lex: w.lex, en: w.en, f: w.f })) }));
         for (const w of c) plan.push(guided(vocabQ(w, pool, 'g2e')));
       }
       plan.push(trial(node));
+      plan.push(miniFor(node));
       plan.push({ type: 'match', prompt: 'Match the pairs', pairs: sample(words, 5).map(w => [w.g, w.en]), greekLeft: true });
       for (const w of sample(words, 5)) plan.push(vocabQ(w, pool, 'e2g'));
       if (node.set > 0) for (const w of sample(KG.vocab.slice(0, node.set * 10), 2)) plan.push(vocabQ(w, pool, 'g2e'));

@@ -187,6 +187,14 @@ test('lesson plans: teach → guided → trial for every node, first play and re
       plan.forEach((q, j) => {
         if (q.type === 'teach') assert.ok(q.say || q.words || q.letters || q.items || q.reading, `${n.id}#${j}: empty teach`);
         else if (q.type === 'trial') assert.ok(q.foe && q.title, `${n.id}#${j}: trial`);
+        else if (q.type === 'mini') {
+          assert.ok(['rain', 'defense', 'forge', 'race'].includes(q.game), `${n.id}: mini game`);
+          assert.ok(q.fallback && q.fallback.length, `${n.id}: mini needs a 2D fallback`);
+          q.fallback.forEach((f, k) => checkQuestion(f, `${n.id}#${j} fallback ${k}`));
+          if (q.game === 'rain') assert.ok(q.targets.length >= 4 && q.pool.length >= 8);
+          if (q.game === 'defense') { assert.ok(q.stones.length >= 6); q.stones.forEach(st => assert.ok(st.cases.length, st.form)); }
+          if (q.game === 'forge') { assert.ok(q.items.length >= 4 && q.tenses.length >= 1); q.items.forEach(it => it.reads.forEach(r => assert.ok(q.tenses.includes(r.tense), `${n.id}: tense ${r.tense} offered`))); }
+        }
         else checkQuestion(q, `${n.id}#${j}`);
       });
     }

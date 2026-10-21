@@ -410,6 +410,12 @@ export function createStage(ctx) {
   function choose(g) {
     const p = g.userData.pick;
     if (p.type === 'opt') { if (S.answered) return; S.answered = true; S.h.pick(p.i); }
+    else if (p.type === 'mini' && MG) {
+      if (MG.q.game === 'rain') rainTap(g);
+      else if (MG.q.game === 'defense') { if (p.gate) defenseTap(g); }
+      else if (MG.q.game === 'forge') forgeTap(g);
+      else if (MG.q.game === 'race') raceTap(g);
+    }
     else if (p.type === 'mt') pickMatch(g);
     else if (p.type === 'stone') {
       if (S.answered) return;
@@ -456,8 +462,9 @@ export function createStage(ctx) {
     S.active = true; S.comboN = 0; aura.material.opacity = 0;
     hero.position.set(0, 0, 5.2); hero.rotation.set(0, Math.PI, 0);
   };
-  S.exit = () => { S.active = false; clearUI(); S.q = null; S.anims = []; };
+  S.exit = () => { S.active = false; clearUI(); S.q = null; S.anims = []; MG = null; };
   S.ask = (q, handlers) => {
+    MG = null;
     clearUI(); S.plank = null; S.q = q; S.h = handlers; S.answered = false; S.locked = false; S.big = null;
     if (q.type === 'mc') askMC(q);
     else if (q.type === 'match') askMatch(q);
@@ -515,6 +522,193 @@ export function createStage(ctx) {
     if (opp) { const y0 = opp.position.y; tween(0.6, t => { opp.position.y = y0 + (1 - ease(t)) * 8; }); }
     S.shake = 0.25;
   };
+  // ── mini-games ─────────────────────────────────────────────
+  // Each runs in the update loop and calls done({ ok, hits, total, text }) once.
+  let MG = null;
+  function miniBanner(text) {
+    const { hh, hw } = frame();
+    if (MG && MG.banner) ui.remove(MG.banner);
+    const b = banner(text, Math.min(hw * 1.9, 13), hh * 0.17); place(b, 0, hh * 0.8); introAnim(b, 0);
+    if (MG) MG.banner = b;
+  }
+  function miniEnd(ok, text) {
+    if (!MG || MG.over) return;
+    MG.over = true; const cb = MG.done, hits = MG.hits, total = MG.total;
+    setTimeout(() => { MG = null; cb({ ok, hits, total, text }); }, 500);
+  }
+  function removePick(g) { ui.remove(g); S.picks = S.picks.filter(x => x !== g); }
+  S.mini = (q, done) => {
+    clearUI(); S.q = q; S.answered = false; S.locked = false;
+    MG = { q, done, hits: 0, total: 0, t: 0, over: false, items: [] };
+    ({ rain: rainStart, defense: defenseStart, forge: forgeStart, race: raceStart })[q.game]();
+  };
+
+  // Word Rain: catch the Greek word that means the English target
+  function rainStart() { MG.round = 0; MG.total = MG.q.targets.length; rainRound(); }
+  function rainRound() {
+    for (const g of MG.items) removePick(g);
+    MG.items = [];
+    if (MG.round >= MG.q.targets.length) return miniEnd(MG.hits >= MG.total - 1, `You caught ${MG.hits} of ${MG.total} words.`);
+    const tgt = MG.q.targets[MG.round++], { hh, hw } = frame();
+    miniBanner(`Catch the word for: "${tgt.en}"`);
+    const words = U.shuffle([tgt.g, ...U.sample(MG.q.pool.filter(g => g !== tgt.g), 3)]);
+    const tw = hw * 0.44, th = hh * 0.13;
+    words.forEach((g, i) => {
+      const st = slab(g, tw, th, { greek: true });
+      const col = i % 2, x = (col ? 1 : -1) * hw * 0.48 + (Math.random() - 0.5) * hw * 0.1;
+      place(st, x, hh * 0.62 + i * hh * 0.16);
+      st.userData.pick = { type: 'mini', ok: g === tgt.g };
+      st.userData.vy = hh * (0.22 + MG.round * 0.025 + Math.random() * 0.05);
+      S.picks.push(st); MG.items.push(st);
+    });
+    MG.wait = false;
+  }
+  function rainUpdate(dt) {
+    if (MG.wait) return;
+    const { hh } = frame();
+    for (const g of MG.items) {
+      if (!g.visible) continue;
+      g.position.y -= g.userData.vy * dt; g.userData.base.y = g.position.y; g.rotation.z = Math.sin(MG.t * 3 + g.position.x) * 0.06;
+      if (g.position.y < -hh * 0.95) {
+        g.visible = false;
+        if (g.userData.pick.ok) { MG.wait = true; KG.app.sfx('bad'); oppReact(false); setTimeout(rainRound, 700); }
+      }
+    }
+  }
+  function rainTap(g) {
+    if (MG.wait || !g.visible) return;
+    if (g.userData.pick.ok) {
+      MG.hits++; MG.wait = true; KG.app.sfx('good'); heroCast();
+      orb(heroHand(), worldPos(g), 0xffd166, () => { glow(g); oppReact(true); });
+      setTimeout(rainRound, 800);
+    } else { KG.app.sfx('bad'); shatter(g); }
+  }
+
+  // Declension Defense: strike each marching form with its case
+  const CASES = ['Nominative', 'Genitive', 'Dative', 'Accusative'];
+  function defenseStart() {
+    const { hh, hw } = frame();
+    miniBanner('Declension Defense! Strike each form with its case');
+    MG.total = MG.q.stones.length; MG.idx = 0;
+    const tw = (hw * 1.92 - hw * 0.06 * 3) / 4, th = hh * 0.15;
+    MG.gates = CASES.map((c, i) => {
+      const g = slab(c.slice(0, 3) + '.', tw, th, { face: '#e9f0f8' });
+      place(g, -hw * 0.96 + tw / 2 + i * (tw + hw * 0.06), -hh * 0.66);
+      g.userData.pick = { type: 'mini', gate: c }; S.picks.push(g); return g;
+    });
+    defenseNext();
+  }
+  function defenseNext() {
+    if (MG.cur) { removePick(MG.cur); MG.cur = null; }
+    if (MG.idx >= MG.q.stones.length) return miniEnd(MG.hits >= MG.total - 2, `You defended against ${MG.hits} of ${MG.total} forms.`);
+    const st = MG.q.stones[MG.idx++], { hh, hw } = frame();
+    const g = slab(st.form, hw * 0.9, hh * 0.16, { greek: true, face: '#f3e7c8' });
+    place(g, 0, hh * 0.55); introAnim(g, 0);
+    g.userData.stone = st; g.userData.vy = hh * (0.13 + MG.idx * 0.012);
+    MG.cur = g; MG.lock = false;
+  }
+  function defenseUpdate(dt) {
+    const g = MG.cur, { hh } = frame();
+    if (!g || MG.lock) return;
+    g.position.y -= g.userData.vy * dt; g.userData.base.y = g.position.y;
+    if (g.position.y < -hh * 0.42) { MG.lock = true; KG.app.sfx('bad'); oppReact(false); shatter(g); setTimeout(defenseNext, 700); }
+  }
+  function defenseTap(gate) {
+    const g = MG.cur; if (!g || MG.lock) return;
+    MG.lock = true;
+    const st = g.userData.stone, ok = st.cases.includes(gate.userData.pick.gate);
+    heroCast();
+    if (ok) { MG.hits++; KG.app.sfx('good'); glow(gate); orb(heroHand(), worldPos(g), 0xffd166, () => { glow(g); setTimeout(defenseNext, 350); }); }
+    else {
+      KG.app.sfx('bad'); shatter(gate); setTimeout(() => { gate.visible = true; gate.scale.setScalar(1); }, 900);
+      const right = MG.gates.find(x => st.cases.includes(x.userData.pick.gate)); if (right) glow(right, 0xffb040);
+      setTimeout(defenseNext, 1100);
+    }
+  }
+
+  // Parsing Forge: name the tense, then the person and number
+  const PNS = ['1st Sg', '2nd Sg', '3rd Sg', '1st Pl', '2nd Pl', '3rd Pl'];
+  function forgeStart() { MG.total = MG.q.items.length; MG.idx = 0; forgeNext(); }
+  function forgeNext() {
+    clearUI(); MG.banner = null;
+    if (MG.idx >= MG.q.items.length) return miniEnd(MG.hits >= MG.total - 1, `You forged ${MG.hits} of ${MG.total} verbs.`);
+    MG.item = MG.q.items[MG.idx++]; MG.step = 0; MG.lock = false;
+    forgeStep();
+  }
+  function forgeStep() {
+    for (const g of [...S.picks]) removePick(g);
+    const { hh, hw, portrait } = frame(), it = MG.item;
+    miniBanner(MG.step === 0 ? `Parsing Forge: which TENSE is ${it.form}?` : `Now the PERSON and NUMBER of ${it.form}`);
+    if (!MG.big) {
+      const big = slab(it.form, hw * 1.2, hh * 0.2, { greek: true, face: '#3a3a44', color: '#ffd166' });
+      place(big, 0, hh * 0.42); introAnim(big, 0); MG.big = big;
+    }
+    const opts = MG.step === 0 ? MG.q.tenses : PNS;
+    const cols = portrait ? 2 : 3, gap = hw * 0.04, tw = (hw * 1.92 - gap * (cols - 1)) / cols, th = hh * 0.13;
+    opts.forEach((o, i) => {
+      const g = slab(o, tw, th, { face: '#f3e7c8' });
+      place(g, -hw * 0.96 + tw / 2 + (i % cols) * (tw + gap), hh * 0.12 - Math.floor(i / cols) * (th + gap));
+      introAnim(g, i * 0.04);
+      g.userData.pick = { type: 'mini', val: o }; S.picks.push(g);
+    });
+  }
+  function forgeTap(g) {
+    if (MG.lock) return;
+    const it = MG.item, v = g.userData.pick.val;
+    const fits = MG.step === 0 ? it.reads.some(r => r.tense === v) : it.reads.some(r => r.tense === MG.tense && r.pn === v) || it.reads.some(r => r.pn === v && !it.reads.some(x => x.tense === MG.tense));
+    heroCast();
+    if (fits) {
+      KG.app.sfx('good'); glow(g);
+      if (MG.step === 0) { MG.tense = v; MG.step = 1; MG.lock = true; setTimeout(() => { MG.lock = false; forgeStep(); }, 500); }
+      else { MG.hits++; MG.lock = true; S.shake = 0.15; orb(heroHand(), worldPos(MG.big), 0xff9f40, () => { glow(MG.big, 0xff9f40); particles(worldPos(MG.big), 0xff9f40, 60, 6); }); setTimeout(() => { MG.big = null; forgeNext(); }, 1000); }
+    } else {
+      KG.app.sfx('bad'); shatter(g); oppReact(false); MG.lock = true;
+      const r = it.reads[0];
+      miniBanner(`${it.form} = ${r.tense} ${r.pn}${it.reads.length > 1 ? ' (or ' + it.reads.slice(1).map(x => x.tense + ' ' + x.pn).join(', ') + ')' : ''}`);
+      setTimeout(() => { MG.big = null; forgeNext(); }, 2200);
+    }
+  }
+
+  // Verse Race: pick the next piece of the translation before time runs out
+  function raceStart() {
+    const R = KG.readings[MG.q.reading];
+    MG.total = MG.q.chunks.length; MG.idx = 0; MG.time = 5 + MG.q.chunks.length * 3.5; MG.left = MG.time; MG.built = [];
+    const { hh, hw, portrait } = frame();
+    const b = banner(R.words.map(w => w.w + w.p).join(' '), Math.min(hw * 1.94, 14), portrait ? hh * 0.36 : hh * 0.3, true);
+    place(b, 0, hh * 0.76); introAnim(b, 0);
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(hw * 1.9, hh * 0.035, 0.1), new THREE.MeshBasicMaterial({ color: 0xffd166 }));
+    place(bar, 0, hh * 0.5); MG.bar = bar; MG.barW = hw * 1.9;
+    raceChoices();
+  }
+  function raceChoices() {
+    for (const g of MG.items) removePick(g);
+    MG.items = [];
+    if (MG.idx >= MG.q.chunks.length) return miniEnd(true, `You finished the race with ${Math.ceil(MG.left)} seconds to spare!`);
+    const { hh, hw } = frame(), right = MG.q.chunks[MG.idx];
+    const pool = MG.q.chunks.slice(MG.idx + 1).concat(MG.q.extras).filter(c => c !== right);
+    const opts = U.shuffle([right, ...U.sample(U.uniq(pool), 2)]);
+    if (MG.line) ui.remove(MG.line);
+    MG.line = banner(MG.built.join(' ') || '…', Math.min(hw * 1.94, 14), hh * 0.2); place(MG.line, 0, hh * 0.24);
+    opts.forEach((o, i) => {
+      const g = slab(o, hw * 1.7, hh * 0.13, { face: '#f3e7c8' });
+      place(g, 0, -hh * 0.1 - i * hh * 0.17); introAnim(g, i * 0.05);
+      g.userData.pick = { type: 'mini', ok: o === right, val: o }; S.picks.push(g); MG.items.push(g);
+    });
+    MG.lock = false;
+  }
+  function raceUpdate(dt) {
+    MG.left -= dt;
+    if (MG.bar) { const f = Math.max(0, MG.left / MG.time); MG.bar.scale.x = Math.max(0.001, f); MG.bar.position.x = -MG.barW / 2 * (1 - f); MG.bar.material.color.setHex(f > 0.35 ? 0xffd166 : 0xe0453a); }
+    hero.position.z = 5.2 - (MG.idx / MG.total) * 6;
+    if (MG.left <= 0) miniEnd(false, `Time ran out after ${MG.idx} of ${MG.total} pieces. Read the verse again, then race once more!`);
+  }
+  function raceTap(g) {
+    if (MG.lock) return;
+    if (g.userData.pick.ok) { MG.hits++; MG.idx++; MG.built.push(g.userData.pick.val); KG.app.sfx('good'); glow(g); MG.lock = true; setTimeout(raceChoices, 350); }
+    else { KG.app.sfx('bad'); shatter(g); MG.left -= 2.5; S.shake = 0.2; }
+  }
+
+  S.debugMini = () => MG; // used by the browser tests
   S.orderLine = () => (S.order ? S.order.line.map(c => c.t) : []);
   S.lock = () => { S.locked = true; };
   // outcome animation for a multiple-choice answer (chosen may be -1 for timeouts)
@@ -555,7 +749,7 @@ export function createStage(ctx) {
   S.resize = () => {
     camera.fov = camera.aspect < 0.9 ? 70 : 55;
     camera.updateProjectionMatrix();
-    if (S.q && !S.answered) S.ask(S.q, S.h); // re-layout to the new screen shape
+    if (S.q && !S.answered && !MG && S.q.type !== 'mini') S.ask(S.q, S.h); // re-layout to the new screen shape
   };
 
   S.update = (dt, t) => {
@@ -578,6 +772,8 @@ export function createStage(ctx) {
     aura.scale.setScalar(1 + Math.sin(t * 4) * 0.08 + (S.comboN || 0) * 0.02); aura.rotation.z += dt;
     if (S.big) S.big.position.y = S.big.userData.base.y + Math.sin(t * 2) * 0.06;
     for (const p of S.picks) if (p.visible && p.userData.base && !(S.sel === p)) p.rotation.y = Math.sin(t * 1.3 + p.userData.base.x) * 0.04;
+    if (MG && !MG.over) { MG.t += dt; ({ rain: rainUpdate, defense: defenseUpdate, race: raceUpdate }[MG.q.game] || (() => {}))(dt); }
+    else if (!MG) hero.position.z += (5.2 - hero.position.z) * Math.min(1, dt * 4);
     S.anims = S.anims.filter(fn => fn(dt) !== false);
   };
   S.render = r => {

@@ -6,6 +6,23 @@ reading and translating the **New Testament** in the original.
 It is an installable web app (PWA): add it to your phone's home screen and it works offline.
 No account, no server, no build step. Your progress is saved on your device.
 
+## The adventure
+
+Koine Quest opens in a **3D world**, a third-person journey in the spirit of *The Hobbit*. You are
+**Theophilus**, an apprentice scribe, travelling through nine regions from Alphabet Hollow to the Great Library:
+
+- **Mentors** in each region give you the lessons as quests. The golden light and quest arrow show where to go next.
+- **Lost scrolls** on pedestals hold NT verses. Read and translate one to restore it.
+- **Guardians** block each region's gate until you beat them in a boss battle.
+- **Shades of Forgetting** roam the road. Touch one and you must remember a word to banish it.
+  These battles are your spaced-repetition review, and a wrong answer costs a heart.
+- **Glowing letters** line the road through Alphabet Hollow, and **coins** respawn every day.
+
+Controls: WASD/arrows to move, Shift to run, Space to jump, E to talk, drag to look around.
+On a phone, drag on the left side to walk, drag on the right to look, and use the on-screen buttons.
+The lesson map, review, arcade, codex and profile are one tap away (📜 🔁 👤). If a device can't run 3D,
+the app opens on the lesson map instead.
+
 ## How it plays
 
 | | |
@@ -89,6 +106,7 @@ npm run make-icons   # re-render icons/*.png from the SVGs (needs Playwright)
 | `js/data/curriculum.js` | the units/path, level titles and achievements |
 | `js/engine.js` | saved state, XP/levels/streaks, spaced repetition, question generators |
 | `js/app.js` | screens, lesson player, arcade, effects |
+| `js/world.js` | the 3D adventure (Three.js, vendored in `js/vendor/` under the MIT license) |
 | `sw.js`, `manifest.webmanifest`, `icons/` | PWA: offline cache and home-screen install |
 
 **Adding content** is mostly data entry: add a lesson to `KG.grammar`, a verse to `KG.readings`, then

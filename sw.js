@@ -1,10 +1,10 @@
 // Offline support: cache the app shell on install, serve cache-first,
 // and refresh cached files in the background when online.
-const CACHE = 'koine-quest-v1';
+const CACHE = 'koine-quest-v2';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/style.css',
   'js/data/alphabet.js', 'js/data/vocab.js', 'js/data/grammar.js', 'js/data/readings.js', 'js/data/curriculum.js',
-  'js/engine.js', 'js/app.js',
+  'js/engine.js', 'js/app.js', 'js/world.js', 'js/vendor/three.module.min.js',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png', 'icons/apple-touch-icon.png',
 ];
 

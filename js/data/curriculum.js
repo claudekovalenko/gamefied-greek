@@ -163,5 +163,8 @@ KG.achievements = [
   { id: 'review50', icon: '🔁', name: 'Spaced Out', desc: 'Answer 50 review cards', test: s => s.stats.reviews >= 50 },
   { id: 'level5', icon: '⭐', name: 'Scribe', desc: 'Reach level 5', test: (s, h) => h.level() >= 5 },
   { id: 'level10', icon: '🌟', name: 'Rising Scholar', desc: 'Reach level 10', test: (s, h) => h.level() >= 10 },
+  { id: 'letters', icon: '✨', name: 'Letter Collector', desc: 'Collect all 24 glowing letters in the world', test: s => ((s.world || {}).letters || []).length >= 24 },
+  { id: 'shades', icon: '👻', name: 'Shade Banisher', desc: 'Banish 25 Shades of Forgetting', test: s => ((s.world || {}).wisps || 0) >= 25 },
+  { id: 'library', icon: '🏛', name: 'The Great Library', desc: 'Reach the Great Library', test: s => !!(s.world || {}).finale },
   { id: 'goal', icon: '🎯', name: 'Goal Getter', desc: 'Hit your daily goal', test: s => s.stats.goals >= 1 },
 ];

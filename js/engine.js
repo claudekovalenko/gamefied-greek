@@ -228,8 +228,9 @@ window.KG = window.KG || {};
     let qs = [];
     for (const w of shuffle(words)) qs.push(vocabQ(w, near, 'g2e'));
     for (const w of sample(words, Math.max(0, n - words.length - 1))) qs.push(vocabQ(w, near, 'e2g'));
-    qs = shuffle(qs).slice(0, n - 1);
-    if (words.length >= 4) qs.splice(Math.floor(qs.length / 2), 0, { type: 'match', prompt: 'Match the pairs', pairs: sample(words, Math.min(5, words.length)).map(w => [w.g, w.en]), greekLeft: true });
+    const hasMatch = words.length >= 4;
+    qs = shuffle(qs).slice(0, hasMatch ? n - 1 : n);
+    if (hasMatch) qs.splice(Math.floor(qs.length / 2), 0, { type: 'match', prompt: 'Match the pairs', pairs: sample(words, Math.min(5, words.length)).map(w => [w.g, w.en]), greekLeft: true });
     return qs;
   };
   function vocabLessonQuestions(set) {

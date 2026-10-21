@@ -125,3 +125,10 @@ test('XP, levels, streak and spaced repetition behave', () => {
   assert.ok(!E.unlocked(E.node('alpha3')));
   assert.ok(S.ach.first && S.ach.perfect && S.ach.combo10);
 });
+
+test('single-word review questions exist (review mode and wisp battles)', () => {
+  for (const w of KG.vocab.slice(0, 30)) {
+    const q = E.vocabQuestions([w], KG.vocab, 1)[0];
+    assert.ok(q && q.type === 'mc' && q.vkey === w.g, `no question for ${w.g}`);
+  }
+});

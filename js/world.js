@@ -85,8 +85,10 @@ try {
   throw e;
 }
 const mobile = matchMedia('(pointer: coarse)').matches;
-renderer.setPixelRatio(Math.min(devicePixelRatio, mobile ? 1.5 : 2));
-renderer.shadowMap.enabled = true;
+// "Low" graphics (Profile → Settings) trades grass, shadows and effects for smoothness on older phones
+const LOW = (E.state.settings || {}).gfx === 'low';
+renderer.setPixelRatio(Math.min(devicePixelRatio, LOW ? 1 : mobile ? 1.5 : 2));
+renderer.shadowMap.enabled = !LOW;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -258,7 +260,7 @@ function scatterTrees() {
   const trunkG = new THREE.CylinderGeometry(0.18, 0.28, 1.6, 6);
   const leafG = new THREE.IcosahedronGeometry(1.3, 0);
   const pineG = new THREE.ConeGeometry(1.2, 3.2, 7);
-  const N = mobile ? 650 : 1100;
+  const N = LOW ? 400 : mobile ? 650 : 1100;
   const trunks = new THREE.InstancedMesh(trunkG, mat(0x6a4a2a), N);
   const leaves = new THREE.InstancedMesh(leafG, new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.9 }), N);
   const pines = new THREE.InstancedMesh(pineG, new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.9 }), N);
@@ -360,6 +362,7 @@ function signPost(x, z, text) {
 // wind-blown grass along the road, drawn in one call with a swaying shader
 const windUniform = { value: 0 };
 function grass() {
+  if (LOW) return;
   const N = mobile ? 9000 : 18000;
   const blade = new THREE.BufferGeometry();
   blade.setAttribute('position', new THREE.Float32BufferAttribute([-0.05, 0, 0, 0.05, 0, 0, 0, 0.42, 0], 3));
@@ -427,7 +430,7 @@ function dotTexture() {
 }
 function setAmbience(zi) {
   if (amb) scene.remove(amb.pts);
-  const A = AMB[zi], n = mobile ? Math.round(A.n * 0.6) : A.n, arr = new Float32Array(n * 3);
+  const A = AMB[zi], n = LOW ? Math.round(A.n * 0.3) : mobile ? Math.round(A.n * 0.6) : A.n, arr = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) arr.set([(Math.random() - 0.5) * 50, Math.random() * 16, (Math.random() - 0.5) * 50], i * 3);
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(arr, 3));
   const pts = new THREE.Points(g, new THREE.PointsMaterial({ color: A.color, size: A.size * 2.2, map: dotTexture(), alphaTest: 0.05, transparent: true, opacity: 0.85, depthWrite: false, blending: A.blink ? THREE.AdditiveBlending : THREE.NormalBlending }));
@@ -479,7 +482,7 @@ function tmat(color, opts = {}) {
 const inkMat = new THREE.MeshBasicMaterial({ color: 0x2a1a0e, side: THREE.BackSide });
 function tmesh(geo, color, opts, ink = 1.06) {
   const m = new THREE.Mesh(geo, tmat(color, opts)); m.castShadow = true; m.receiveShadow = true;
-  if (ink) { const o = new THREE.Mesh(geo, inkMat); o.scale.setScalar(ink); m.add(o); }
+  if (ink && !LOW) { const o = new THREE.Mesh(geo, inkMat); o.scale.setScalar(ink); m.add(o); }
   return m;
 }
 function person({ skin = 0xf0c8a0, robe = 0x3f7d3a, hair = 0x6a3e1e, hood = false, beard = false, staff = false, scale = 1 } = {}) {

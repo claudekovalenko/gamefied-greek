@@ -114,7 +114,38 @@ clock = new THREE.Clock();
   sky.name = 'sky';
   scene.add(sky);
 }
-scene.add(new THREE.HemisphereLight(0xdff0ff, 0x5a6a3a, 1.1));
+const hemi = new THREE.HemisphereLight(0xdff0ff, 0x5a6a3a, 1.1);
+scene.add(hemi);
+// Each world has its own sky, fog and light; they blend as you travel.
+const ATMOS = [
+  { top: 0x4a88c8, mid: 0xa9d4f0, bot: 0xe8e0c8, sun: 0xfff1d6, sunI: 2.2, hemi: 1.1, fog: [60, 230] },   // Alphabet Hollow: bright morning
+  { top: 0x3a6a5a, mid: 0x9cc8b0, bot: 0xd8e8d0, sun: 0xe8ffd8, sunI: 1.6, hemi: 1.0, fog: [30, 150] },   // Wordwood: green mist
+  { top: 0x5a7ab8, mid: 0xf0d8a0, bot: 0xf8e8c0, sun: 0xffd890, sunI: 2.4, hemi: 1.1, fog: [60, 230] },   // Fields: golden hour
+  { top: 0x2a78d8, mid: 0x9ad0f8, bot: 0xe0f0f8, sun: 0xffffff, sunI: 2.4, hemi: 1.2, fog: [70, 250] },   // Verb River: clear blue
+  { top: 0x6a7888, mid: 0xc0c8d0, bot: 0xe0e0e0, sun: 0xf0f0f0, sunI: 1.5, hemi: 1.2, fog: [40, 180] },   // Builders' Ridge: overcast
+  { top: 0x3a2a6a, mid: 0xf0a070, bot: 0xf8d0a0, sun: 0xffa060, sunI: 2.0, hemi: 0.9, fog: [50, 200] },   // Ruins of Time: dusk
+  { top: 0x1a2a5a, mid: 0x6a80b8, bot: 0xb0c0e0, sun: 0xc0d0ff, sunI: 1.3, hemi: 0.85, fog: [40, 190] },  // Mirror Lake: twilight
+  { top: 0x8aa0c0, mid: 0xe0e8f0, bot: 0xffffff, sun: 0xffffff, sunI: 2.0, hemi: 1.3, fog: [30, 160] },   // Peaks: cold white
+  { top: 0x4a3a8a, mid: 0xf8c070, bot: 0xfff0c8, sun: 0xffc860, sunI: 2.3, hemi: 1.1, fog: [60, 230] },   // Great Library: golden sunset
+];
+const atm = { top: new THREE.Color(ATMOS[0].top), mid: new THREE.Color(ATMOS[0].mid), bot: new THREE.Color(ATMOS[0].bot), sun: new THREE.Color(ATMOS[0].sun), sunI: 2.2, hemi: 1.1, near: 60, far: 230 };
+function paintSky() {
+  const sk = scene.getObjectByName('sky'), g = sk.geometry, p = g.attributes.position, col = g.attributes.color, c = new THREE.Color();
+  for (let i = 0; i < p.count; i++) {
+    const y = p.getY(i) / 500;
+    if (y > 0) c.copy(atm.mid).lerp(atm.top, Math.min(1, y * 1.6)); else c.copy(atm.mid).lerp(atm.bot, Math.min(1, -y * 4));
+    col.setXYZ(i, c.r, c.g, c.b);
+  }
+  col.needsUpdate = true;
+  scene.fog.color.copy(atm.mid); scene.fog.near = atm.near; scene.fog.far = atm.far;
+  sun.color.copy(atm.sun); sun.intensity = atm.sunI; hemi.intensity = atm.hemi;
+}
+function blendAtmosphere(zi, k) {
+  const A = ATMOS[zi], T = new THREE.Color();
+  atm.top.lerp(T.setHex(A.top), k); atm.mid.lerp(T.setHex(A.mid), k); atm.bot.lerp(T.setHex(A.bot), k); atm.sun.lerp(T.setHex(A.sun), k);
+  atm.sunI += (A.sunI - atm.sunI) * k; atm.hemi += (A.hemi - atm.hemi) * k; atm.near += (A.fog[0] - atm.near) * k; atm.far += (A.fog[1] - atm.far) * k;
+  paintSky();
+}
 sun = new THREE.DirectionalLight(0xfff1d6, 2.2);
 sun.castShadow = true;
 sun.shadow.mapSize.set(mobile ? 1024 : 2048, mobile ? 1024 : 2048);
@@ -395,6 +426,7 @@ function golem(color = 0x8a8a8a) {
 
 // ── entities: mentors, pedestals, guardians, gates ───────────
 const ents = []; // {kind, zone, obj, x, z, r, node?, label}
+const portals = [];
 function marker(text, color) { const m = textSprite(text, { size: 64, bg: null, color, font: `900 64px Nunito, sans-serif`, scale: 0.016 }); return m; }
 function addEnt(e) {
   const nameTag = textSprite(e.label, { size: 30 });
@@ -439,6 +471,19 @@ function buildEntities() {
     title.position.set(0, 7.6, 0.75); gate.add(title);
     const barrier = new THREE.Mesh(new THREE.PlaneGeometry(140, 12), new THREE.MeshBasicMaterial({ color: 0xffd166, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false }));
     barrier.position.y = 4; gate.add(barrier);
+    // the portal that appears once the guardian is beaten
+    const portal = new THREE.Group(); portal.position.y = 3.6;
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(3, 0.25, 10, 48), new THREE.MeshStandardMaterial({ color: 0xffd166, emissive: 0xffb020, emissiveIntensity: 1.2, metalness: 0.6, roughness: 0.3 }));
+    portal.add(ring);
+    const pc = document.createElement('canvas'); pc.width = pc.height = 256; const px = pc.getContext('2d');
+    const grd = px.createRadialGradient(128, 128, 10, 128, 128, 128); grd.addColorStop(0, 'rgba(255,255,255,.95)'); grd.addColorStop(0.4, 'rgba(160,200,255,.7)'); grd.addColorStop(1, 'rgba(120,80,255,.15)');
+    px.fillStyle = grd; px.fillRect(0, 0, 256, 256);
+    px.strokeStyle = 'rgba(255,255,255,.6)'; px.lineWidth = 6;
+    for (let k = 0; k < 6; k++) { px.beginPath(); for (let a = 0; a < 9; a += 0.1) { const r = 6 + a * 13; px.lineTo(128 + Math.cos(a + k * 1.05) * r, 128 + Math.sin(a + k * 1.05) * r); } px.stroke(); }
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(2.8, 40), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(pc), transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+    portal.add(disc); portal.userData.disc = disc;
+    gate.add(portal);
+    portals[i] = portal;
     put(gate, gx, gz);
     const gzz = gz + 6, gxx = gx + 3.5;
     const gol = golem([0x8a8a8a, 0x6a7a4a, 0xc9a43a, 0x4a6a8a, 0x6a6a7a, 0xa08060, 0xa0b0c0, 0xcfe0ff, 0xe0c060][i]);
@@ -487,12 +532,12 @@ function buildCollectibles() {
 
 // ── wisps: Shades of Forgetting ──────────────────────────────
 const wisps = [];
-function wispMesh() {
+function wispMesh(elite = false) {
   const g = new THREE.Group();
-  const core = new THREE.Mesh(new THREE.IcosahedronGeometry(0.45, 1), new THREE.MeshStandardMaterial({ color: 0x5a2a8a, emissive: 0x7a3aff, emissiveIntensity: 1.2, flatShading: true }));
+  const core = new THREE.Mesh(new THREE.IcosahedronGeometry(0.45, 1), new THREE.MeshStandardMaterial({ color: elite ? 0x8a1a2a : 0x5a2a8a, emissive: elite ? 0xff3a3a : 0x7a3aff, emissiveIntensity: 1.2, flatShading: true }));
   g.add(core);
   const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d');
-  const gr = x.createRadialGradient(32, 32, 2, 32, 32, 32); gr.addColorStop(0, 'rgba(180,120,255,.9)'); gr.addColorStop(1, 'rgba(120,60,255,0)');
+  const gr = x.createRadialGradient(32, 32, 2, 32, 32, 32); gr.addColorStop(0, elite ? 'rgba(255,120,120,.9)' : 'rgba(180,120,255,.9)'); gr.addColorStop(1, elite ? 'rgba(255,60,60,0)' : 'rgba(120,60,255,0)');
   x.fillStyle = gr; x.fillRect(0, 0, 64, 64);
   const t = new THREE.CanvasTexture(c);
   const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthWrite: false, blending: THREE.AdditiveBlending }));
@@ -507,14 +552,84 @@ function spawnWisp(w) {
 }
 function buildWisps() {
   for (let zi = 1; zi < NZ; zi++) for (let k = 0; k < 3; k++) {
-    const w = { zone: zi, obj: wispMesh(), t: Math.random() * 10 };
+    // one elite shade per world hunts your weakest words
+    const elite = k === 2;
+    const w = { zone: zi, obj: wispMesh(elite), t: Math.random() * 10, elite };
+    if (elite) w.obj.scale.setScalar(1.45);
     scene.add(w.obj); spawnWisp(w); wisps.push(w);
   }
 }
 
 // ── player ────────────────────────────────────────────────────
-const player = person({ robe: 0x2f6a3a, hair: 0x7a4a1e, hood: true });
+// ── the hero's look: robe, hat, staff and companion from the wardrobe ──
+function addHat(body, hat) {
+  if (hat === 'wizard') {
+    const c = mesh(new THREE.ConeGeometry(0.36, 1.0, 12), 0x3a2a7a); c.position.y = 2.55; c.rotation.z = 0.12; body.add(c);
+    const b = mesh(new THREE.TorusGeometry(0.4, 0.07, 6, 20), 0x2a1a5a); b.rotation.x = Math.PI / 2; b.position.y = 2.08; body.add(b);
+    const st = mesh(new THREE.OctahedronGeometry(0.08), 0xffd166, { emissive: 0xffb000, emissiveIntensity: 1 }); st.position.set(0.12, 2.6, 0.22); body.add(st);
+  } else if (hat === 'laurel') {
+    const t = mesh(new THREE.TorusGeometry(0.31, 0.06, 6, 18), 0x4f8f3a); t.rotation.x = Math.PI / 2; t.position.y = 2.02; body.add(t);
+  } else if (hat === 'crown') {
+    const c = mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.2, 12, 1, true), 0xe0b030, { metalness: 0.8, roughness: 0.3, side: THREE.DoubleSide }); c.position.y = 2.12; body.add(c);
+    for (let k = 0; k < 6; k++) { const sp = mesh(new THREE.ConeGeometry(0.06, 0.18, 5), 0xe0b030, { metalness: 0.8, roughness: 0.3 }); const a = k / 6 * Math.PI * 2; sp.position.set(Math.cos(a) * 0.28, 2.3, Math.sin(a) * 0.28); body.add(sp); }
+  }
+}
+function addStaff(body, staff) {
+  if (staff === 'none') return;
+  const col = { oak: 0x6a4a2a, crystal: 0x8a8aa0, lightning: 0xd0a030 }[staff], gem = { oak: [0x5ab04a, 0x2a8020], crystal: [0x7fd0ff, 0x3fa0ff], lightning: [0xffee66, 0xffcc00] }[staff];
+  const st = mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.2, 6), col); st.position.set(0.55, 1.15, 0.15); body.add(st);
+  const g = mesh(new THREE.OctahedronGeometry(0.16), gem[0], { emissive: gem[1], emissiveIntensity: 1.2 }); g.position.set(0.55, 2.35, 0.15); body.add(g);
+}
+function applyLook(g) {
+  const L = E.look();
+  while (g.children.length) g.remove(g.children[0]);
+  const robe = (KG.wardrobe.robe.find(r => r.id === L.robe) || KG.wardrobe.robe[0]).color;
+  const m = person({ robe, hair: 0x7a4a1e, hood: L.hat === 'hood' });
+  for (const c of [...m.children]) g.add(c);
+  g.userData = m.userData;
+  addHat(g.userData.body, L.hat); addStaff(g.userData.body, L.staff);
+  return g;
+}
+function buildPet(type) {
+  if (!type || type === 'none') return null;
+  const p = new THREE.Group();
+  if (type === 'owl') {
+    const b = mesh(new THREE.SphereGeometry(0.28, 12, 10), 0x8a6a4a); b.scale.y = 1.2; p.add(b);
+    for (const sd of [-1, 1]) {
+      const e = mesh(new THREE.SphereGeometry(0.09, 8, 8), 0xffffff); e.position.set(sd * 0.11, 0.1, 0.22); p.add(e);
+      const pu = mesh(new THREE.SphereGeometry(0.045, 6, 6), 0x111111); pu.position.set(sd * 0.11, 0.1, 0.3); p.add(pu);
+      const ear = mesh(new THREE.ConeGeometry(0.06, 0.16, 5), 0x6a4a2a); ear.position.set(sd * 0.15, 0.36, 0); p.add(ear);
+      const w = mesh(new THREE.SphereGeometry(0.2, 8, 6), 0x6a4a2a); w.scale.set(0.3, 0.8, 0.9); w.position.set(sd * 0.28, 0, 0); p.add(w); w.userData.wing = sd;
+    }
+    p.userData.fly = 2.4;
+  } else if (type === 'dove') {
+    const b = mesh(new THREE.SphereGeometry(0.22, 12, 10), 0xffffff); b.scale.z = 1.4; p.add(b);
+    const h = mesh(new THREE.SphereGeometry(0.13, 10, 8), 0xffffff); h.position.set(0, 0.12, 0.26); p.add(h);
+    const bk = mesh(new THREE.ConeGeometry(0.04, 0.1, 5), 0xffb040); bk.rotation.x = Math.PI / 2; bk.position.set(0, 0.1, 0.4); p.add(bk);
+    for (const sd of [-1, 1]) { const w = mesh(new THREE.BoxGeometry(0.4, 0.04, 0.22), 0xf0f0f8); w.position.set(sd * 0.3, 0.05, 0); p.add(w); w.userData.wing = sd; }
+    p.userData.fly = 2.6;
+  } else if (type === 'lamb') {
+    for (let k = 0; k < 7; k++) { const f = mesh(new THREE.SphereGeometry(0.2, 8, 6), 0xf4f0e8); f.position.set((k % 3 - 1) * 0.16, 0.42 + (k > 3 ? 0.1 : 0), (Math.floor(k / 3) - 1) * 0.16); p.add(f); }
+    const h = mesh(new THREE.SphereGeometry(0.16, 10, 8), 0x2a2a2a); h.position.set(0, 0.52, 0.34); p.add(h);
+    for (const [x, z] of [[-0.14, -0.15], [0.14, -0.15], [-0.14, 0.15], [0.14, 0.15]]) { const l = mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.3, 5), 0x2a2a2a); l.position.set(x, 0.15, z); p.add(l); }
+    p.userData.hop = true;
+  }
+  return p;
+}
+function animatePet(p, t, dt) {
+  if (!p) return;
+  for (const c of p.children) if (c.userData.wing) c.rotation.z = c.userData.wing * Math.sin(t * 14) * 0.6;
+}
+const player = new THREE.Group();
+applyLook(player);
 scene.add(player);
+let pet = null;
+function setPet() {
+  if (pet) scene.remove(pet);
+  pet = buildPet(E.look().pet);
+  if (pet) { pet.position.copy(player.position).add(new THREE.Vector3(1, 1, 1)); scene.add(pet); }
+}
+E.on(t => { if (t === 'look') { applyLook(player); setPet(); } });
 const P = { vel: new THREE.Vector3(), onGround: true, hearts: 5, maxHearts: 5, hurtT: 0, regen: 0, zone: -1 };
 const cam = { yaw: Math.PI, pitch: 0.42, dist: 8.5, auto: 0 };
 const input = { f: 0, r: 0, run: false, jump: false, keys: {}, joy: null, drag: null };
@@ -524,7 +639,7 @@ const hud = document.getElementById('whud');
 hud.innerHTML = `
   <div class="wtop">
     <div class="wstat"><div class="whearts" id="whearts"></div><div class="wlv"><b id="wlv">1</b><span class="wxp"><i id="wxp"></i></span></div><div class="wcoins">🪙 <b id="wcoins">0</b></div></div>
-    <div class="wbtns"><button class="wb" data-act="go" data-arg="review" title="Review">🔁<span id="wdue" class="wbadge"></span></button><button class="wb" data-act="go" data-arg="path" title="Journal">📜</button><button class="wb" data-act="go" data-arg="profile" title="Profile">👤</button></div>
+    <div class="wbtns"><button class="wb" id="wmapbtn" title="World map">🗺</button><button class="wb" data-act="go" data-arg="codex" title="Library">📖</button><button class="wb" data-act="go" data-arg="review" title="Review">🔁<span id="wdue" class="wbadge"></span></button><button class="wb" data-act="go" data-arg="path" title="Journal">📜</button><button class="wb" data-act="go" data-arg="profile" title="Profile">👤</button></div>
   </div>
   <div class="wquest" id="wquest"><div class="wq-arrow" id="wqarrow">▲</div><div><div class="wq-k">Quest</div><div id="wqtext"></div></div></div>
   <div class="wbanner" id="wbanner"></div>
@@ -559,7 +674,7 @@ function refreshMarkers() {
   const t = questTarget();
   for (const e of ents) {
     e.mark.visible = !!(t.ent === e);
-    if (e.kind === 'guardian') e.gate.visible = !gateOpen(e.zone);
+    if (e.kind === 'guardian') { e.gate.visible = !gateOpen(e.zone); portals[e.zone].visible = gateOpen(e.zone); }
     if (e.kind === 'pedestal') {
       const done = E.stars(e.node.id) > 0;
       e.glow.material.opacity = done ? 1 : E.unlocked(e.node) ? 0.8 : 0.25;
@@ -578,6 +693,23 @@ function refreshMarkers() {
 }
 
 let bannerT = 0;
+function storyBeat(zi) {
+  const Z = ZONES[zi];
+  dialog(`📖 ${esc(Z.name)}`, `<p>${esc(KG.story.arrive[zi])}</p><p class="muted small">Find <b>${esc(Z.mentor[1])}</b>, ${esc(Z.mentor[2])}. Follow the golden light.</p>`, [{ label: 'Onward', cls: 'primary' }]);
+}
+// travel to any world you have reached
+function worldMap() {
+  const reach = i => i === 0 || gateOpen(i - 1);
+  dialog('🗺 World Map', `<div class="wmap">${ZONES.map((Z, i) => `<button class="wm ${reach(i) ? '' : 'locked'} ${i === P.zone ? 'here' : ''}" data-wm="${i}" ${reach(i) ? '' : 'disabled'}>
+      <b>${i + 1}. ${esc(Z.name)}</b><span>${reach(i) ? esc(KG.units[i].title) + (i === P.zone ? ' · you are here' : '') : '🔒 Beat the guardian before it'}</span></button>`).join('')}</div>`, [{ label: 'Close' }]);
+  document.querySelectorAll('[data-wm]').forEach(b => b.onclick = () => {
+    const i = +b.dataset.wm, m = ents.find(e => e.kind === 'mentor' && e.zone === i);
+    closeDialog();
+    root.classList.add('portalfx'); KG.app.sfx('level');
+    setTimeout(() => { player.position.set(m.x - 2, groundAt(m.x - 2, m.z + 3), m.z + 3); snapCamera(); }, 250);
+    setTimeout(() => root.classList.remove('portalfx'), 900);
+  });
+}
 function showBanner(i) {
   const u = KG.units[i];
   $('wbanner').innerHTML = `<div class="wb-k">Region ${i + 1} · ${esc(u.title)}</div><div class="wb-t">${esc(ZONES[i].name)}</div><div class="wb-s">${esc(u.sub)}</div>`;
@@ -638,12 +770,15 @@ function startBattle(w) {
   const studied = Object.keys(E.state.vocab).map(g => E.vocabByGreek[g]).filter(Boolean);
   const due = E.dueWords();
   const pool = studied.length >= 4 ? studied : E.vocabSet(0).concat(E.vocabSet(1));
-  const word = due.length ? U.pick(due) : U.pick(pool);
-  const q = E.vocabQuestions([word], pool.length > 8 ? pool : KG.vocab, 1)[0];
+  const weak = E.weakWords(6);
+  const word = w.elite && weak.length ? U.pick(weak) : due.length ? U.pick(due) : U.pick(pool);
+  // well-known words come back the harder way round: English → Greek
+  const rec = E.state.vocab[word.g], hard = w.elite || (rec && rec.box >= 3);
+  const q = E.vocabQ(word, pool.length > 8 ? pool : KG.vocab, hard ? 'e2g' : 'g2e');
   battle = { w, q, done: false };
   KG.app.sfx('bad');
   const b = $('wbattle');
-  b.innerHTML = `<div class="wbt-box"><div class="wbt-h">👻 A Shade of Forgetting attacks!</div><div class="muted small">Banish it by remembering the word.</div>
+  b.innerHTML = `<div class="wbt-box ${w.elite ? 'elite' : ''}"><div class="wbt-h">${w.elite ? '🔥 An ELITE Shade attacks! It knows your weakest words…' : '👻 A Shade of Forgetting attacks!'}</div><div class="muted small">Banish it by remembering the word.</div>
     <div class="wbt-q">${q.prompt}</div><div class="wbt-big gk">${esc(q.big || '')}</div>
     <div class="wbt-opts">${q.options.map((o, i) => `<button class="wbt-opt ${q.greekOpts ? 'gk' : ''}" data-bo="${i}"><span class="k">${i + 1}</span>${q.greekOpts ? esc(o) : o}</button>`).join('')}</div><div id="wbtfb"></div></div>`;
   b.classList.add('on');
@@ -657,8 +792,8 @@ function answerBattle(i, el) {
   E.recordAnswer(q, ok, true);
   $('wbattle').querySelectorAll('.wbt-opt').forEach((b, k) => { b.disabled = true; if (k === q.answer) b.classList.add('right'); });
   if (!ok) el.classList.add('wrong');
-  $('wbtfb').innerHTML = `<div class="wbt-fb ${ok ? 'ok' : 'no'}">${ok ? '✨ The shade dissolves into light! +8 XP' : `💔 It strikes you! ${q.explain || ''}`}</div><button class="btn ${ok ? 'good' : 'bad'} wide" id="wbtgo">Continue</button>`;
-  if (ok) { KG.app.sfx('good'); E.gainXP(8, 1); ws().wisps++; E.checkAchievements(); w.dead = true; w.obj.visible = false; w.respawn = 40; burst(w.obj.position, 0xb388ff); }
+  $('wbtfb').innerHTML = `<div class="wbt-fb ${ok ? 'ok' : 'no'}">${ok ? `✨ The shade dissolves into light! +${w.elite ? 16 : 8} XP` : `💔 It strikes you! ${q.explain || ''}`}</div><button class="btn ${ok ? 'good' : 'bad'} wide" id="wbtgo">Continue</button>`;
+  if (ok) { KG.app.sfx('good'); E.gainXP(w.elite ? 16 : 8, w.elite ? 3 : 1); ws().wisps++; E.checkAchievements(); w.dead = true; w.obj.visible = false; w.respawn = 40; E.questProgress('shades'); burst(w.obj.position, 0xb388ff); }
   else { KG.app.sfx('bad'); P.hearts = Math.max(0, P.hearts - 1); P.hurtT = 1; const away = player.position.clone().sub(w.obj.position).setY(0).normalize(); P.vel.addScaledVector(away, 9); w.cool = 4; }
   updateHUD();
   $('wbtgo').onclick = endBattle; $('wbtgo').focus();
@@ -726,6 +861,7 @@ canvas.addEventListener('pointerup', endPtr); canvas.addEventListener('pointerca
 canvas.addEventListener('wheel', e => { cam.dist = Math.min(16, Math.max(4, cam.dist + e.deltaY * 0.01)); e.preventDefault(); }, { passive: false });
 $('wjump').addEventListener('pointerdown', e => { input.jump = true; e.preventDefault(); });
 $('wtalk').addEventListener('click', () => tryTalk());
+$('wmapbtn').addEventListener('click', () => { if (!battle) worldMap(); });
 
 let nearEnt = null;
 function tryTalk() { if (nearEnt && !dlgOpen && !battle) talk(nearEnt); }
@@ -774,6 +910,14 @@ function step(dt) {
   const gy = groundAt(pos.x, pos.z);
   if (pos.y <= gy) { pos.y = gy; P.vel.y = 0; P.onGround = true; }
   animatePerson(player, P.onGround ? Math.hypot(P.vel.x, P.vel.z) : 0, dt);
+  if (pet) {
+    const back = player.rotation.y + Math.PI * 0.75, tx = pos.x + Math.sin(back) * 1.4, tz = pos.z + Math.cos(back) * 1.4;
+    pet.position.x += (tx - pet.position.x) * Math.min(1, dt * 3); pet.position.z += (tz - pet.position.z) * Math.min(1, dt * 3);
+    const gy = groundAt(pet.position.x, pet.position.z);
+    pet.position.y = gy + (pet.userData.fly ? pet.userData.fly + Math.sin(t * 2.5) * 0.25 : Math.abs(Math.sin(t * 6)) * (Math.hypot(P.vel.x, P.vel.z) > 0.5 ? 0.25 : 0.03));
+    pet.rotation.y = Math.atan2(pos.x - pet.position.x, pos.z - pet.position.z);
+    animatePet(pet, t, dt);
+  }
   player.userData.body.rotation.x = P.onGround ? 0 : -0.15;
 
   // camera: follow and gently swing behind the player while walking
@@ -792,7 +936,15 @@ function step(dt) {
 
   // regions
   const zi = zoneOf(pos.z);
-  if (zi !== P.zone) { P.zone = zi; showBanner(zi); }
+  if (zi !== P.zone) {
+    const first = P.zone < 0;
+    P.zone = zi; showBanner(zi);
+    if (!first) { root.classList.add('portalfx'); setTimeout(() => root.classList.remove('portalfx'), 900); KG.app.sfx('level'); }
+    const w = ws(); w.seen = w.seen || [];
+    if (!w.seen.includes(zi)) { w.seen.push(zi); E.save(); if (KG.story.arrive[zi] && !dlgOpen) setTimeout(() => storyBeat(zi), first ? 300 : 900); }
+  }
+  blendAtmosphere(zi, Math.min(1, dt * 1.2));
+  for (const pt of portals) if (pt && pt.visible) { pt.userData.disc.rotation.z -= dt * 1.5; pt.children[0].rotation.z += dt * 0.4; }
   if (bannerT > 0 && (bannerT -= dt) <= 0) $('wbanner').classList.remove('on');
 
   // NPCs idle & interaction
@@ -843,7 +995,7 @@ function step(dt) {
     if (!c.c.visible) continue;
     c.c.rotation.z += dt * 3;
     if (Math.hypot(pos.x - c.x, pos.z - c.z) < 1.1 && Math.abs(pos.y + 0.8 - c.c.position.y) < 1.6) {
-      c.c.visible = false; w.coins.got.push(c.i); E.state.coins++; KG.app.sfx('tap'); updateHUD();
+      c.c.visible = false; w.coins.got.push(c.i); E.state.coins++; KG.app.sfx('tap'); E.questProgress('coins'); updateHUD();
     }
   }
 
@@ -951,6 +1103,7 @@ W.onLessonDone = (node, r) => {
   if (node.type === 'boss' && r.passed) pending.push(() => {
     const e = ents.find(x => x.kind === 'guardian' && x.zone === node.unit);
     KG.app.toast(`⚔ ${esc(e.label)} bows. <b>The gate opens!</b>`, 'gold');
+    setTimeout(() => dialog(esc(e.label), `<p>“${esc(KG.story.guardian[node.unit])}”</p><p class="muted small">${node.unit < NZ - 1 ? `A portal now glows in the gate. Step through it to reach <b>${esc(ZONES[node.unit + 1].name)}</b>.` : 'The way to the Great Library is open.'}</p>`, [{ label: 'Onward', cls: 'primary' }]), 600);
     burst(new THREE.Vector3(pathX(gateZ(node.unit)), groundAt(pathX(gateZ(node.unit)), gateZ(node.unit)) + 3, gateZ(node.unit)), 0xffd166);
   });
   if (node.type === 'reading' && r.passed && r.firstClear) pending.push(() => {
@@ -973,7 +1126,8 @@ W.debug = { player, cam, P, ents, wisps, questTarget, teleport: (x, z) => { play
   player.position.set(w.x, groundAt(w.x, w.z), w.z);
   if (typeof w.yaw === 'number') cam.yaw = w.yaw;
   camera.position.set(w.x, groundAt(w.x, w.z) + 5, w.z + 8);
-  stage = createStage({ renderer, person, golem, wispMesh, ZONES, KG, animatePerson });
+  setPet();
+  stage = createStage({ renderer, person, golem, wispMesh, ZONES, KG, animatePerson, applyLook, buildPet, animatePet });
   W.debug.stage = stage;
   W.ok = true;
   document.dispatchEvent(new Event('world-ready'));

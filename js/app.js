@@ -77,6 +77,7 @@
     if (type === 'goal') toast('🎯 <b>Daily goal reached!</b> +10 🪙', 'gold');
     if (type === 'achievement') { toast(`${data.icon} <b>Achievement:</b> ${esc(data.name)} (+15 🪙)`, 'gold'); }
     if (type === 'streak' && data > 1) toast(`🔥 <b>${data}-day streak!</b>`);
+    if (type === 'quest') { sfx('win'); toast(`📋 <b>Daily quest complete:</b> ${esc(data.text)} (+15 🪙, +25 XP)`, 'gold'); }
     renderTop();
   });
 
@@ -474,6 +475,10 @@
       else title = r.passed ? (r.perfect ? '💎 Flawless!' : 'Lesson complete!') : 'Almost there!';
       if (!r.passed) extra = `<p>${P.mode === 'boss' ? 'Review the unit\'s lessons and try again.' : 'Score 70% or more to earn a star and unlock the next lesson.'}</p>`;
       if (r.passed && r.firstClear) { const nx = E.nodes[P.node.index + 1]; if (nx) extra = `<p>🔓 Unlocked: <b>${esc(nx.title)}</b></p>`; }
+      if (r.chest) {
+        const pz = r.chest.prize;
+        extra = `<div class="chest"><div class="chest-ic">🎁</div><div><div class="sp-k">Treasure chest!</div>${pz ? `<b>${esc(pz.it.name)}</b> ${pz.it.icon || ''} <span class="muted small">(${pz.slot})</span><div class="small">Wear it from your Profile → Wardrobe</div>` : ''}<div class="small">+${r.chest.coins} 🪙</div></div></div>` + extra;
+      }
       if (r.spell) extra = `<div class="spellnew big"><span class="sp-ic">${r.spell.icon}</span><div><div class="sp-k">✨ Spell added to your spellbook</div><b>${esc(r.spell.name)}</b><div class="small">${esc(r.spell.desc)}</div></div></div>` + extra;
     } else {
       const xp = res.xp; E.state.stats.bestCombo = Math.max(E.state.stats.bestCombo, res.maxCombo);
@@ -510,7 +515,7 @@
     const due = E.dueWords(), M = S().mistakes, studied = Object.keys(S().vocab).length;
     const boxes = [1, 2, 3, 4, 5, 6, 7].map(b => Object.values(S().vocab).filter(r => r.box === b).length);
     const maxB = Math.max(1, ...boxes);
-    main.innerHTML = `<h1 class="vh">Review</h1>
+    main.innerHTML = `${questsCard()}<h1 class="vh">Review</h1>
       <p class="muted">Spaced repetition shows you each word just before you would forget it. A few minutes a day keeps every word alive.</p>
       <div class="card big-cta ${due.length ? 'hot' : ''}">
         <div><h3>🔁 Daily review</h3><p>${due.length ? `<b>${due.length}</b> word${due.length > 1 ? 's' : ''} ready for review` : studied ? 'All caught up! Come back tomorrow.' : 'Finish a vocabulary lesson to start your deck.'}</p></div>
@@ -522,6 +527,12 @@
       <div class="card"><h3>Your memory boxes</h3><p class="muted">Each correct review moves a word up a box and doubles the wait. Box 4+ = mastered.</p>
         <div class="boxes">${boxes.map((c, i) => `<div class="bx"><div class="bxbar"><i style="height:${(c / maxB) * 100}%"></i></div><b>${c}</b><span>Box ${i + 1}</span></div>`).join('')}</div></div>`;
   }
+  function questsCard() {
+    const d = E.daily();
+    return `<div class="card quests"><h3>📋 Today's quests</h3>${d.quests.map(q => `<div class="quest ${q.done ? 'done' : ''}"><span>${q.done ? '✅' : '◻'} ${esc(q.text)}</span><span class="qbar"><i style="width:${q.prog / q.goal * 100}%"></i></span><b>${q.prog}/${q.goal}</b></div>`).join('')}
+      <p class="muted small">Each quest: +15 🪙 and +25 XP. New quests every day.</p></div>`;
+  }
+  KG.app_questsCard = questsCard;
   function startReview(kind) {
     let words, qs;
     if (kind === 'mistakes') {
@@ -668,11 +679,20 @@
   }
 
   // ── profile ─────────────────────────────────────────────────
+  function wardrobeCard() {
+    const L = E.look(), slots = { robe: '👘 Robes', hat: '🎩 Hats', staff: '🪄 Staffs', pet: '🐾 Companions' };
+    return `<div class="card"><h3>🧥 Wardrobe <span class="muted small">win items from guardians' chests or buy them</span></h3>
+      ${Object.entries(slots).map(([slot, label]) => `<div class="wr-slot"><div class="wr-h">${label}</div><div class="wr-items">${KG.wardrobe[slot].map(it => {
+        const own = E.ownItem(slot, it.id), on = L[slot] === it.id;
+        const sw = slot === 'robe' ? `<span class="wr-sw" style="background:#${it.color.toString(16).padStart(6, '0')}"></span>` : `<span class="wr-ic">${it.icon}</span>`;
+        return `<button class="wr ${on ? 'on' : ''} ${own ? '' : 'locked'}" data-act="${own ? 'equip' : 'buyItem'}" data-arg="${slot}:${it.id}">${sw}<b>${esc(it.name)}</b><span>${on ? 'Wearing' : own ? 'Wear' : it.price + ' 🪙'}</span></button>`;
+      }).join('')}</div></div>`).join('')}</div>`;
+  }
   function renderProfile() {
     const s = S(), lv = E.levelInfo(), st = s.stats;
     const days = Array.from({ length: 7 }, (_, i) => U.addDays(U.day(), i - 6));
     const maxD = Math.max(s.dailyGoal, ...days.map(d => s.history[d] || 0));
-    main.innerHTML = `<h1 class="vh">Profile</h1>
+    main.innerHTML = `<h1 class="vh">Profile</h1>${questsCard()}
       <div class="card lvcard"><div class="lvbig">${lv.level}</div><div class="grow"><div class="muted">Level ${lv.level}</div><h3>${lv.title}</h3>
         <div class="xpbar"><i style="width:${(lv.cur / lv.need) * 100}%"></i></div><div class="muted small">${lv.cur} / ${lv.need} XP to level ${lv.level + 1} · ${s.xp} XP total</div></div></div>
       <div class="statgrid">
@@ -686,7 +706,8 @@
       <div class="card"><h3>Shop <span class="muted small">you have ${s.coins} 🪙</span></h3>
         <div class="shop"><div><b>🧊 Streak freeze</b><p class="muted small">Protects your streak for one missed day (max 2).</p><button class="btn primary" data-act="buy" data-arg="freeze">50 🪙</button></div>
         <div><b>🚀 XP boost</b><p class="muted small">Double XP on your next 3 lessons${s.boost ? ` (${s.boost} left)` : ''}.</p><button class="btn primary" data-act="buy" data-arg="boost">80 🪙</button></div></div></div>
-      <div class="card"><h3>Achievements <span class="muted small">${Object.keys(s.ach).length}/${KG.achievements.length}</span></h3>
+      ${wardrobeCard()}
+      <div class="card"><h3>🏆 Trophy room <span class="muted small">${Object.keys(s.ach).length}/${KG.achievements.length}</span></h3>
         <div class="achs">${KG.achievements.map(a => `<div class="ach ${s.ach[a.id] ? 'got' : ''}" title="${esc(a.desc)}"><div class="ai">${a.icon}</div><b>${esc(a.name)}</b><span>${esc(a.desc)}</span></div>`).join('')}</div></div>
       <div class="card settings"><h3>Settings</h3>
         <label>Daily goal <select id="goalsel">${[20, 50, 100, 200].map(g => `<option value="${g}" ${g === s.dailyGoal ? 'selected' : ''}>${g} XP · ${{ 20: 'Casual', 50: 'Regular', 100: 'Serious', 200: 'Intense' }[g]}</option>`).join('')}</select></label>
@@ -768,6 +789,13 @@
     arcade: k => startArcade(k), apick: (i, el) => arcadePick(i, el),
     quitArcade: () => { if (A) clearInterval(A.timer); A = null; go('arcade'); },
     readVerse,
+    equip: a => { const [sl, id] = a.split(':'); if (E.equip(sl, id)) { sfx('tap'); renderProfile(); } },
+    buyItem: a => {
+      const [sl, id] = a.split(':'), it = KG.wardrobe[sl].find(x => x.id === id);
+      if (S().coins < it.price) return toast(`You need ${it.price} 🪙 for the ${esc(it.name)}. Keep learning!`);
+      if (!confirm(`Buy the ${it.name} for ${it.price} coins?`)) return;
+      if (E.buyItem(sl, id)) { sfx('win'); toast(`🧥 ${esc(it.name)} is yours!`, 'gold'); renderProfile(); renderTop(); }
+    },
     passage: (ref, el) => KG.reader.open(ref, el && el.dataset.scroll),
     rword: a => KG.reader.word(a), rwordClose: () => { const b = $('#rdword'); if (b) b.hidden = true; },
     raddword: a => KG.reader.addWord(a), rcompare: i => KG.reader.compare(i), rfinish: () => KG.reader.finish(), readerClose: () => KG.reader.close(),

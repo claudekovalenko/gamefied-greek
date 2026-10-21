@@ -6,6 +6,7 @@ import * as THREE from './vendor/three.module.min.js';
 export function createStage(ctx) {
   const { renderer, person, golem, wispMesh, ZONES, KG } = ctx;
   const U = KG.util;
+  const E_look = () => KG.engine.look();
   const GK = '"Gentium Plus", "Noto Serif", Georgia, serif';
   const UI = 'Nunito, system-ui, sans-serif';
 
@@ -93,9 +94,10 @@ export function createStage(ctx) {
   }
 
   // hero
-  const hero = person({ robe: 0x2f6a3a, hair: 0x7a4a1e, hood: true });
+  const hero = ctx.applyLook(new THREE.Group());
   hero.position.set(0, 0, 5.2); hero.rotation.y = Math.PI;
   scene.add(hero);
+  let pet = null;
   const aura = new THREE.Mesh(new THREE.TorusGeometry(1, 0.08, 8, 40), new THREE.MeshBasicMaterial({ color: 0xffd166, transparent: true, opacity: 0 }));
   aura.rotation.x = Math.PI / 2; aura.position.set(0, 0.05, 5.2); scene.add(aura);
 
@@ -460,7 +462,11 @@ export function createStage(ctx) {
     setOpponent(kind, unit);
     clearUI(); S.q = null;
     S.active = true; S.comboN = 0; aura.material.opacity = 0;
+    ctx.applyLook(hero);
     hero.position.set(0, 0, 5.2); hero.rotation.set(0, Math.PI, 0);
+    if (pet) scene.remove(pet);
+    pet = ctx.buildPet(E_look().pet);
+    if (pet) { pet.position.set(1.5, pet.userData.fly ? 2.6 : 0, 5.6); pet.rotation.y = Math.PI; scene.add(pet); }
   };
   S.exit = () => { S.active = false; clearUI(); S.q = null; S.anims = []; MG = null; };
   S.ask = (q, handlers) => {
@@ -769,6 +775,7 @@ export function createStage(ctx) {
       if (opp.userData.wobble && opp.userData.body) opp.userData.body.rotation.z = Math.sin(t * 2) * 0.03;
     }
     ctx.animatePerson(hero, 0, dt);
+    if (pet) { if (pet.userData.fly) pet.position.y = 2.6 + Math.sin(t * 2.5) * 0.25; else pet.position.y = Math.abs(Math.sin(t * 3)) * 0.05; ctx.animatePet(pet, t, dt); }
     aura.scale.setScalar(1 + Math.sin(t * 4) * 0.08 + (S.comboN || 0) * 0.02); aura.rotation.z += dt;
     if (S.big) S.big.position.y = S.big.userData.base.y + Math.sin(t * 2) * 0.06;
     for (const p of S.picks) if (p.visible && p.userData.base && !(S.sel === p)) p.rotation.y = Math.sin(t * 1.3 + p.userData.base.x) * 0.04;

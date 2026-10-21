@@ -138,6 +138,7 @@
     if (cur.scroll) s.scrolls[cur.scroll] = 'translated';
     else s.reading['done:' + cur.ref] = true;
     if (first) {
+      E.questProgress('verses', cur.verses.length);
       s.stats.passages = (s.stats.passages || 0) + 1;
       if (!cur.scroll) s.reading.free = (s.reading.free || 0) + 1;
       E.gainXP(10 * cur.verses.length + 20, 5 + cur.verses.length);

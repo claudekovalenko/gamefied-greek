@@ -234,6 +234,41 @@ window.KG = window.KG || {};
   };
   NT.gloss = li => { const L = NT.lex[li], v = E.vocabByGreek[L[0]]; return v ? v.en : (L[1] || '—'); };
 
+  // ── daily quests: three fresh goals each day ────────────────
+  const QUESTS = [
+    { id: 'correct', text: 'Answer {n} questions correctly', n: [20, 30, 40] },
+    { id: 'lessons', text: 'Finish {n} lessons', n: [1, 2, 3] },
+    { id: 'reviews', text: 'Review {n} words', n: [10, 15, 20] },
+    { id: 'shades', text: 'Banish {n} Shades of Forgetting', n: [2, 3, 5] },
+    { id: 'verses', text: 'Translate {n} verses in the Reading Room', n: [2, 3, 5] },
+    { id: 'combo', text: 'Reach a {n}× combo', n: [5, 8, 10] },
+    { id: 'coins', text: 'Collect {n} coins in the world', n: [5, 8, 12] },
+    { id: 'perfect', text: 'Finish a lesson without a mistake', n: [1, 1, 1] },
+  ];
+  E.daily = () => {
+    const S = E.state, t = U.day();
+    if (!S.daily || S.daily.day !== t) {
+      const lv = Math.min(2, Math.floor(E.levelInfo().level / 5));
+      S.daily = { day: t, quests: sample(QUESTS, 3).map(q => ({ id: q.id, goal: q.n[lv], prog: 0, text: q.text.replace('{n}', q.n[lv]), done: false })) };
+      E.save();
+    }
+    return S.daily;
+  };
+  E.questProgress = (id, amount = 1, absolute = false) => {
+    const d = E.daily();
+    for (const q of d.quests) {
+      if (q.id !== id || q.done) continue;
+      q.prog = absolute ? Math.max(q.prog, amount) : q.prog + amount;
+      if (q.prog >= q.goal) {
+        q.done = true; q.prog = q.goal;
+        E.state.coins += 15; E.state.stats.quests = (E.state.stats.quests || 0) + 1;
+        emit('quest', q);
+        E.gainXP(25);
+      }
+    }
+    E.save();
+  };
+
   // ── mistakes notebook ───────────────────────────────────────
   E.logMistake = q => {
     if (q.type !== 'mc' || q.noLog) return;
@@ -294,6 +329,7 @@ window.KG = window.KG || {};
 
   // Vocabulary
   E.vocabSet = i => KG.vocab.filter(w => w.set === i);
+  E.vocabQ = (w, pool, dir) => vocabQ(w, pool, dir);
   function vocabQ(w, pool, dir) {
     const explain = `${gk(w.lex)}: <b>${U.esc(w.en)}</b> <span class="muted">(≈${w.f}× in the NT)</span>`;
     if (dir === 'e2g') return mc(`Which word means "<b>${U.esc(w.en)}</b>"?`, w.g, others(w.g, pool.map(x => x.g)), { greekOpts: true, vkey: w.g, explain, speak: w.g });
@@ -346,11 +382,14 @@ window.KG = window.KG || {};
   function grammarQuestions(key, n = 12) {
     const L = KG.grammar[key], all = cells(L), qs = [];
     const phrases = L.phrases || [], concepts = L.concepts || [];
-    const nPar = all.length ? 6 : 0, nPh = Math.min(phrases.length, all.length ? 3 : 5);
-    const nCon = Math.max(3, n - nPar - nPh);
+    // adapt: once a lesson is mastered, ask more of the harder "produce the form" questions
+    const node = E.nodes.find(x => x.lesson === key), rec = node && E.state.lessons[node.id];
+    const strong = rec && rec.best >= 0.9 && rec.plays >= 1;
+    const nPar = all.length ? (strong ? 8 : 6) : 0, nPh = Math.min(phrases.length, all.length ? 3 : 5);
+    const nCon = Math.max(strong ? 2 : 3, n - nPar - nPh);
     for (const c of sample(concepts, nCon)) qs.push(mc(c.q, c.a, c.w, { explain: c.ex || '' }));
     const picks = sample(all, nPar);
-    picks.forEach((c, i) => qs.push(i % 2 ? E.produceQ(c, all) : E.parseQ(c, all)));
+    picks.forEach((c, i) => qs.push((strong ? i % 3 !== 0 : i % 2) ? E.produceQ(c, all) : E.parseQ(c, all)));
     for (const [g, en] of sample(phrases, nPh)) qs.push(mc('Translate:', en, others(en, phrases.map(p => p[1])), { big: g, speak: g, explain: `${gk(g)} = <b>${U.esc(en)}</b>` }));
     if (phrases.length >= 4) {
       const [g, en] = U.pick(phrases);
@@ -558,7 +597,8 @@ window.KG = window.KG || {};
     if (passed) rec.stars = Math.min(3, rec.stars + (perfect && rec.stars === 0 ? 2 : 1));
     let bonus = passed ? 20 : 5;
     if (perfect && passed) { bonus += 20; S.stats.perfect++; }
-    if (node.type === 'boss' && passed) { bonus += 50; if (firstClear) S.stats.bosses++; }
+    let chest = null;
+    if (node.type === 'boss' && passed) { bonus += 50; if (firstClear) { S.stats.bosses++; chest = E.openChest(); } }
     if (node.type === 'reading' && firstClear) S.stats.verses++;
     if (node.type === 'vocab') for (const w of E.vocabSet(node.set)) if (!S.vocab[w.g]) E.srsAnswer(w.g, true);
     let spell = null;
@@ -572,17 +612,44 @@ window.KG = window.KG || {};
     const coins = (passed ? 5 : 1) + (perfect && passed ? 5 : 0) + (node.type === 'boss' && passed ? 20 : 0);
     S.stats.lessons++;
     S.stats.bestCombo = Math.max(S.stats.bestCombo, res.maxCombo);
+    E.questProgress('lessons'); E.questProgress('combo', res.maxCombo, true);
+    if (perfect && passed) E.questProgress('perfect');
     E.gainXP(xp, coins);
-    return { xp, coins, acc, perfect, passed, stars: rec.stars, firstClear, boosted, spell };
+    return { xp, coins, acc, perfect, passed, stars: rec.stars, firstClear, boosted, spell, chest };
   };
 
   E.recordAnswer = (q, correct, isReview) => {
     const S = E.state;
-    S.stats.answered++; if (correct) S.stats.correct++;
-    if (isReview) S.stats.reviews++;
+    S.stats.answered++; if (correct) { S.stats.correct++; E.questProgress('correct'); }
+    if (isReview) { S.stats.reviews++; E.questProgress('reviews'); }
     if (q.vkey) E.srsAnswer(q.vkey, correct);
     if (!correct) E.logMistake(q); else if (isReview) E.clearMistake(q);
     E.save();
+  };
+
+  // ── wardrobe & loot ────────────────────────────────────────
+  E.look = () => {
+    const S = E.state;
+    if (!S.look) S.look = { owned: ['robe:forest', 'hat:hood', 'hat:none', 'staff:none', 'pet:none'], robe: 'forest', hat: 'hood', staff: 'none', pet: 'none' };
+    return S.look;
+  };
+  E.ownItem = (slot, id) => E.look().owned.includes(slot + ':' + id);
+  E.equip = (slot, id) => { if (!E.ownItem(slot, id)) return false; E.look()[slot] = id; E.save(); emit('look'); return true; };
+  E.buyItem = (slot, id) => {
+    const it = KG.wardrobe[slot].find(x => x.id === id);
+    if (!it || E.ownItem(slot, id) || E.state.coins < it.price) return false;
+    E.state.coins -= it.price; E.look().owned.push(slot + ':' + id); E.equip(slot, id); return true;
+  };
+  // a guardian's treasure chest: something new to wear, plus coins
+  E.openChest = () => {
+    const L = E.look(), pool = [];
+    for (const slot of Object.keys(KG.wardrobe)) for (const it of KG.wardrobe[slot]) if (it.price > 0 && !L.owned.includes(slot + ':' + it.id)) pool.push({ slot, it });
+    const coins = pool.length ? 30 : 80;
+    E.state.coins += coins;
+    let prize = null;
+    if (pool.length) { pool.sort((a, b) => a.it.price - b.it.price); prize = pool[Math.floor(Math.random() * Math.min(pool.length, 5))]; L.owned.push(prize.slot + ':' + prize.it.id); }
+    E.save();
+    return { coins, prize };
   };
 
   E.buy = item => {

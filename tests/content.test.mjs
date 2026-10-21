@@ -14,7 +14,7 @@ const ctx = { console, localStorage: { getItem: k => store[k] ?? null, setItem: 
 ctx.window = ctx;
 vm.createContext(ctx);
 ctx.fetch = async url => { const t = readFileSync(path.join(root, url), 'utf8'); return { ok: true, json: async () => JSON.parse(t) }; };
-for (const f of ['js/data/alphabet.js', 'js/data/vocab.js', 'js/data/grammar.js', 'js/data/readings.js', 'js/data/curriculum.js', 'js/data/passages.js', 'js/data/teach.js', 'js/engine.js']) {
+for (const f of ['js/data/alphabet.js', 'js/data/vocab.js', 'js/data/grammar.js', 'js/data/readings.js', 'js/data/curriculum.js', 'js/data/passages.js', 'js/data/teach.js', 'js/data/wardrobe.js', 'js/engine.js']) {
   vm.runInContext(readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f });
 }
 const { KG } = ctx, E = KG.engine;

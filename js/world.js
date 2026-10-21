@@ -417,7 +417,7 @@ function tmesh(geo, color, opts, ink = 1.06) {
   if (ink && !LOW) { const o = new THREE.Mesh(geo, inkMat); o.scale.setScalar(ink); m.add(o); }
   return m;
 }
-function person({ skin = 0xf0c8a0, robe = 0x3f7d3a, hair = 0x6a3e1e, hood = false, beard = false, staff = false, scale = 1 } = {}) {
+function person({ skin = 0xf0c8a0, robe = 0x3f7d3a, hair = 0x6a3e1e, hood = false, beard = false, staff = false, long = false, scale = 1 } = {}) {
   const g = new THREE.Group(), body = new THREE.Group();
   g.add(body);
   const robeDark = new THREE.Color(robe).multiplyScalar(0.7).getHex();
@@ -441,6 +441,7 @@ function person({ skin = 0xf0c8a0, robe = 0x3f7d3a, hair = 0x6a3e1e, hood = fals
   if (hood) {
     const h = tmesh(new THREE.ConeGeometry(0.44, 0.66, 14), robe); h.position.set(0, 2.18, -0.1); h.rotation.x = -0.4; body.add(h);
   }
+  if (long) { const lh = tmesh(new THREE.CylinderGeometry(0.3, 0.36, 0.75, 14, 1, true, Math.PI * 0.6, Math.PI * 1.8), hair, { side: THREE.DoubleSide }, 0); lh.position.set(0, 1.62, -0.06); body.add(lh); }
   if (beard) { const b = tmesh(new THREE.ConeGeometry(0.24, 0.66, 10), 0xeeeeee); b.position.set(0, 1.55, 0.2); b.rotation.x = Math.PI + 0.25; body.add(b); }
   const cloak = new THREE.Mesh(new THREE.ConeGeometry(0.6, 1.35, 16, 1, true), tmat(robeDark, { side: THREE.DoubleSide })); cloak.castShadow = true; cloak.position.set(0, 1.0, -0.13); body.add(cloak);
   const legs = [], arms = [];
@@ -627,19 +628,55 @@ function portalDisc(r) {
   }
   return new THREE.Mesh(new THREE.CircleGeometry(r, 40), new THREE.MeshBasicMaterial({ map: portalTex, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
 }
+// the teachers of each world (js/data/story.js) and how they look
+const teacherOf = (i, k) => KG.story.teachers[i][k] || KG.story.teachers[i][0];
+const LONG_HAIR = ['Sophia', 'Rhoda', 'Dorcas', 'Joanna', 'Lydia', 'Phoebe', 'Lois', 'Eunice', 'Priscilla', 'Damaris', 'Junia'];
+function teacherLook(i, k) {
+  const T = teacherOf(i, k), long = LONG_HAIR.includes(T[1]);
+  if (k === 0) return { robe: ZONES[i].robe, hair: long ? 0x6a3e1e : 0xdddddd, beard: !long && i % 3 === 0, staff: true, hood: i % 2 === 1, long, skin: [0xf0c8a0, 0xd8a878, 0xb07850][i % 3] };
+  const robes = [0x3f6a9a, 0x9a5a2a, 0x5a8a4a, 0x8a3a5a, 0x4a4a7a, 0xa08030, 0x2f7a7a, 0x7a5a9a];
+  return { robe: robes[(i * 2 + k) % robes.length], hair: [0x2a1a10, 0x8a5a2a, 0xbbbbbb, 0x4a2a1a][(i + k) % 4], beard: !long && (i + k) % 2 === 0, staff: k === 2, long, skin: [0xf0c8a0, 0xd8a878, 0xb07850, 0xe8b890][(i + k * 2) % 4] };
+}
+// which of a world's teachers gives a lesson (the same split as buildEntities)
+function teacherIndex(i, nodeId) {
+  const taught = KG.units[i].nodes.filter(n => n.type !== 'boss' && n.type !== 'reading'), per = Math.ceil(taught.length / Math.min(3, taught.length));
+  const j = taught.findIndex(n => n.id === nodeId);
+  return j < 0 ? 0 : Math.floor(j / per);
+}
+// a teacher's spot: a rug, a bench and a slate with the lesson on it
+function teachingSpot(p, sd, k, title) {
+  const nx = Math.cos(p.a) * sd, nz = -Math.sin(p.a) * sd, x = p.x + nx * 2.4, z = p.z + nz * 2.4;
+  const rug = new THREE.Mesh(new THREE.CircleGeometry(2.6, 20), mat([0x9a2a2a, 0x2a5a8a, 0x6a2a7a][k]));
+  rug.rotation.x = -Math.PI / 2; rug.position.set(p.x + nx * 0.6, groundAt(p.x + nx * 0.6, p.z + nz * 0.6) + 0.04, p.z + nz * 0.6); WG.add(rug);
+  const g = new THREE.Group();
+  for (const s of [-1, 1]) { const post = mesh(new THREE.CylinderGeometry(0.07, 0.07, 2, 6), 0x6a4a2a); post.position.set(s * 1.1, 1, 0); g.add(post); }
+  const slate = mesh(new THREE.BoxGeometry(2.5, 1.3, 0.1), 0x2a3a2a); slate.position.y = 1.6; g.add(slate);
+  const txt = textSprite(title, { size: 34, bg: null, color: '#f5f0dc', scale: 0.0075 }); txt.position.set(0, 1.6, 0.2); g.add(txt);
+  const bench = mesh(new THREE.BoxGeometry(2, 0.15, 0.5), 0x8a6a3a); bench.position.set(0, 0.45, 1.4); g.add(bench);
+  for (const s of [-1, 1]) { const l = mesh(new THREE.BoxGeometry(0.12, 0.45, 0.4), 0x6a4a2a); l.position.set(s * 0.8, 0.22, 1.4); g.add(l); }
+  g.rotation.y = Math.atan2(-nx, -nz);
+  put(g, x, z); colliders.push({ x, z, r: 1.2 });
+}
 function buildEntities() {
   ents.length = 0;
   const i = WI, u = KG.units[i], Z = ZONES[i], side = i % 2 ? -1 : 1;
-  // mentor
-  const mp = along(0.28, side, 4.5);
-  const m = person({ robe: Z.robe, hair: 0xdddddd, beard: i % 3 === 0, staff: true, hood: i % 2 === 1, skin: [0xf0c8a0, 0xd8a878, 0xb07850][i % 3] });
-  m.rotation.y = Math.atan2(mp.px - mp.x, mp.pz - mp.z);
-  put(m, mp.x, mp.z);
-  addEnt({ kind: 'mentor', zone: i, obj: m, x: mp.x, z: mp.z, label: `${Z.mentor[0]} · ${Z.mentor[1]}` });
-  // reading pedestals
-  const reads = u.nodes.filter(n => n.type === 'reading');
-  reads.forEach((n, k) => {
-    const p = along(0.42 + k * (0.36 / Math.max(1, reads.length)), k % 2 ? -1 : 1, 6.5);
+  // three teachers along the road, each with their own lessons and their own spot;
+  // the road follows the curriculum, so walking on means learning on
+  const seq = u.nodes.filter(n => n.type !== 'boss'), taught = seq.filter(n => n.type !== 'reading');
+  const tOf = n => 0.1 + 0.72 * seq.indexOf(n) / Math.max(1, seq.length - 1);
+  const k3 = Math.min(3, taught.length), per = Math.ceil(taught.length / k3);
+  for (let k = 0; k < k3; k++) {
+    const mine = taught.slice(k * per, (k + 1) * per); if (!mine.length) continue;
+    const T = teacherOf(i, k), sd = (i + k) % 2 ? -1 : 1, mp = along(tOf(mine[0]), sd, 4.5);
+    const m = person(teacherLook(i, k));
+    m.rotation.y = Math.atan2(mp.px - mp.x, mp.pz - mp.z);
+    put(m, mp.x, mp.z);
+    teachingSpot(mp, sd, k, mine[0].title);
+    addEnt({ kind: 'mentor', zone: i, teacher: k, T, nodes: mine.map(n => n.id), obj: m, x: mp.x, z: mp.z, label: `${T[0]} · ${T[1]}` });
+  }
+  // reading pedestals, where the road reaches each reading
+  seq.filter(n => n.type === 'reading').forEach((n, k) => {
+    const p = along(tOf(n) + 0.02, k % 2 ? -1 : 1, 6.5);
     const g = new THREE.Group();
     const col = mesh(new THREE.CylinderGeometry(0.4, 0.55, 1.1, 8), 0xe8dfcc); col.position.y = 0.55; g.add(col);
     const top = mesh(new THREE.BoxGeometry(1.1, 0.15, 0.8), 0xd8cfbc); top.position.y = 1.15; g.add(top);
@@ -857,6 +894,7 @@ E.on(t => { if (t === 'look') { applyLook(player); setPet(); } });
 const P = { vel: new THREE.Vector3(), onGround: true, hearts: 5, maxHearts: 5, hurtT: 0, regen: 0, zone: -1 };
 const cam = { yaw: Math.PI, pitch: 0.42, dist: 8.5, auto: 0 };
 const input = { f: 0, r: 0, run: false, jump: false, keys: {}, joy: null, drag: null };
+const stickRight = () => (E.state.settings.stick || 'right') === 'right';
 
 // ── HUD & overlays ────────────────────────────────────────────
 const hud = document.getElementById('whud');
@@ -869,6 +907,7 @@ hud.innerHTML = `
   <div class="wpowers" id="wpowers"></div>
   <div class="wbanner" id="wbanner"></div>
   <div class="wprompt" id="wprompt"></div>
+  <div class="wjoy-rest" id="wjoyrest"></div>
   <div class="wjoy" id="wjoy"><div class="wjoy-knob" id="wknob"></div></div>
   <div class="wact"><button class="wbig" id="wtalk">💬</button><button class="wbig wjump" id="wjump">⤒</button></div>
   <div class="whelp" id="whelp">WASD / arrows to move · Shift to run · Space to jump · E to talk · drag to look</div>
@@ -895,7 +934,7 @@ function questTarget() {
   let e;
   if (n.type === 'boss') e = ents.find(x => x.kind === 'guardian');
   else if (n.type === 'reading') e = ents.find(x => x.kind === 'pedestal' && x.node.id === n.id);
-  else e = ents.find(x => x.kind === 'mentor');
+  else e = ents.find(x => x.kind === 'mentor' && x.nodes.includes(n.id)) || ents.find(x => x.kind === 'mentor');
   return { node: n, ent: e };
 }
 let beacon = null;
@@ -925,7 +964,7 @@ function refreshMarkers() {
   if (t.done) txt = WI === NZ - 1 ? 'All quests complete! Enter the Great Library.' : 'All quests complete! Travel on to the Great Library.';
   else if (t.away) txt = `${t.node.unit > WI ? 'Go through the portal to' : 'Return to'} <b>${esc(ZONES[t.node.unit].name)}</b>: ${esc(t.node.title)}`;
   else {
-    const who = t.ent.kind === 'mentor' ? `Visit ${ZONES[WI].mentor[1]}` : t.ent.kind === 'pedestal' ? 'Restore the lost scroll' : `Challenge ${t.ent.label}`;
+    const who = t.ent.kind === 'mentor' ? `Visit ${t.ent.T[1]}` : t.ent.kind === 'pedestal' ? 'Restore the lost scroll' : `Challenge ${t.ent.label}`;
     txt = `${who}: <b>${esc(t.node.title)}</b>`;
   }
   $('wqtext').innerHTML = txt;
@@ -945,7 +984,7 @@ let traveling = false;
 function placeAt(where) {
   let p, face;
   if (where === 'gate') { p = along(0.92); face = p.a + Math.PI; }
-  else if (where === 'mentor') { const m = ents.find(e => e.kind === 'mentor'); p = along(0.28); p = { x: (p.px + m.x) / 2 + Math.sin(p.a) * 2, z: (p.pz + m.z) / 2 + Math.cos(p.a) * 2 }; face = along(0.28).a + Math.PI; }
+  else if (where === 'mentor') { const m = (questTarget().ent && questTarget().ent.kind === 'mentor' ? questTarget().ent : ents.find(e => e.kind === 'mentor')), r = m.obj.rotation.y; p = { x: m.x + Math.sin(r) * 2.6, z: m.z + Math.cos(r) * 2.6 }; face = r + Math.PI; }
   else if (where && where.x !== undefined) { p = where; face = where.yaw !== undefined ? where.yaw - Math.PI : 0; }
   else { p = along(0.05); face = p.a; }
   player.position.set(p.x, groundAt(p.x, p.z), p.z);
@@ -1027,16 +1066,17 @@ function faceShot(o, dist = 4, h = 1.2, side = 0.6) {
 }
 function behindPlayer() { const pos = player.position; return () => V(pos.x - Math.sin(player.rotation.y) * 7, pos.y + 3.4, pos.z - Math.cos(player.rotation.y) * 7); }
 function arrivalShots(i) {
-  const Z = ZONES[i], m = ents.find(e => e.kind === 'mentor').obj, mid = along(0.5);
+  const Z = ZONES[i], me = ents.find(e => e.kind === 'mentor'), m = me.obj, T = me.T, mid = along(0.5);
+  const others = ents.filter(e => e.kind === 'mentor' && e !== me).map(e => `${esc(e.T[1])}, ${esc(e.T[2])}`).join(', and ');
   const shots = [];
   if (i === 0) {
     shots.push({ cam: orbitShot(mid.px, mid.pz, 46, 26, 0.6, 1.5), look: () => V(mid.px, groundAt(mid.px, mid.pz), mid.pz), who: '📜 The Apprentice’s Journey', text: 'You are <b>Θεόφιλος</b> (Theophilus), an apprentice Koine wizard in Alphabet Hollow. The scrolls of the Great Library lie scattered across nine worlds, and their words are fading into forgetfulness.' });
     shots.push({ cam: orbitShot(mid.px, mid.pz, 40, 18, 1.5, 2.3), look: () => V(mid.px, groundAt(mid.px, mid.pz) + 2, mid.pz), who: '📜 The Apprentice’s Journey', text: 'In Greek, every rule you master is a <b>spell</b>. Learn them from the masters, restore the lost scrolls, banish the Shades of Forgetting, and win your way through the portals to the Library.' });
-    shots.push({ cam: faceShot(m), look: () => headOf(m), who: `${esc(Z.mentor[0])} · ${esc(Z.mentor[1])}`, speaker: m, speak: Z.greet[0], text: `<span class="gk">${esc(Z.greet[0])}</span> <i>(${esc(Z.greet[1])})</i> Welcome, young wizard! Every spell begins with letters. Gather the glowing letters along the road, then come to me.` });
+    shots.push({ cam: faceShot(m), look: () => headOf(m), who: `${esc(T[0])} · ${esc(T[1])}`, speaker: m, speak: T[3], text: `<span class="gk">${esc(T[3])}</span> <i>(${esc(T[4])})</i> Welcome, young wizard! Every spell begins with letters. Gather the glowing letters along the road and come to me. Later, ${others} will teach you more.` });
   } else {
     const lm = D.pts[Math.floor(D.pts.length / 2)];
     shots.push({ cam: orbitShot(lm[0], lm[1], 44, 24, 0.4, 1.3), look: () => V(lm[0], groundAt(lm[0], lm[1]), lm[1]), who: `📖 ${esc(Z.name)}`, text: esc(KG.story.arrive[i]) });
-    shots.push({ cam: faceShot(m), look: () => headOf(m), who: `${esc(Z.mentor[0])} · ${esc(Z.mentor[1])}, ${esc(Z.mentor[2])}`, speaker: m, speak: Z.greet[0], text: `<span class="gk">${esc(Z.greet[0])}</span> <i>(${esc(Z.greet[1])})</i> ${esc(KG.story.mentor[i])}` });
+    shots.push({ cam: faceShot(m), look: () => headOf(m), who: `${esc(T[0])} · ${esc(T[1])}, ${esc(T[2])}`, speaker: m, speak: T[3], text: `<span class="gk">${esc(T[3])}</span> <i>(${esc(T[4])})</i> ${esc(KG.story.mentor[i])}${others ? ` Further along the road, ${others} will teach you too.` : ''}` });
   }
   shots.push({ cam: behindPlayer(), look: () => V(player.position.x, player.position.y + 1.4, player.position.z), dur: 1.2, cut: false });
   return shots;
@@ -1076,15 +1116,20 @@ function talk(e) {
   const Z = ZONES[e.zone], app = KG.app;
   app.sfx('tap');
   if (e.kind === 'mentor') {
-    const t = questTarget(), mine = KG.units[e.zone].nodes.filter(n => n.type !== 'reading' && n.type !== 'boss');
-    const greet = `<p><span class="gk">${esc(Z.greet[0])}</span> <i>(${esc(Z.greet[1])})</i></p>`;
+    const t = questTarget(), T = e.T, mine = KG.units[e.zone].nodes.filter(n => e.nodes.includes(n.id));
+    const greet = `<p><span class="gk">${esc(T[3])}</span> <i>(${esc(T[4])})</i></p>`;
     let html = greet, btns = [];
+    const left = mine.filter(n => !E.stars(n.id));
     if (t.done) html += '<p>You have learned every spell I can teach. Go to the Great Library, wizard!</p>';
     else if (t.ent === e) {
-      html += `<p>I am ${esc(Z.mentor[1])}, ${esc(Z.mentor[2])}. Your next lesson in the craft is <b>${esc(t.node.title)}</b>.</p>`;
+      html += `<p>I am ${esc(T[1])}, ${esc(T[2])}. ${esc(T[5])}</p><p>Your lesson: <b>${esc(t.node.title)}</b> <span class="muted small">(${mine.length - left.length + 1} of ${mine.length} with me)</span></p>`;
       btns.push({ label: `Begin: ${esc(t.node.title)} ▶`, cls: 'primary', fn: () => launch(t.node.id) });
-    } else if (t.node.unit === e.zone) html += `<p>${t.ent.kind === 'pedestal' ? `A lost scroll lies nearby: <b>${esc(t.ent.label)}</b>. Restore it at its pedestal (follow the golden light).` : `You are ready, apprentice! Face <b>${esc(t.ent.label)}</b> at the gate to prove your spells.`}</p>`;
-    else if (t.node.unit > e.zone) html += `<p>You have finished my lessons. Your path lies onward through the portal: seek ${esc(ZONES[t.node.unit].mentor[1])} in ${esc(ZONES[t.node.unit].name)}.</p>`;
+    } else if (t.node.unit === e.zone) {
+      const who = t.ent.kind === 'mentor' ? `${esc(t.ent.T[1])}, ${esc(t.ent.T[2])}` : null;
+      if (left.length && !E.unlocked(left[0])) html += `<p>Not yet, apprentice. Finish your lesson${who ? ` with ${who}` : ''} first, then come back to me.</p>`;
+      else html += `<p>${who ? `Your next lesson is with <b>${who}</b>. Follow the golden light along the road.` : t.ent.kind === 'pedestal' ? `A lost scroll lies nearby: <b>${esc(t.ent.label)}</b>. Restore it at its pedestal (follow the golden light).` : `You are ready, apprentice! Face <b>${esc(t.ent.label)}</b> at the gate to prove your spells.`}</p>`;
+    }
+    else if (t.node.unit > e.zone) html += `<p>You have finished my lessons. Your path lies onward through the portal to ${esc(ZONES[t.node.unit].name)}.</p>`;
     else html += `<p>You are not ready for my lessons yet. Return to ${esc(ZONES[t.node.unit].name)} first.</p>`;
     const done = mine.filter(n => E.stars(n.id) > 0);
     if (done.length) {
@@ -1092,7 +1137,7 @@ function talk(e) {
       done.slice(-4).forEach(n => btns.push({ label: `↺ ${esc(n.title)}`, fn: () => launch(n.id) }));
     }
     btns.push({ label: 'Farewell' });
-    dialog(`${esc(Z.mentor[0])} <span class="muted">· ${esc(Z.mentor[1])}, ${esc(Z.mentor[2])}</span>`, html, btns);
+    dialog(`${esc(T[0])} <span class="muted">· ${esc(T[1])}, ${esc(T[2])}</span>`, html, btns);
   } else if (e.kind === 'pedestal') {
     const n = e.node, R = KG.readings[n.reading], done = E.stars(n.id) > 0;
     if (!E.unlocked(n)) return dialog(`📜 ${esc(R.ref)}`, '<p>The scroll is sealed with a strange light. Learn more spells from your master first.</p>', [{ label: 'Leave' }]);
@@ -1159,8 +1204,8 @@ function endBattle() {
   $('wbattle').classList.remove('on'); $('wbattle').innerHTML = '';
   battle = null;
   if (P.hearts <= 0) {
-    const m = ents.find(e => e.kind === 'mentor');
-    dialog('😵 You fainted…', `<p>The shades overwhelmed you. You wake beside ${esc(ZONES[WI].mentor[1])}, who gives you some bread and water.</p><p class="muted small">Tip: review your words in 🔁 Review to make the shades easier.</p>`, [{ label: 'Get up', cls: 'primary' }]);
+    const m = ents.filter(e => e.kind === 'mentor').sort((a, b) => Math.hypot(a.x - player.position.x, a.z - player.position.z) - Math.hypot(b.x - player.position.x, b.z - player.position.z))[0];
+    dialog('😵 You fainted…', `<p>The shades overwhelmed you. You wake beside ${esc(m.T[1])}, who gives you some bread and water.</p><p class="muted small">Tip: review your words in 🔁 Review to make the shades easier.</p>`, [{ label: 'Get up', cls: 'primary' }]);
     P.hearts = P.maxHearts;
     player.position.set(m.x - 2, groundAt(m.x - 2, m.z + 2), m.z + 2);
     updateHUD();
@@ -1192,16 +1237,20 @@ addEventListener('keyup', e => { input.keys[e.code] = false; });
 const canvas = renderer.domElement;
 canvas.addEventListener('pointerdown', e => {
   if (mode === 'stage') { stage.pointer(e); return; }
-  canvas.setPointerCapture(e.pointerId);
-  if (e.pointerType === 'touch' && e.clientX < innerWidth * 0.45 && !input.joy) {
+  try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* pointer already gone */ }
+  // the walking stick sits on the side the player chooses (Profile → Settings), right by default
+  const right = stickRight();
+  if (e.pointerType === 'touch' && (right ? e.clientX > innerWidth * 0.5 : e.clientX < innerWidth * 0.5) && !input.joy) {
     input.joy = { id: e.pointerId, x0: e.clientX, y0: e.clientY, dx: 0, dy: 0 };
     const j = $('wjoy'); j.style.left = (e.clientX - 60) + 'px'; j.style.top = (e.clientY - 60) + 'px'; j.classList.add('on');
   } else input.drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
 });
 canvas.addEventListener('pointermove', e => {
   if (input.joy && e.pointerId === input.joy.id) {
-    let dx = e.clientX - input.joy.x0, dy = e.clientY - input.joy.y0; const m = Math.hypot(dx, dy), max = 50;
-    if (m > max) { dx *= max / m; dy *= max / m; }
+    let dx = e.clientX - input.joy.x0, dy = e.clientY - input.joy.y0; const m = Math.hypot(dx, dy), max = 55;
+    // the stick follows a finger that slides past its edge, so it never feels stuck
+    if (m > max * 1.6) { input.joy.x0 += dx * (1 - max * 1.6 / m); input.joy.y0 += dy * (1 - max * 1.6 / m); const j = $('wjoy'); j.style.left = (input.joy.x0 - 60) + 'px'; j.style.top = (input.joy.y0 - 60) + 'px'; dx = e.clientX - input.joy.x0; dy = e.clientY - input.joy.y0; }
+    const m2 = Math.hypot(dx, dy); if (m2 > max) { dx *= max / m2; dy *= max / m2; }
     input.joy.dx = dx / max; input.joy.dy = dy / max;
     $('wknob').style.transform = `translate(${dx}px, ${dy}px)`;
   } else if (input.drag && e.pointerId === input.drag.id) {
@@ -1234,11 +1283,12 @@ function step(dt) {
     const k = input.keys;
     if (k.KeyW || k.ArrowUp) f += 1; if (k.KeyS || k.ArrowDown) f -= 1;
     if (k.KeyA || k.ArrowLeft) r -= 1; if (k.KeyD || k.ArrowRight) r += 1;
-    if (input.joy) { f -= input.joy.dy; r += input.joy.dx; }
+    if (input.joy) { const jm = Math.hypot(input.joy.dx, input.joy.dy); if (jm > 0.12) { const k = (jm - 0.12) / 0.88 / jm; f -= input.joy.dy * k; r += input.joy.dx * k; } }
   }
   const mag = Math.min(1, Math.hypot(f, r));
-  const run = input.keys.ShiftLeft || input.keys.ShiftRight || (input.joy && mag > 0.92);
-  const speed = mag * (run ? 9.5 : 5.5);
+  const run = input.keys.ShiftLeft || input.keys.ShiftRight;
+  // on a stick, speed follows how far you push: a gentle walk, then a run at the edge
+  const speed = input.joy ? (mag < 0.8 ? mag * 6.5 : 5.2 + (mag - 0.8) * 22) : mag * (run ? 9.5 : 5.5);
   const fx = -Math.sin(cam.yaw), fz = -Math.cos(cam.yaw), rx = Math.cos(cam.yaw), rz = -Math.sin(cam.yaw);
   let mx = fx * f + rx * r, mz = fz * f + rz * r; const ml = Math.hypot(mx, mz) || 1; mx /= ml; mz /= ml;
   if (mag > 0.05) {
@@ -1283,9 +1333,10 @@ function step(dt) {
   if (cine) updateCine(dt, t);
   else {
     cam.auto = Math.max(0, cam.auto - dt);
-    if (mag > 0.3 && cam.auto <= 0 && f > 0.2) {
+    // the camera swings round behind the hero as you walk (more readily on a phone stick)
+    if (mag > 0.3 && cam.auto <= 0 && (f > 0.2 || (input.joy && f > -0.4))) {
       let d = (player.rotation.y + Math.PI) - cam.yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
-      cam.yaw += d * dt * 1.2;
+      cam.yaw += d * dt * (input.joy ? 2.2 : 1.2) * Math.min(1, mag);
     }
     // pull the camera in when a hill or wall stands between it and the hero
     let cd = cam.dist;
@@ -1461,6 +1512,7 @@ W.show = () => {
   mode = 'world'; worldShown = true;
   root.classList.remove('staging');
   root.classList.add('on');
+  root.classList.toggle('stick-right', stickRight());
   resize();
   refreshMarkers();
   for (const sc of scrolls) sc.g.visible = !(E.state.scrolls || {})[sc.p.id];
@@ -1479,7 +1531,7 @@ W.hide = () => {
 // The 3D trial stage used by every lesson, boss, review and arcade game.
 W.stage = {
   get ok() { return !!stage; },
-  enter(kind, unit) { if (mode === 'world' && worldShown) savePos(); if (cine) endCutscene(); closeDialog(); mode = 'stage'; root.classList.add('on', 'staging'); resize(); stage.enter(kind, unit); startLoop(); },
+  enter(kind, unit, nodeId) { if (mode === 'world' && worldShown) savePos(); if (cine) endCutscene(); closeDialog(); mode = 'stage'; root.classList.add('on', 'staging'); resize(); stage.enter(kind, unit, nodeId); startLoop(); },
   ask: (q, h) => stage.ask(q, h), reveal: (ok, c, r) => stage.reveal(ok, c, r), result: ok => stage.result(ok),
   teach: item => stage.teach(item), trial: foe => stage.trial(foe), mini: (q, done) => stage.mini(q, done),
   hp: f => stage.hp(f), combo: n => stage.combo(n), celebrate: w => stage.celebrate(w), orderLine: () => stage.orderLine(), lock: () => stage.lock(),
@@ -1512,7 +1564,7 @@ W.debug = { player, cam, P, ents, wisps, questTarget, get world() { return WI; }
   if (backPortal && Math.hypot(player.position.x - backPortal.x, player.position.z - backPortal.z) > 5) backPortal.armed = true;
   snapCamera();
   setPet();
-  stage = createStage({ renderer, person, golem, wispMesh, ZONES, KG, animatePerson, applyLook, buildPet, animatePet, GOLEM_COL });
+  stage = createStage({ renderer, person, golem, wispMesh, ZONES, KG, animatePerson, applyLook, buildPet, animatePet, GOLEM_COL, teacherLook: (i, nodeId) => teacherLook(i, teacherIndex(i, nodeId)) });
   W.debug.stage = stage;
   W.ok = true;
   document.dispatchEvent(new Event('world-ready'));

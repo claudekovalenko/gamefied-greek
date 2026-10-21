@@ -21,13 +21,15 @@ master is a **spell**, and the goal is to read and translate the Greek New Testa
   portal you arrived through leads back. The **world map** takes you to any world you've reached.
 - **Cutscenes**: arriving in a world, the camera sweeps over it and its master greets you; beating a guardian,
   it bows, speaks, and the portal blazes open.
-- **Masters** give you lessons as quests. A golden light and the quest arrow always show where to go next.
+- **Three teachers in every world**, each at their own spot along the road with a slate, a bench and their own
+  lessons, so walking on through a world means learning on. They give you lessons as quests. A golden light and the quest arrow always show where to go next.
 - **Shades of Forgetting** roam the road. Touch one and you must remember a word to banish it: this is
   your spaced-repetition review. An **elite shade** in each world hunts your weakest words.
 - **Collect** glowing letters, daily coins, and **lost scrolls**: NT passages to read and translate in the Reading Room.
 
 Controls: WASD/arrows to move, Shift to run, Space to jump, E to talk, drag to look around.
-On a phone, drag on the left side to walk, drag on the right to look, and use the on-screen buttons.
+On a phone, put your thumb down on the walking side to walk (right side by default; switch to left in
+Profile → Settings), drag on the other side to look, and use the on-screen buttons.
 
 ## How a lesson works
 
@@ -71,7 +73,7 @@ Twenty passages, from John 1:1–5 to Revelation 21, are collected as scrolls on
 | 📋 **Daily quests** | Three goals a day (answers, lessons, reviews, shades, verses, combos…) for coins and XP. |
 | 🎁 **Loot & wardrobe** | Guardians drop treasure chests: robes, hats, staffs and companions (owl, dove, lamb). Coins buy the rest. |
 | 🏆 **31 achievements** | From *First Steps* to *For God So Loved* (translate John 3:16) and *The Great Library*. |
-| 🎮 **Arcade** | 60-second high-score rounds: the 3D spell games (Word Rain, Declension Defense, Parsing Forge, Verse Race) and the speed rounds (Alphabet Blitz, Vocab Lightning, Parse Rush). |
+| 🎮 **Arcade** | 60-second high-score rounds with combo multipliers (×2, ×3, ×4) and 🥉🥈🥇 medals: the 3D spell games (Word Rain, Declension Defense, Parsing Forge, Verse Race) and the speed rounds (Alphabet Blitz, Vocab Lightning, Parse Rush). |
 | 🔁 **Review** | Spaced-repetition deck for every word you study, plus a notebook of your mistakes. |
 | 📖 **Library** | Reading Room, scroll collection, reading-readiness score, Spellbook and lexicon. |
 

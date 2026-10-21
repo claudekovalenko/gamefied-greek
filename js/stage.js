@@ -94,7 +94,6 @@ export function createStage(ctx) {
   function setOpponent(kind, unit) {
     if (opp) scene.remove(opp);
     if (S.hpObj) { scene.remove(S.hpObj); S.hpObj = null; }
-    const Z = ZONES[unit];
     if (kind === 'guardian') { opp = golem(GOLEM_COL[unit], unit); opp.scale.setScalar(1.25); }
     else if (kind === 'beast') { opp = sets.beast(unit); }
     else if (kind === 'shade') { opp = wispMesh(); opp.scale.setScalar(2.6); opp.userData.float = 2.6; }
@@ -133,7 +132,7 @@ export function createStage(ctx) {
     } else if (kind === 'rival') {
       opp = person({ robe: 0x5a2a7a, hair: 0x1a1a1a, staff: true, skin: 0xe8c098, scale: 1.05 });
     } else {
-      opp = person({ robe: Z.robe, hair: 0xdddddd, beard: unit % 3 === 0, staff: true, hood: unit % 2 === 1, skin: [0xf0c8a0, 0xd8a878, 0xb07850][unit % 3], scale: 1.15 });
+      opp = person(Object.assign(ctx.teacherLook(unit, S.nodeId), { scale: 1.15 }));
     }
     S.oppKind = kind;
     opp.position.copy(oppPos); opp.rotation.y = 0;
@@ -431,8 +430,8 @@ export function createStage(ctx) {
 
   // ── public API ─────────────────────────────────────────────
   S.ok = true;
-  S.enter = (kind, unit = 0) => {
-    S.kind = kind; S.unit = unit;
+  S.enter = (kind, unit = 0, nodeId = null) => {
+    S.kind = kind; S.unit = unit; S.nodeId = nodeId;
     useSet(kind === 'arcade' ? 'arena' : THEMES[unit] || 'arena', kind === 'shade' ? 'shade' : '');
     setOpponent(kind, unit);
     clearUI(); S.q = null;

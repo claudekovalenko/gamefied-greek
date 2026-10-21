@@ -104,10 +104,10 @@
     return 'mentor';
   }
   const stageUnit = o => (o.node ? o.node.unit : (E.nextNode() || { unit: 0 }).unit);
-  function enterStage(kind, unit) {
+  function enterStage(kind, unit, nodeId) {
     document.body.classList.remove('in-world');
     document.body.classList.add('playing', 'in-stage');
-    ST().enter(kind, unit);
+    ST().enter(kind, unit, nodeId);
   }
   function go(v) {
     if (v === 'world' && !hasWorld()) v = 'path';
@@ -232,7 +232,7 @@
   function showLearn(id, thenStart) {
     const n = E.node(id); closeSheet();
     readerReading = n.type === 'reading' ? KG.readings[n.reading] : null;
-    if (use3D()) enterStage(stageKind({ node: n }), n.unit);
+    if (use3D()) enterStage(stageKind({ node: n }), n.unit, n.id);
     else {
       if (hasWorld()) KG.world.hide();
       document.body.classList.remove('in-world');
@@ -264,7 +264,7 @@
     P = Object.assign({ i: 0, correct: 0, wrong: 0, combo: 0, maxCombo: 0, xp: 0, hearts: 3, answered: false }, opts);
     readerReading = null;
     P.is3D = use3D();
-    if (P.is3D) enterStage(stageKind(P), stageUnit(P));
+    if (P.is3D) enterStage(stageKind(P), stageUnit(P), P.node && P.node.id);
     else {
       if (hasWorld()) KG.world.hide();
       document.body.classList.remove('in-world');
@@ -355,6 +355,10 @@
   function renderMini(q) {
     main.innerHTML = `<div class="s3">${header()}<div class="s3center"><div class="minititle">🎮 ${esc(q.title)}</div></div><div class="foot s3foot" id="foot"><div class="muted center s3help">${MINI_HELP[q.game]}</div></div></div>`;
     sfx('combo');
+    // every hit in a lesson mini-game shows its reward and builds a streak
+    let streak = 0;
+    q.onHit = () => { if (!P || P.q !== q) return; streak++; floatXP(streak >= 3 ? `🔥${streak} +3 XP` : '+3 XP', $('.prog')); };
+    q.onMiss = () => { streak = 0; };
     ST().mini(q, res => {
       if (!P || P.q !== q) return;
       P.xp += res.hits * 3;
@@ -588,17 +592,22 @@
 
   // ── arcade ──────────────────────────────────────────────────
   const GAMES = {
-    blitz: { name: 'Alphabet Blitz', icon: 'Ω', desc: 'Name as many letters as you can in 60 seconds.' },
-    lightning: { name: 'Vocab Lightning', icon: '⚡', desc: 'Rapid-fire meanings from the words you have studied.' },
-    parse: { name: 'Parse Rush', icon: '🧩', desc: 'Parse forms from the grammar you have unlocked.' },
-    rain: { name: 'Word Rain', icon: '🌧', desc: 'Catch each falling word that means the English target.', mini: true },
-    defense: { name: 'Declension Defense', icon: '🛡', desc: 'Strike every marching noun form with its case.', mini: true },
-    forge: { name: 'Parsing Forge', icon: '⚒', desc: 'Name the tense, then the person and number, of each verb.', mini: true },
-    race: { name: 'Verse Race', icon: '🏁', desc: 'Build verse after verse of the NT translation, piece by piece.', mini: true },
+    blitz: { name: 'Alphabet Blitz', icon: 'Ω', desc: 'Name as many letters as you can in 60 seconds.' , medals: [15, 25, 40] },
+    lightning: { name: 'Vocab Lightning', icon: '⚡', desc: 'Rapid-fire meanings from the words you have studied.' , medals: [12, 22, 35] },
+    parse: { name: 'Parse Rush', icon: '🧩', desc: 'Parse forms from the grammar you have unlocked.' , medals: [8, 15, 24] },
+    rain: { name: 'Word Rain', icon: '🌧', desc: 'Catch each falling word that means the English target.', mini: true , medals: [10, 25, 45] },
+    defense: { name: 'Declension Defense', icon: '🛡', desc: 'Strike every marching noun form with its case.', mini: true , medals: [10, 25, 45] },
+    forge: { name: 'Parsing Forge', icon: '⚒', desc: 'Name the tense, then the person and number, of each verb.', mini: true , medals: [8, 18, 30] },
+    race: { name: 'Verse Race', icon: '🏁', desc: 'Build verse after verse of the NT translation, piece by piece.', mini: true , medals: [12, 30, 50] },
   };
+  // bronze, silver and gold for each game's score
+  const MEDALS = ['🥉', '🥈', '🥇'];
+  const medalOf = (k, score) => GAMES[k].medals.filter(m => score >= m).length;
   function renderArcade() {
-    const card = ([k, g]) => `<div class="card game"><div class="gic">${g.icon}</div><div class="gtx"><h3>${g.name}</h3><p>${g.desc}</p>
-      <p class="muted">High score: <b>${S().arcade[k] || 0}</b></p></div><button class="btn primary" data-act="arcade" data-arg="${k}" ${g.mini && !use3D() ? 'disabled title="Needs 3D (Profile → Settings)"' : ''}>Play</button></div>`;
+    const card = ([k, g]) => { const best = S().arcade[k] || 0, m = medalOf(k, best), nx = g.medals[m];
+      return `<div class="card game"><div class="gic">${g.icon}</div><div class="gtx"><h3>${g.name} ${m ? MEDALS[m - 1] : ''}</h3><p>${g.desc}</p>
+      <p class="muted">Best: <b>${best}</b>${nx ? ` · ${MEDALS[m]} at ${nx}` : ' · all medals won!'}</p></div><button class="btn primary" data-act="arcade" data-arg="${k}" ${g.mini && !use3D() ? 'disabled title="Needs 3D (Profile → Settings)"' : ''}>Play</button></div>`;
+    };
     const pw = E.powers();
     main.innerHTML = `<h1 class="vh">Arcade</h1><p class="muted">60-second high-score rounds. Mistakes cost time. Power-ups: 💡${pw.hint} ⏳${pw.slow}</p>
       <h2>⚔ 3D spell games</h2>${Object.entries(GAMES).filter(([, g]) => g.mini).map(card).join('')}
@@ -623,14 +632,33 @@
   function startArcade(kind) {
     const mini = !!GAMES[kind].mini;
     if (mini && !use3D()) return toast('This game needs 3D. Turn on “Play lessons in 3D” in Profile → Settings.');
-    A = { kind, mini, score: 0, left: 60000, last: performance.now(), slowUntil: 0, timer: null, is3D: use3D() };
+    A = { kind, mini, score: 0, combo: 0, best: S().arcade[kind] || 0, left: 60000, last: performance.now(), slowUntil: 0, timer: null, is3D: use3D() };
     if (A.is3D) enterStage('arcade', 0); else document.body.classList.add('playing');
     A.timer = setInterval(tickArcade, 100);
     if (mini) arcadeMini(); else arcadeNext();
   }
   function arcadeHead() {
     return `<div class="ph"><button class="x" data-act="quitArcade" aria-label="Quit">✕</button>
-      <div class="atimer"><span id="atime">60</span>s</div><div class="ascore">⭐ <span id="ascore">${A.score}</span></div></div>${powerBar()}`;
+      <div class="atimer"><span id="atime">60</span>s</div><div class="ascore">⭐ <span id="ascore">${A.score}</span></div></div>
+      <div class="abar"><div class="abest"><i id="abest" style="width:${bestPct()}%"></i>${GAMES[A.kind].medals.map((m, k) => `<em style="left:${Math.min(100, m / barMax() * 100)}%">${MEDALS[k]}</em>`).join('')}</div><span class="acombo" id="acombo">${comboText()}</span></div>${powerBar()}`;
+  }
+  // scoring: right answers in a row build a multiplier (×2 at 3, ×3 at 6, ×4 at 9); a miss resets it
+  const mult = () => Math.min(4, 1 + Math.floor(A.combo / 3));
+  const comboText = () => A.combo >= 3 ? `🔥 ${A.combo} in a row · ×${mult()}` : A.best ? `Best ${A.best}` : '';
+  const barMax = () => Math.max(A.best, GAMES[A.kind].medals[2]) * 1.05;
+  const bestPct = () => Math.min(100, A.score / barMax() * 100);
+  function arcadeHit() {
+    const before = mult(); A.combo++;
+    const pts = mult(); A.score += pts;
+    if (mult() > before) { sfx('combo'); toast(`🔥 <b>×${mult()} multiplier!</b>`); }
+    const before2 = medalOf(A.kind, A.score - pts), now = medalOf(A.kind, A.score);
+    if (now > before2) { sfx('win'); toast(`${MEDALS[now - 1]} <b>${['Bronze', 'Silver', 'Gold'][now - 1]} medal score!</b>`, 'gold'); }
+    if (A.best && A.score > A.best && A.score - pts <= A.best) toast('🏅 <b>New best!</b> Keep going!', 'gold');
+    floatXP(`+${pts}`, $('.ascore'));
+    arcadeScore();
+  }
+  function arcadeMiss(sec) {
+    A.combo = 0; A.left -= sec * 1000; floatXP(`−${sec}s`, $('.atimer')); arcadeScore();
   }
   function tickArcade() {
     if (!A) return;
@@ -640,10 +668,14 @@
     const t = $('#atime'); if (t) { t.textContent = Math.ceil(left / 1000); t.parentElement.style.setProperty('--t', left / 60000); t.parentElement.classList.toggle('slow', slow); }
     if (left <= 0) endArcade();
   }
-  const arcadeScore = () => { const e = $('#ascore'); if (e) e.textContent = A.score; };
+  const arcadeScore = () => {
+    const e = $('#ascore'); if (e) e.textContent = A.score;
+    const b = $('#abest'); if (b) b.style.width = bestPct() + '%';
+    const c = $('#acombo'); if (c) { c.textContent = comboText(); c.classList.toggle('hot', A.combo >= 3); }
+  };
   function arcadeMini() {
     const q = E.arcadeMini(A.kind);
-    Object.assign(q, { arcade: true, onHit: () => { if (A && A.q === q) { A.score++; arcadeScore(); } }, onMiss: () => { if (A && A.q === q) { A.left -= 2000; floatXP('−2s', $('.atimer')); } } });
+    Object.assign(q, { arcade: true, onHit: () => { if (A && A.q === q) arcadeHit(); }, onMiss: () => { if (A && A.q === q) arcadeMiss(2); } });
     A.q = q;
     main.innerHTML = `<div class="s3">${arcadeHead()}<div class="s3center"><div class="minititle">🎮 ${esc(GAMES[A.kind].name)}</div></div><div class="foot s3foot"><div class="muted center s3help">${MINI_HELP[A.kind]}</div></div></div>`;
     ST().mini(q, () => { if (A && A.q === q) arcadeMini(); });
@@ -672,7 +704,7 @@
       el.classList.add(ok ? 'right' : 'wrong');
       if (!ok) document.querySelectorAll('.opt')[A.q.answer].classList.add('right');
     }
-    if (!ok) { A.left -= 3000; sfx('bad'); } else { A.score++; sfx('good'); }
+    if (!ok) { arcadeMiss(3); sfx('bad'); } else { arcadeHit(); sfx('good'); }
     setTimeout(() => { if (A) { A.lock = false; arcadeNext(); } }, A.is3D ? (ok ? 700 : 1100) : (ok ? 250 : 700));
   }
   function endArcade() {
@@ -682,12 +714,15 @@
     if (is3D) { if (mini) ST().stopMini(); ST().celebrate(score > 0); }
     const best = S().arcade[kind] || 0, record = score > best;
     if (record) S().arcade[kind] = score;
-    const xp = score * 3, coins = Math.floor(score / 4);
+    const xp = score * 2, coins = Math.floor(score / 5), medal = medalOf(kind, score), oldMedal = medalOf(kind, best);
     if (xp) E.gainXP(xp, coins); else E.save();
     E.checkAchievements();
     if (record && score) { sfx('win'); confetti(); }
     if (record && score >= 15) E.grantPower('slow', 1, 'record');
+    if (medal > oldMedal) E.grantPower('hint', 1, 'record');
+    const nx = GAMES[kind].medals[medal];
     main.innerHTML = `<div class="results ${is3D ? 's3card' : ''}"><h1>${record && score ? '🏅 New high score!' : '⏱ Time!'}</h1>
+      <div class="amedal">${medal ? `<span class="big">${MEDALS[medal - 1]}</span> ${['Bronze', 'Silver', 'Gold'][medal - 1]}${medal > oldMedal ? ' · <b>new medal!</b>' : ''}` : 'No medal yet'}${nx ? `<div class="muted small">${MEDALS[medal]} at ${nx} points. ${nx - score} to go!</div>` : ''}</div>
       <div class="rstats"><div><b>${score}</b><span>score</span></div><div><b>${Math.max(best, score)}</b><span>best</span></div><div><b>+${xp}</b><span>XP</span></div><div><b>+${coins}</b><span>🪙</span></div></div>
       <div class="col-btns"><button class="btn primary wide" data-act="arcade" data-arg="${kind}">Play again</button><button class="btn ghost wide" data-act="go" data-arg="arcade">Back</button></div></div>`;
     renderTop();
@@ -782,6 +817,7 @@
         <label class="tg"><input type="checkbox" id="setspeech" ${s.settings.speech ? 'checked' : ''}><span>Read Greek aloud <span class="muted small">(uses your device's Greek voice, modern pronunciation)</span></span></label>
         <label>After each answer <select id="autosel">${[['fast', 'Move on quickly'], ['normal', 'Move on automatically'], ['relaxed', 'Move on slowly (more time to read)'], ['off', 'Wait for me to tap Continue']].map(([k, t]) => `<option value="${k}" ${(s.settings.autoAdvance || 'normal') === k ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
         <label>Graphics <select id="gfxsel"><option value="high" ${(s.settings.gfx || 'high') === 'high' ? 'selected' : ''}>High (grass, shadows, effects)</option><option value="low" ${s.settings.gfx === 'low' ? 'selected' : ''}>Low (smoother on older phones)</option></select></label>
+ <label>Walking stick on phones <select id="sticksel"><option value="right" ${(s.settings.stick || 'right') === 'right' ? 'selected' : ''}>Right side (right hand)</option><option value="left" ${s.settings.stick === 'left' ? 'selected' : ''}>Left side (left hand)</option></select></label>
         <label class="tg"><input type="checkbox" id="set3d" ${s.settings.mode3d !== false ? 'checked' : ''}><span>Play lessons in 3D <span class="muted small">(turn off for simple 2D cards on older devices)</span></span></label>
         <label class="tg"><input type="checkbox" id="setunlock" ${s.settings.unlockAll ? 'checked' : ''}><span>Unlock all lessons <span class="muted small">(if you already know some Greek)</span></span></label>
         <div class="row"><button class="btn ghost" data-act="export">⬇ Export progress</button><button class="btn ghost" data-act="import">⬆ Import</button><button class="btn danger" data-act="reset">Reset</button></div>
@@ -791,6 +827,7 @@
     $('#setsound').onchange = e => { s.settings.sound = e.target.checked; E.save(); };
     $('#setspeech').onchange = e => { s.settings.speech = e.target.checked; E.save(); if (e.target.checked) speak('Ἐν ἀρχῇ ἦν ὁ λόγος'); };
     $('#gfxsel').onchange = e => { s.settings.gfx = e.target.value; E.save(); toast('Graphics setting saved. It applies the next time the app opens.'); };
+    $('#sticksel').onchange = e => { s.settings.stick = e.target.value; E.save(); toast(`Walking stick: ${e.target.value} side`); };
     $('#autosel').onchange = e => { s.settings.autoAdvance = e.target.value; E.save(); };
     $('#set3d').onchange = e => { s.settings.mode3d = e.target.checked; E.save(); };
     $('#setunlock').onchange = e => { s.settings.unlockAll = e.target.checked; E.save(); };

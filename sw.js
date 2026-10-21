@@ -1,10 +1,10 @@
-// Offline support: cache the app shell on install, serve cache-first,
-// and refresh cached files in the background when online.
-const CACHE = 'koine-quest-v2';
+// Offline support: cache the app shell on install, use the network when it is
+// available and fall back to the cache when offline.
+const CACHE = 'koine-quest-v3';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/style.css',
   'js/data/alphabet.js', 'js/data/vocab.js', 'js/data/grammar.js', 'js/data/readings.js', 'js/data/curriculum.js',
-  'js/engine.js', 'js/app.js', 'js/world.js', 'js/vendor/three.module.min.js',
+  'js/engine.js', 'js/app.js', 'js/world.js', 'js/stage.js', 'js/vendor/three.module.min.js',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png', 'icons/apple-touch-icon.png',
 ];
 
@@ -20,12 +20,17 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
-  e.respondWith(caches.open(CACHE).then(async cache => {
-    const hit = await cache.match(e.request, { ignoreSearch: true });
-    const fresh = fetch(e.request).then(res => {
+  // Network first so updates appear immediately; the cache keeps it working offline.
+  e.respondWith((async () => {
+    const cache = await caches.open(CACHE);
+    try {
+      const res = await fetch(e.request);
       if (res.ok && (res.type === 'basic' || res.type === 'cors')) cache.put(e.request, res.clone());
       return res;
-    }).catch(() => hit);
-    return hit || fresh;
-  }));
+    } catch (err) {
+      const hit = await cache.match(e.request, { ignoreSearch: true });
+      if (hit) return hit;
+      throw err;
+    }
+  })());
 });

@@ -378,14 +378,29 @@
     const foot = $('#foot');
     foot.className = 'foot ' + (ok ? 'ok' : 'no');
     foot.innerHTML = `<div class="fb"><div class="fb-h">${ok ? '✔' : '✘'} ${head}</div>${detail ? `<div class="fb-d">${detail}</div>` : ''}</div>
-      <button class="btn ${ok ? 'good' : 'bad'} wide" data-act="next" id="nextbtn">Continue</button>`;
+      <button class="btn ${ok ? 'good' : 'bad'} wide autonext" data-act="next" id="nextbtn">Continue</button>`;
+    scheduleAuto(ok, (q.explain || '').length + (ok ? 0 : 60));
     if (P.is3D) foot.classList.add('s3foot');
     $('.prog i').style.width = ((P.i + 1) / P.qs.length) * 100 + '%';
     const c = $('.combo'); if (c) { c.textContent = P.combo >= 2 ? `🔥${P.combo}` : ''; c.classList.toggle('hot', P.combo >= 3); }
     const h = $('.hearts'); if (h) h.innerHTML = `${'❤'.repeat(Math.max(0, P.hearts))}<span class="lost">${'❤'.repeat(3 - Math.max(0, P.hearts))}</span>`;
     setTimeout(() => { const b = $('#nextbtn'); if (b) b.focus(); }, 30);
   }
+  // Auto-advance: right answers move on quickly; wrong ones stay up long enough
+  // to read the correction. Tapping anywhere skips the wait.
+  const SPEEDS = { fast: [700, 2600], normal: [1100, 3800], relaxed: [1700, 5600] };
+  function scheduleAuto(ok, textLen) {
+    clearTimeout(P.autoT);
+    const sp = SPEEDS[S().settings.autoAdvance || 'normal'];
+    if (!sp) return;
+    const ms = ok ? sp[0] : sp[1] + Math.min(3000, textLen * 18);
+    const b = $('#nextbtn');
+    if (b) { b.style.setProperty('--auto', ms + 'ms'); b.classList.add('counting'); }
+    const at = P.i;
+    P.autoT = setTimeout(() => { if (P && P.answered && P.i === at && !document.querySelector('.sheet-wrap')) next(); }, ms);
+  }
   function next() {
+    if (P) clearTimeout(P.autoT);
     if (P.mode === 'boss' && P.hearts <= 0) return finish();
     P.i++;
     if (P.i >= P.qs.length) return finish();
@@ -609,6 +624,7 @@
         <label>Daily goal <select id="goalsel">${[20, 50, 100, 200].map(g => `<option value="${g}" ${g === s.dailyGoal ? 'selected' : ''}>${g} XP · ${{ 20: 'Casual', 50: 'Regular', 100: 'Serious', 200: 'Intense' }[g]}</option>`).join('')}</select></label>
         <label class="tg"><input type="checkbox" id="setsound" ${s.settings.sound ? 'checked' : ''}><span>Sound effects</span></label>
         <label class="tg"><input type="checkbox" id="setspeech" ${s.settings.speech ? 'checked' : ''}><span>Read Greek aloud <span class="muted small">(uses your device's Greek voice, modern pronunciation)</span></span></label>
+        <label>After each answer <select id="autosel">${[['fast', 'Move on quickly'], ['normal', 'Move on automatically'], ['relaxed', 'Move on slowly (more time to read)'], ['off', 'Wait for me to tap Continue']].map(([k, t]) => `<option value="${k}" ${(s.settings.autoAdvance || 'normal') === k ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
         <label class="tg"><input type="checkbox" id="set3d" ${s.settings.mode3d !== false ? 'checked' : ''}><span>Play lessons in 3D <span class="muted small">(turn off for simple 2D cards on older devices)</span></span></label>
         <label class="tg"><input type="checkbox" id="setunlock" ${s.settings.unlockAll ? 'checked' : ''}><span>Unlock all lessons <span class="muted small">(if you already know some Greek)</span></span></label>
         <div class="row"><button class="btn ghost" data-act="export">⬇ Export progress</button><button class="btn ghost" data-act="import">⬆ Import</button><button class="btn danger" data-act="reset">Reset</button></div>
@@ -617,6 +633,7 @@
     $('#goalsel').onchange = e => { s.dailyGoal = +e.target.value; E.save(); renderTop(); };
     $('#setsound').onchange = e => { s.settings.sound = e.target.checked; E.save(); };
     $('#setspeech').onchange = e => { s.settings.speech = e.target.checked; E.save(); if (e.target.checked) speak('Ἐν ἀρχῇ ἦν ὁ λόγος'); };
+    $('#autosel').onchange = e => { s.settings.autoAdvance = e.target.value; E.save(); };
     $('#set3d').onchange = e => { s.settings.mode3d = e.target.checked; E.save(); };
     $('#setunlock').onchange = e => { s.settings.unlockAll = e.target.checked; E.save(); };
     $('#importfile').onchange = e => {
@@ -697,6 +714,8 @@
     reset() { if (confirm('Erase ALL progress? This cannot be undone.')) { E.reset(); toast('Progress reset.'); go('path'); } },
   };
   document.addEventListener('click', e => {
+    const fb = e.target.closest('.foot.ok, .foot.no');
+    if (fb && !e.target.closest('button, textarea, a') && $('#nextbtn')) { $('#nextbtn').click(); return; }
     const el = e.target.closest('[data-act]');
     if (!el || el.disabled) return;
     const fn = ACT[el.dataset.act];

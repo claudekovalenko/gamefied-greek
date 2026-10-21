@@ -90,10 +90,17 @@
       <button class="chip" data-act="go" data-arg="profile" title="Drachmas (coins)">🪙 <b>${s.coins}</b></button>`;
   }
   let view = 'path';
+  let home = 'path'; // where lessons return to: the 3D world or the path map
+  const hasWorld = () => !!(KG.world && KG.world.ok);
   function go(v) {
+    if (v === 'world' && !hasWorld()) v = 'path';
     view = v; location.hash = v;
+    if (v === 'world' || v === 'path') home = v;
     document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('on', b.dataset.arg === v));
     document.body.classList.remove('playing');
+    document.body.classList.toggle('in-world', v === 'world');
+    if (v === 'world') { closeSheet(); main.innerHTML = ''; KG.world.show(); renderTop(); return; }
+    if (hasWorld()) KG.world.hide();
     ({ path: renderPath, review: renderReview, arcade: renderArcade, codex: renderCodex, profile: renderProfile }[v] || renderPath)();
     main.scrollTop = 0; window.scrollTo(0, 0);
     renderTop();
@@ -208,8 +215,10 @@
   function showLearn(id, thenStart) {
     const n = E.node(id); closeSheet();
     readerReading = n.type === 'reading' ? KG.readings[n.reading] : null;
+    if (hasWorld()) KG.world.hide();
+    document.body.classList.remove('in-world');
     document.body.classList.add('playing');
-    main.innerHTML = `<div class="learn"><div class="learn-h"><button class="x" data-act="go" data-arg="path" aria-label="Close">✕</button><h2>${esc(n.title)}</h2></div>
+    main.innerHTML = `<div class="learn"><div class="learn-h"><button class="x" data-act="go" data-arg="${home}" aria-label="Close">✕</button><h2>${esc(n.title)}</h2></div>
       ${learnHTML(n)}<div class="learn-f"><button class="btn primary wide" data-act="start" data-arg="${id}">${thenStart ? 'Start practice ▶' : 'Practice now ▶'}</button></div></div>`;
     window.scrollTo(0, 0);
   }
@@ -237,6 +246,8 @@
     if (!opts.qs.length) { toast('Nothing to practice here yet!'); return go(view); }
     P = Object.assign({ i: 0, correct: 0, wrong: 0, combo: 0, maxCombo: 0, xp: 0, hearts: 3, answered: false }, opts);
     readerReading = null;
+    if (hasWorld()) KG.world.hide();
+    document.body.classList.remove('in-world');
     document.body.classList.add('playing');
     renderQ();
   }
@@ -360,9 +371,11 @@
         <div><b>+${r.coins}</b><span>🪙</span></div></div>
       ${extra}
       <div class="col-btns">
-        ${node && r.passed && E.nodes[node.index + 1] ? `<button class="btn primary wide" data-act="start" data-arg="${E.nodes[node.index + 1].id}">Next lesson ▶</button>` : ''}
+        ${home === 'world' ? `<button class="btn primary wide" data-act="go" data-arg="world">🏞 Return to the adventure</button>` :
+          node && r.passed && E.nodes[node.index + 1] ? `<button class="btn primary wide" data-act="start" data-arg="${E.nodes[node.index + 1].id}">Next lesson ▶</button>` : ''}
         ${node ? `<button class="btn ghost wide" data-act="start" data-arg="${node.id}">${r.passed ? 'Practice again' : 'Try again'}</button>` : ''}
-        <button class="btn ghost wide" data-act="go" data-arg="${node ? 'path' : 'review'}">Back</button></div></div>`;
+        ${home === 'world' ? '' : `<button class="btn ghost wide" data-act="go" data-arg="${node ? 'path' : 'review'}">Back</button>`}</div></div>`;
+    if (node && KG.world && KG.world.ok) KG.world.onLessonDone(node, r);
     P = null;
     renderTop();
   }
@@ -554,7 +567,7 @@
   const ACT = {
     go, open: openNode, closeSheet, learn: id => showLearn(id, false), start: startNode,
     say: t => speak(t), word: i => wordInfo(i),
-    quit: () => { if (P && P.i > 0 && !confirm('Quit this lesson? Your progress in it will be lost.')) return; P = null; go(view === 'review' ? 'review' : 'path'); },
+    quit: () => { if (P && P.i > 0 && !confirm('Quit this lesson? Your progress in it will be lost.')) return; P = null; go(view === 'review' ? 'review' : home); },
     pick(i, el) {
       if (!P || P.answered) return;
       const q = P.q, ok = +i === q.answer;
@@ -636,7 +649,17 @@
   // ── boot ────────────────────────────────────────────────────
   const msg = E.checkStreak();
   renderTop();
-  go((location.hash || '#path').slice(1));
+  KG.app = { go, startNode, openNode, sfx, speak, toast, confetti, floatXP, renderTop, showLearn, readVerse: id => readVerse(id) };
+  // The 3D world loads as a module after this script; open it once it reports ready,
+  // and fall back to the path map if WebGL is unavailable.
+  const worldIncluded = !!document.querySelector('script[data-world]');
+  const first = location.hash.slice(1) || (worldIncluded ? 'world' : 'path');
+  if (first === 'world' && worldIncluded) {
+    main.innerHTML = '<div class="loading">Loading the world…</div>';
+    document.addEventListener('world-ready', () => { if (main.querySelector('.loading')) go('world'); });
+    document.addEventListener('world-failed', () => go('path'));
+    setTimeout(() => { if (main.querySelector('.loading')) go('path'); }, 8000);
+  } else go(first);
   window.addEventListener('hashchange', () => {
     const h = location.hash.slice(1);
     if (A) { clearInterval(A.timer); A = null; }

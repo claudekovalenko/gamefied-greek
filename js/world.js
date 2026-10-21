@@ -449,7 +449,7 @@ function buildEntities() {
 }
 
 // ── collectibles ──────────────────────────────────────────────
-const letters = [], coins = [];
+const letters = [], coins = [], scrolls = [];
 function buildCollectibles() {
   const w = ws();
   KG.alphabet.forEach((Lt, i) => {
@@ -458,6 +458,21 @@ function buildCollectibles() {
     s.position.set(x, groundAt(x, z) + 1.3, z); scene.add(s);
     s.visible = !w.letters.includes(i);
     letters.push({ i, s, x, z });
+  });
+  // lost scrolls: NT passages to collect for the Reading Room
+  const found = (E.state.scrolls || {});
+  const byUnit = {};
+  KG.passages.forEach(p => {
+    const k = (byUnit[p.unit] = (byUnit[p.unit] || 0) + 1);
+    const z = -p.unit * L - 30 - k * 11, side = k % 2 ? 1 : -1, x = pathX(z) + side * (9 + (k * 3) % 5);
+    const g = new THREE.Group();
+    const roll = mesh(new THREE.CylinderGeometry(0.22, 0.22, 1.1, 12), 0xf5e6c0, { emissive: 0xa07a20, emissiveIntensity: 0.6 }); roll.rotation.z = Math.PI / 2; g.add(roll);
+    for (const sd of [-1, 1]) { const kn = mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.25, 8), 0x8a5a2a); kn.rotation.z = Math.PI / 2; kn.position.x = sd * 0.65; g.add(kn); }
+    const seal = mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.05, 10), 0xc9452b); seal.rotation.x = Math.PI / 2; seal.position.z = 0.22; g.add(seal);
+    const halo = glyphSprite('📜'); halo.scale.set(2.4, 2.4, 1); g.add(halo);
+    g.position.set(x, groundAt(x, z) + 1.2, z); scene.add(g);
+    g.visible = !found[p.id];
+    scrolls.push({ p, g, x, z });
   });
   const coinG = new THREE.CylinderGeometry(0.32, 0.32, 0.08, 16);
   const coinM = new THREE.MeshStandardMaterial({ color: 0xffd166, metalness: 0.9, roughness: 0.25, emissive: 0x6a4a00 });
@@ -816,6 +831,14 @@ function step(dt) {
       if (w.letters.length === 24) { KG.app.confetti(); E.checkAchievements(); }
     }
   }
+  for (const sc of scrolls) {
+    if (!sc.g.visible) continue;
+    sc.g.rotation.y += dt * 1.5; sc.g.position.y = groundAt(sc.x, sc.z) + 1.2 + Math.sin(t * 2 + sc.x) * 0.15;
+    if (Math.hypot(pos.x - sc.x, pos.z - sc.z) < 1.4) {
+      sc.g.visible = false; burst(sc.g.position, 0xffe9a8);
+      if (KG.reader) KG.reader.unlockScroll(sc.p.id); E.gainXP(10, 2);
+    }
+  }
   for (const c of coins) {
     if (!c.c.visible) continue;
     c.c.rotation.z += dt * 3;
@@ -897,6 +920,7 @@ W.show = () => {
   root.classList.add('on');
   resize();
   refreshMarkers();
+  for (const sc of scrolls) sc.g.visible = !(E.state.scrolls || {})[sc.p.id];
   snapCamera();
   for (const p of pending) p(); pending = [];
   startLoop();

@@ -139,6 +139,14 @@ window.KG = window.KG || {};
   // roughly doubles the gap. A miss sends it back to box 1.
   const INTERVALS = [0, 1, 2, 4, 8, 16, 35, 75];
   E.vocabByGreek = Object.fromEntries(KG.vocab.map(w => [w.g, w]));
+  // Words added from the Reading Room live in state.custom and join the same deck.
+  E.word = g => E.vocabByGreek[g] || ((E.state.custom || {})[g] && Object.assign({ g, lex: g }, E.state.custom[g]));
+  E.addWord = (g, en, f) => {
+    if (E.vocabByGreek[g]) { if (!E.state.vocab[g]) E.srsAnswer(g, true); E.save(); return; }
+    (E.state.custom || (E.state.custom = {}))[g] = { en, f, set: -1 };
+    if (!E.state.vocab[g]) E.srsAnswer(g, true);
+    E.save();
+  };
   E.srsAnswer = (g, correct) => {
     const V = E.state.vocab, t = U.day();
     let r = V[g];
@@ -149,14 +157,82 @@ window.KG = window.KG || {};
   };
   E.dueWords = () => {
     const t = U.day();
-    return Object.entries(E.state.vocab).filter(([, r]) => r.due <= t).map(([g]) => E.vocabByGreek[g]).filter(Boolean);
+    return Object.entries(E.state.vocab).filter(([, r]) => r.due <= t).map(([g]) => E.word(g)).filter(Boolean);
   };
   E.weakWords = (n = 12) => Object.entries(E.state.vocab)
     .sort((a, b) => (a[1].box - b[1].box) || (b[1].miss - a[1].miss))
-    .slice(0, n).map(([g]) => E.vocabByGreek[g]).filter(Boolean);
+    .slice(0, n).map(([g]) => E.word(g)).filter(Boolean);
   E.coverage = () => Object.keys(E.state.vocab).reduce((sum, g) => sum + ((E.vocabByGreek[g] || {}).f || 0), 0) / KG.NT_WORD_COUNT;
   E.masteredCoverage = () => Object.entries(E.state.vocab).filter(([, r]) => r.box >= 4)
     .reduce((sum, [g]) => sum + ((E.vocabByGreek[g] || {}).f || 0), 0) / KG.NT_WORD_COUNT;
+
+  // ── the whole Greek NT (SBLGNT + MorphGNT), loaded book by book ──
+  const NT = E.nt = { books: null, lex: null, cache: {}, en: {} };
+  const getJSON = url => fetch(url).then(r => { if (!r.ok) throw new Error(`Could not load ${url} (${r.status})`); return r.json(); });
+  NT.ready = () => Promise.all([
+    NT.books || getJSON('data/nt/books.json').then(d => (NT.books = d.books)),
+    NT.lex || getJSON('data/nt/lexicon.json').then(d => (NT.lex = d)),
+  ]);
+  NT.book = b => NT.cache[b] || (NT.cache[b] = getJSON(`data/nt/${b}.json`));
+  NT.english = b => NT.en[b] || (NT.en[b] = getJSON(`data/nt/en/${b}.json`).catch(() => null));
+  const ALIASES = {
+    mt: 'Mt', matt: 'Mt', matthew: 'Mt', mk: 'Mk', mark: 'Mk', mrk: 'Mk', lk: 'Lk', luke: 'Lk', jn: 'Jn', john: 'Jn', jhn: 'Jn',
+    ac: 'Ac', acts: 'Ac', ro: 'Ro', rom: 'Ro', romans: 'Ro', '1co': '1Co', '1cor': '1Co', '1corinthians': '1Co', '2co': '2Co', '2cor': '2Co', '2corinthians': '2Co',
+    ga: 'Ga', gal: 'Ga', galatians: 'Ga', eph: 'Eph', ephesians: 'Eph', php: 'Php', phil: 'Php', philippians: 'Php', col: 'Col', colossians: 'Col',
+    '1th': '1Th', '1thess': '1Th', '1thessalonians': '1Th', '2th': '2Th', '2thess': '2Th', '2thessalonians': '2Th', '1ti': '1Ti', '1tim': '1Ti', '1timothy': '1Ti',
+    '2ti': '2Ti', '2tim': '2Ti', '2timothy': '2Ti', tit: 'Tit', titus: 'Tit', phm: 'Phm', philem: 'Phm', philemon: 'Phm', heb: 'Heb', hebrews: 'Heb',
+    jas: 'Jas', jam: 'Jas', james: 'Jas', '1pe': '1Pe', '1pet': '1Pe', '1peter': '1Pe', '2pe': '2Pe', '2pet': '2Pe', '2peter': '2Pe',
+    '1jn': '1Jn', '1john': '1Jn', '2jn': '2Jn', '2john': '2Jn', '3jn': '3Jn', '3john': '3Jn', jud: 'Jud', jude: 'Jud', re: 'Re', rev: 'Re', revelation: 'Re',
+  };
+  // "John 3:16-18", "Jn 3", "1 Cor 13:4–7", "Rom 8:28-9:2" → { b, c1, v1, c2, v2 } (verse 0 = whole chapter)
+  NT.parseRef = str => {
+    const m = String(str).trim().match(/^([1-3]?\s*[A-Za-z]+)\.?\s*(\d+)(?:[:.](\d+))?(?:\s*[-–]\s*(\d+)(?:[:.](\d+))?)?$/);
+    if (!m) return null;
+    const b = ALIASES[m[1].replace(/\s+/g, '').toLowerCase()];
+    if (!b) return null;
+    const c1 = +m[2], v1 = m[3] ? +m[3] : 0;
+    let c2 = c1, v2 = v1;
+    if (m[4] && m[5]) { c2 = +m[4]; v2 = +m[5]; } else if (m[4]) { if (v1) v2 = +m[4]; else { c2 = +m[4]; v2 = 0; } }
+    return { b, c1, v1, c2, v2 };
+  };
+  NT.refName = r => {
+    const name = (NT.books || []).find(x => x.b === r.b)?.name || r.b;
+    if (!r.v1) return `${name} ${r.c1}${r.c2 !== r.c1 ? '–' + r.c2 : ''}`;
+    if (r.c1 === r.c2) return `${name} ${r.c1}:${r.v1}${r.v2 !== r.v1 ? '–' + r.v2 : ''}`;
+    return `${name} ${r.c1}:${r.v1}–${r.c2}:${r.v2}`;
+  };
+  // Returns [{ c, v, words: [{ t, li, code }] }] for a parsed reference
+  NT.passage = async r => {
+    await NT.ready();
+    const bk = await NT.book(r.b), out = [];
+    for (let c = r.c1; c <= r.c2; c++) {
+      const vs = bk.ch[c - 1]; if (!vs) continue;
+      const from = c === r.c1 && r.v1 ? r.v1 : 1, to = c === r.c2 && r.v2 ? r.v2 : vs.length;
+      for (let v = from; v <= Math.min(to, vs.length); v++) out.push({ c, v, words: vs[v - 1].map(([t, li, code]) => ({ t, li, code })) });
+    }
+    return out;
+  };
+  // MorphGNT codes → readable parsing, e.g. "V-AAI3S" → "Verb — aorist active indicative 3rd singular"
+  const POS = { 'A-': 'Adjective', 'C-': 'Conjunction', 'D-': 'Adverb', 'I-': 'Interjection', 'N-': 'Noun', 'P-': 'Preposition', 'RA': 'Article', 'RD': 'Demonstrative pronoun', 'RI': 'Interrogative/indefinite pronoun', 'RP': 'Personal pronoun', 'RR': 'Relative pronoun', 'V-': 'Verb', 'X-': 'Particle' };
+  const F = [
+    { 1: '1st', 2: '2nd', 3: '3rd' }, { P: 'present', I: 'imperfect', F: 'future', A: 'aorist', X: 'perfect', Y: 'pluperfect' },
+    { A: 'active', M: 'middle', P: 'passive' }, { I: 'indicative', D: 'imperative', S: 'subjunctive', O: 'optative', N: 'infinitive', P: 'participle' },
+    { N: 'nominative', G: 'genitive', D: 'dative', A: 'accusative', V: 'vocative' }, { S: 'singular', P: 'plural' }, { M: 'masculine', F: 'feminine', N: 'neuter' }, { C: 'comparative', S: 'superlative' },
+  ];
+  NT.decode = code => {
+    code = code.padEnd(10, '-');
+    const pos = POS[code.slice(0, 2)] || 'Word', p = code.slice(2);
+    let parts;
+    if (code[0] === 'V') {
+      // tense voice mood, then person+number (finite) or case number gender (participle)
+      parts = [F[1][p[1]], F[2][p[2]], F[3][p[3]]];
+      if (p[0] !== '-') parts.push(F[0][p[0]] + ' ' + (F[5][p[5]] || ''));
+      else parts.push(F[4][p[4]], F[5][p[5]], F[6][p[6]]);
+    } else parts = [F[4][p[4]], F[5][p[5]], F[6][p[6]], F[7][p[7]], p[0] !== '-' && !p[4].match(/[NGDAV]/) ? F[0][p[0]] + ' person' : ''];
+    const det = parts.filter(Boolean).join(' ').trim();
+    return det ? `${pos} — ${det}` : pos;
+  };
+  NT.gloss = li => { const L = NT.lex[li], v = E.vocabByGreek[L[0]]; return v ? v.en : (L[1] || '—'); };
 
   // ── mistakes notebook ───────────────────────────────────────
   E.logMistake = q => {

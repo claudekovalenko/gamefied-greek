@@ -166,5 +166,8 @@ KG.achievements = [
   { id: 'letters', icon: '✨', name: 'Letter Collector', desc: 'Collect all 24 glowing letters in the world', test: s => ((s.world || {}).letters || []).length >= 24 },
   { id: 'shades', icon: '👻', name: 'Shade Banisher', desc: 'Banish 25 Shades of Forgetting', test: s => ((s.world || {}).wisps || 0) >= 25 },
   { id: 'library', icon: '🏛', name: 'The Great Library', desc: 'Reach the Great Library', test: s => !!(s.world || {}).finale },
+  { id: 'scroll1', icon: '📜', name: 'First Scroll', desc: 'Translate a whole passage', test: s => (s.stats.passages || 0) >= 1 },
+  { id: 'scroll10', icon: '🏺', name: 'Keeper of Scrolls', desc: 'Translate 10 passages', test: s => (s.stats.passages || 0) >= 10 },
+  { id: 'freeread', icon: '🧭', name: 'Free Reader', desc: 'Translate a passage you chose yourself', test: s => ((s.reading || {}).free || 0) >= 1 },
   { id: 'goal', icon: '🎯', name: 'Goal Getter', desc: 'Hit your daily goal', test: s => s.stats.goals >= 1 },
 ];

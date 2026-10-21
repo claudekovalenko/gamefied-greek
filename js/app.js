@@ -439,6 +439,7 @@
           node && r.passed && E.nodes[node.index + 1] ? `<button class="btn primary wide" data-act="start" data-arg="${E.nodes[node.index + 1].id}">Next lesson ▶</button>` : ''}
         ${node ? `<button class="btn ghost wide" data-act="start" data-arg="${node.id}">${r.passed ? 'Practice again' : 'Try again'}</button>` : ''}
         ${home === 'world' ? '' : `<button class="btn ghost wide" data-act="go" data-arg="${node ? 'path' : 'review'}">Back</button>`}</div></div>`;
+    if (node && node.type === 'boss' && r.passed && KG.reader) KG.reader.unitCleared(node.unit);
     if (node && KG.world && KG.world.ok) KG.world.onLessonDone(node, r);
     P = null;
     renderTop();
@@ -560,18 +561,19 @@
   function readiness() {
     const cov = E.coverage(), gDone = E.nodes.filter(n => n.type === 'grammar' && E.stars(n.id)).length;
     const gAll = E.nodes.filter(n => n.type === 'grammar').length, vDone = S().stats.verses;
-    const score = (cov / 0.7) * 0.4 + (gDone / gAll) * 0.4 + Math.min(1, vDone / 22) * 0.2;
+    // reading real passages is the goal, so translated passages weigh in too
+    const score = (cov / 0.7) * 0.3 + (gDone / gAll) * 0.35 + Math.min(1, vDone / 22) * 0.1 + Math.min(1, (S().stats.passages || 0) / 20) * 0.25;
     const stages = [[0, 'Alphabet Apprentice'], [0.1, 'Word Gatherer'], [0.3, 'Phrase Reader'], [0.5, 'Verse Reader'], [0.75, 'Passage Translator'], [0.95, 'NT Reader']];
     return { score: Math.min(1, score), stage: stages.filter(s => s[0] <= score).pop()[1], cov, gDone, gAll, vDone };
   }
   let lexFilter = '';
   function renderCodex() {
     const r = readiness(), readings = E.nodes.filter(n => n.type === 'reading');
-    main.innerHTML = `<h1 class="vh">Codex</h1>
+    main.innerHTML = `<h1 class="vh">Library</h1>${KG.reader ? KG.reader.section() : ''}
       <div class="card prof"><div class="ring" style="--p:${r.score * 360}deg"><span>${Math.round(r.score * 100)}%</span></div>
         <div><div class="muted">NT reading readiness</div><h3>${r.stage}</h3>
         <p>📖 The words you've studied cover <b>${(r.cov * 100).toFixed(1)}%</b> of the words in the NT (mastered: ${(E.masteredCoverage() * 100).toFixed(1)}%)</p>
-        <p>⚙ Grammar lessons: <b>${r.gDone}/${r.gAll}</b> · ✝ Verses translated: <b>${r.vDone}/${readings.length}</b></p></div></div>
+        <p>⚙ Grammar lessons: <b>${r.gDone}/${r.gAll}</b> · ✝ Verses translated: <b>${r.vDone}/${readings.length}</b> · 📜 Passages translated: <b>${S().stats.passages || 0}</b></p></div></div>
       <h2>Verse collection</h2><div class="verses">${readings.map(n => {
         const R = KG.readings[n.reading], have = E.stars(n.id) > 0;
         return `<button class="vtile ${have ? '' : 'locked'}" data-act="${have ? 'readVerse' : 'open'}" data-arg="${have ? n.reading : n.id}">
@@ -700,6 +702,9 @@
     arcade: k => startArcade(k), apick: (i, el) => arcadePick(i, el),
     quitArcade: () => { if (A) clearInterval(A.timer); A = null; go('arcade'); },
     readVerse,
+    passage: (ref, el) => KG.reader.open(ref, el && el.dataset.scroll),
+    rword: a => KG.reader.word(a), rwordClose: () => { const b = $('#rdword'); if (b) b.hidden = true; },
+    raddword: a => KG.reader.addWord(a), rcompare: i => KG.reader.compare(i), rfinish: () => KG.reader.finish(), readerClose: () => KG.reader.close(),
     hint: id => { const R = KG.readings[id]; readerReading = R; sheet(`<div class="sheet-k">Word help</div><h2>${esc(R.ref)}</h2>${verseHTML(R, 'big')}<div id="wordinfo" class="wordinfo muted">Tap any word for its meaning and parsing.</div>`); },
     buy(item) {
       if (E.buy(item)) { sfx('win'); toast(item === 'freeze' ? '🧊 Streak freeze equipped!' : '🚀 XP boost active for 3 lessons!'); renderProfile(); renderTop(); }
@@ -733,7 +738,20 @@
   // ── boot ────────────────────────────────────────────────────
   const msg = E.checkStreak();
   renderTop();
-  KG.app = { go, startNode, openNode, sfx, speak, toast, confetti, floatXP, renderTop, showLearn, readVerse: id => readVerse(id) };
+  let readerFrom = 'codex';
+  function openReader(name, r) {
+    if (view !== 'passage') readerFrom = view === 'world' ? 'world' : 'codex';
+    view = 'passage'; closeSheet();
+    if (use3D()) { enterStage('scroll', (E.nextNode() || { unit: 8 }).unit); main.innerHTML = '<div class="learn parchment reader-wrap"></div>'; }
+    else {
+      if (hasWorld()) KG.world.hide();
+      document.body.classList.remove('in-world', 'in-stage'); document.body.classList.add('playing');
+      main.innerHTML = '<div class="reader-wrap"></div>';
+    }
+    window.scrollTo(0, 0);
+  }
+  KG.app = { go, startNode, openNode, sfx, speak, toast, confetti, floatXP, renderTop, showLearn, readVerse: id => readVerse(id),
+    openReader, closeReader: () => go(readerFrom), closeSheet };
   // The 3D world loads as a module after this script; open it once it reports ready,
   // and fall back to the path map if WebGL is unavailable.
   const worldIncluded = !!document.querySelector('script[data-world]');

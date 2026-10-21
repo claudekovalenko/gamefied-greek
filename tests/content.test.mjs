@@ -13,7 +13,8 @@ const store = {};
 const ctx = { console, localStorage: { getItem: k => store[k] ?? null, setItem: (k, v) => { store[k] = v; } } };
 ctx.window = ctx;
 vm.createContext(ctx);
-for (const f of ['js/data/alphabet.js', 'js/data/vocab.js', 'js/data/grammar.js', 'js/data/readings.js', 'js/data/curriculum.js', 'js/engine.js']) {
+ctx.fetch = async url => { const t = readFileSync(path.join(root, url), 'utf8'); return { ok: true, json: async () => JSON.parse(t) }; };
+for (const f of ['js/data/alphabet.js', 'js/data/vocab.js', 'js/data/grammar.js', 'js/data/readings.js', 'js/data/curriculum.js', 'js/data/passages.js', 'js/engine.js']) {
   vm.runInContext(readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f });
 }
 const { KG } = ctx, E = KG.engine;
@@ -131,4 +132,39 @@ test('single-word review questions exist (review mode and wisp battles)', () => 
     const q = E.vocabQuestions([w], KG.vocab, 1)[0];
     assert.ok(q && q.type === 'mc' && q.vkey === w.g, `no question for ${w.g}`);
   }
+});
+
+test('Reading Room: every scroll passage loads real SBLGNT verses with an English comparison', async () => {
+  const NT = E.nt;
+  assert.equal(new Set(KG.passages.map(p => p.id)).size, KG.passages.length);
+  for (const p of KG.passages) {
+    const r = NT.parseRef(p.ref);
+    assert.ok(r, `cannot parse ${p.ref}`);
+    const vs = await NT.passage(r);
+    const expected = (r.v2 - r.v1 + 1);
+    assert.equal(vs.length, expected, `${p.ref}: got ${vs.length} verses`);
+    for (const v of vs) assert.ok(v.words.length > 0, `${p.ref} ${v.c}:${v.v} is empty`);
+    const en = JSON.parse(readFileSync(path.join(root, `data/nt/en/${r.b}.json`), 'utf8'));
+    assert.ok(en[r.c1 - 1][r.v1 - 1], `${p.ref}: no English`);
+    assert.ok(p.unit >= 0 && p.unit < KG.units.length);
+  }
+});
+
+test('Reading Room: references and parsing codes decode sensibly', async () => {
+  const NT = E.nt;
+  assert.equal(JSON.stringify(NT.parseRef('1 Cor 13:4–7')), JSON.stringify({ b: '1Co', c1: 13, v1: 4, c2: 13, v2: 7 }));
+  assert.equal(JSON.stringify(NT.parseRef('Rom 8:28-9:2')), JSON.stringify({ b: 'Ro', c1: 8, v1: 28, c2: 9, v2: 2 }));
+  assert.equal(NT.parseRef('Hezekiah 3:1'), null);
+  assert.equal(NT.decode('V-3AAI-S'), 'Verb — aorist active indicative 3rd singular');
+  assert.equal(NT.decode('V--PAPNSM'), 'Verb — present active participle nominative singular masculine');
+  assert.equal(NT.decode('C'), 'Conjunction');
+  // every code in John decodes without "undefined"
+  await NT.ready();
+  const jn = await NT.book('Jn');
+  for (const ch of jn.ch) for (const v of ch) for (const [, li, code] of v) {
+    assert.ok(!NT.decode(code).includes('undefined'), `bad decode for ${code}`);
+    assert.ok(NT.lex[li], 'lemma index in range');
+  }
+  const glossed = NT.lex.filter(l => l[1]).reduce((n, l) => n + l[2], 0), all = NT.lex.reduce((n, l) => n + l[2], 0);
+  assert.ok(glossed / all > 0.99, `only ${(glossed / all * 100).toFixed(1)}% of NT words have a gloss`);
 });

@@ -78,6 +78,7 @@
     if (type === 'achievement') { toast(`${data.icon} <b>Achievement:</b> ${esc(data.name)} (+15 🪙)`, 'gold'); }
     if (type === 'streak' && data > 1) toast(`🔥 <b>${data}-day streak!</b>`);
     if (type === 'quest') { sfx('win'); toast(`📋 <b>Daily quest complete:</b> ${esc(data.text)} (+15 🪙, +25 XP)`, 'gold'); }
+    if (type === 'power' && data.n) { const pw = E.POWERS[data.k]; setTimeout(() => toast(`${pw[0]} <b>+${data.n} ${pw[1]}</b>${data.why === 'quest' ? ' for finishing a quest' : data.why === 'streak' ? ' for your day streak' : data.why === 'combo' ? ' for your combo' : data.why === 'record' ? ' for your new record' : ''}!`, 'gold'), 700); }
     renderTop();
   });
 
@@ -275,8 +276,43 @@
     const pct = (P.i / P.qs.length) * 100;
     return `<div class="ph"><button class="x" data-act="quit" aria-label="Quit">✕</button>
       <div class="prog"><i style="width:${pct}%"></i></div>
-      ${P.mode === 'boss' ? `<div class="hearts">${'❤'.repeat(P.hearts)}<span class="lost">${'❤'.repeat(3 - P.hearts)}</span></div>` : ''}
-      <div class="combo ${P.combo >= 3 ? 'hot' : ''}">${P.combo >= 2 ? `🔥${P.combo}` : ''}</div></div>`;
+      ${P.mode === 'boss' ? `<div class="hearts">${heartsHTML()}</div>` : ''}
+      <div class="combo ${P.combo >= 3 ? 'hot' : ''}">${P.combo >= 2 ? `🔥${P.combo}` : ''}</div></div>${powerBar()}`;
+  }
+  const heartsHTML = () => `${'❤'.repeat(Math.max(0, P.hearts))}<span class="lost">${'❤'.repeat(3 - Math.max(0, P.hearts))}</span>${P.shield ? '<span class="wshield">🛡</span>' : ''}`;
+  // ── power-ups: Hint, Shield, Slow Time ─────────────────────
+  const TIMED = ['rain', 'defense', 'race'];
+  function powerBar() {
+    const q = (A || P || {}).q || {}, pw = E.powers(), on = [];
+    if (!A && P && P.answered && q.type !== 'mini') return '';
+    if (q.type === 'mc' && q.options.length > 2) on.push('hint');
+    if (P && P.mode === 'boss') on.push('shield');
+    if (A || (q.type === 'mini' && TIMED.includes(q.game))) on.push('slow');
+    if (!on.length) return '';
+    return `<div class="pwbar">${on.map(k => `<button class="pw ${k === 'shield' && P && P.shield ? 'on' : ''}" data-act="power" data-arg="${k}" ${pw[k] ? '' : 'disabled'} title="${E.POWERS[k][2]}">${E.POWERS[k][0]} ${E.POWERS[k][1]} <b>${pw[k]}</b></button>`).join('')}</div>`;
+  }
+  function refreshPowers() { const b = $('.pwbar'); if (b) b.outerHTML = powerBar() || '<div class="pwbar"></div>'; }
+  function usePower(k) {
+    const S3 = A ? A.is3D : P && P.is3D, q = (A || P || {}).q;
+    if (!q) return;
+    if (k === 'hint') {
+      if (q.type !== 'mc' || q.hinted || (A ? A.lock : P.answered)) return;
+      if (!E.usePower('hint')) return;
+      q.hinted = true;
+      const gone = sample(q.options.map((_, i) => i).filter(i => i !== q.answer), 2);
+      if (S3) ST().hint(gone);
+      document.querySelectorAll('.opt').forEach((b, i) => { if (gone.includes(i)) { b.disabled = true; b.classList.add('gone'); } });
+      sfx('combo');
+    } else if (k === 'shield') {
+      if (!P || P.mode !== 'boss' || P.shield || !E.usePower('shield')) return;
+      P.shield = true; if (S3) ST().shield(true); sfx('combo');
+      const h = $('.hearts'); if (h) h.innerHTML = heartsHTML();
+    } else if (k === 'slow') {
+      if (A) { if (A.slowUntil > performance.now() || !E.usePower('slow')) return; A.slowUntil = performance.now() + 10000; if (A.is3D) ST().slow(10); toast('⏳ <b>Time slows…</b> (10 seconds)'); }
+      else { if (q.type !== 'mini' || P.slowed === q || !E.usePower('slow')) return; P.slowed = q; ST().slow(10); toast('⏳ <b>Time slows…</b> (10 seconds)'); }
+      sfx('combo');
+    }
+    refreshPowers();
   }
   // [bracketed] parts of a demo glow
   const demoHTML = d => esc(d).replace(/\[(.+?)\]/g, '<b class="glow">$1</b>');
@@ -415,9 +451,13 @@
         floatXP(`+${base + bonus} XP`, $('.prompt'));
         sfx(P.combo > 0 && P.combo % 5 === 0 ? 'combo' : 'good');
         if (P.combo > 0 && P.combo % 5 === 0) toast(`⚡ ${P.combo}× combo! Bonus XP`);
+        if (P.combo === 8 && !P.comboPower) { P.comboPower = true; E.grantPower('hint', 1, 'combo'); }
       } else {
         P.wrong++; P.combo = 0; sfx('bad');
-        if (P.mode === 'boss') P.hearts--;
+        if (P.mode === 'boss') {
+          if (P.shield) { P.shield = false; if (P.is3D) ST().shield(false); toast('🛡 <b>Your shield took the blow!</b> No heart lost.'); }
+          else P.hearts--;
+        }
         // Ask a missed question once more at the end of the lesson (retrieval after a delay).
         if (P.mode !== 'boss' && !q.retry) {
           const again = Object.assign({}, P.qs[P.i], { retry: true });
@@ -443,7 +483,8 @@
     if (P.is3D) foot.classList.add('s3foot');
     $('.prog i').style.width = ((P.i + 1) / P.qs.length) * 100 + '%';
     const c = $('.combo'); if (c) { c.textContent = P.combo >= 2 ? `🔥${P.combo}` : ''; c.classList.toggle('hot', P.combo >= 3); }
-    const h = $('.hearts'); if (h) h.innerHTML = `${'❤'.repeat(Math.max(0, P.hearts))}<span class="lost">${'❤'.repeat(3 - Math.max(0, P.hearts))}</span>`;
+    const h = $('.hearts'); if (h) h.innerHTML = heartsHTML();
+    refreshPowers();
     setTimeout(() => { const b = $('#nextbtn'); if (b) b.focus(); }, 30);
   }
   // Auto-advance: right answers move on quickly; wrong ones stay up long enough
@@ -550,11 +591,18 @@
     blitz: { name: 'Alphabet Blitz', icon: 'Ω', desc: 'Name as many letters as you can in 60 seconds.' },
     lightning: { name: 'Vocab Lightning', icon: '⚡', desc: 'Rapid-fire meanings from the words you have studied.' },
     parse: { name: 'Parse Rush', icon: '🧩', desc: 'Parse forms from the grammar you have unlocked.' },
+    rain: { name: 'Word Rain', icon: '🌧', desc: 'Catch each falling word that means the English target.', mini: true },
+    defense: { name: 'Declension Defense', icon: '🛡', desc: 'Strike every marching noun form with its case.', mini: true },
+    forge: { name: 'Parsing Forge', icon: '⚒', desc: 'Name the tense, then the person and number, of each verb.', mini: true },
+    race: { name: 'Verse Race', icon: '🏁', desc: 'Build verse after verse of the NT translation, piece by piece.', mini: true },
   };
   function renderArcade() {
-    main.innerHTML = `<h1 class="vh">Arcade</h1><p class="muted">60-second speed rounds. Wrong answers cost 3 seconds. Beat your high score!</p>
-      ${Object.entries(GAMES).map(([k, g]) => `<div class="card game"><div class="gic">${g.icon}</div><div class="gtx"><h3>${g.name}</h3><p>${g.desc}</p>
-      <p class="muted">High score: <b>${S().arcade[k] || 0}</b></p></div><button class="btn primary" data-act="arcade" data-arg="${k}">Play</button></div>`).join('')}`;
+    const card = ([k, g]) => `<div class="card game"><div class="gic">${g.icon}</div><div class="gtx"><h3>${g.name}</h3><p>${g.desc}</p>
+      <p class="muted">High score: <b>${S().arcade[k] || 0}</b></p></div><button class="btn primary" data-act="arcade" data-arg="${k}" ${g.mini && !use3D() ? 'disabled title="Needs 3D (Profile → Settings)"' : ''}>Play</button></div>`;
+    const pw = E.powers();
+    main.innerHTML = `<h1 class="vh">Arcade</h1><p class="muted">60-second high-score rounds. Mistakes cost time. Power-ups: 💡${pw.hint} ⏳${pw.slow}</p>
+      <h2>⚔ 3D spell games</h2>${Object.entries(GAMES).filter(([, g]) => g.mini).map(card).join('')}
+      <h2>⚡ Speed rounds</h2>${Object.entries(GAMES).filter(([, g]) => !g.mini).map(card).join('')}`;
   }
   function arcadeQ(kind) {
     if (kind === 'blitz') {
@@ -570,31 +618,47 @@
     const all = E.unlockedCells(), c = U.pick(all);
     return E.parseQ(c, all);
   }
+  // The clock runs on real time, at half speed while Slow Time lasts.
   let A = null;
   function startArcade(kind) {
-    A = { kind, score: 0, end: Date.now() + 60000, timer: null, is3D: use3D() };
+    const mini = !!GAMES[kind].mini;
+    if (mini && !use3D()) return toast('This game needs 3D. Turn on “Play lessons in 3D” in Profile → Settings.');
+    A = { kind, mini, score: 0, left: 60000, last: performance.now(), slowUntil: 0, timer: null, is3D: use3D() };
     if (A.is3D) enterStage('arcade', 0); else document.body.classList.add('playing');
-    A.timer = setInterval(tickArcade, 200);
-    arcadeNext();
+    A.timer = setInterval(tickArcade, 100);
+    if (mini) arcadeMini(); else arcadeNext();
+  }
+  function arcadeHead() {
+    return `<div class="ph"><button class="x" data-act="quitArcade" aria-label="Quit">✕</button>
+      <div class="atimer"><span id="atime">60</span>s</div><div class="ascore">⭐ <span id="ascore">${A.score}</span></div></div>${powerBar()}`;
   }
   function tickArcade() {
     if (!A) return;
-    const left = Math.max(0, A.end - Date.now());
-    const t = $('#atime'); if (t) { t.textContent = Math.ceil(left / 1000); t.parentElement.style.setProperty('--t', left / 60000); }
+    const now = performance.now(), slow = A.slowUntil > now;
+    A.left -= (now - A.last) * (slow ? 0.5 : 1); A.last = now;
+    const left = Math.max(0, A.left);
+    const t = $('#atime'); if (t) { t.textContent = Math.ceil(left / 1000); t.parentElement.style.setProperty('--t', left / 60000); t.parentElement.classList.toggle('slow', slow); }
     if (left <= 0) endArcade();
+  }
+  const arcadeScore = () => { const e = $('#ascore'); if (e) e.textContent = A.score; };
+  function arcadeMini() {
+    const q = E.arcadeMini(A.kind);
+    Object.assign(q, { arcade: true, onHit: () => { if (A && A.q === q) { A.score++; arcadeScore(); } }, onMiss: () => { if (A && A.q === q) { A.left -= 2000; floatXP('−2s', $('.atimer')); } } });
+    A.q = q;
+    main.innerHTML = `<div class="s3">${arcadeHead()}<div class="s3center"><div class="minititle">🎮 ${esc(GAMES[A.kind].name)}</div></div><div class="foot s3foot"><div class="muted center s3help">${MINI_HELP[A.kind]}</div></div></div>`;
+    ST().mini(q, () => { if (A && A.q === q) arcadeMini(); });
+    tickArcade();
   }
   function arcadeNext() {
     A.q = arcadeQ(A.kind);
     const q = A.q;
     if (A.is3D) {
-      main.innerHTML = `<div class="s3"><div class="ph"><button class="x" data-act="quitArcade" aria-label="Quit">✕</button>
-        <div class="atimer"><span id="atime">60</span>s</div><div class="ascore">⭐ ${A.score}</div></div></div>`;
+      main.innerHTML = `<div class="s3">${arcadeHead()}</div>`;
       A.lock = false;
       ST().ask(q, { pick: i => arcadePick(i) });
       return tickArcade();
     }
-    main.innerHTML = `<div class="player arcade"><div class="ph"><button class="x" data-act="quitArcade" aria-label="Quit">✕</button>
-      <div class="atimer"><span id="atime">60</span>s</div><div class="ascore">⭐ ${A.score}</div></div>
+    main.innerHTML = `<div class="player arcade">${arcadeHead()}
       <div class="qbody"><div class="prompt">${q.prompt}</div><div class="bigword"><span class="gk">${esc(q.big)}</span></div>
       <div class="opts">${q.options.map((o, i) => `<button class="opt" data-act="apick" data-arg="${i}"><span class="k">${i + 1}</span>${esc(o)}</button>`).join('')}</div></div></div>`;
     tickArcade();
@@ -608,20 +672,21 @@
       el.classList.add(ok ? 'right' : 'wrong');
       if (!ok) document.querySelectorAll('.opt')[A.q.answer].classList.add('right');
     }
-    if (!ok) { A.end -= 3000; sfx('bad'); } else { A.score++; sfx('good'); }
+    if (!ok) { A.left -= 3000; sfx('bad'); } else { A.score++; sfx('good'); }
     setTimeout(() => { if (A) { A.lock = false; arcadeNext(); } }, A.is3D ? (ok ? 700 : 1100) : (ok ? 250 : 700));
   }
   function endArcade() {
     if (!A) return;
     clearInterval(A.timer);
-    const { kind, score, is3D } = A; A = null;
-    if (is3D) ST().celebrate(score > 0);
+    const { kind, score, is3D, mini } = A; A = null;
+    if (is3D) { if (mini) ST().stopMini(); ST().celebrate(score > 0); }
     const best = S().arcade[kind] || 0, record = score > best;
     if (record) S().arcade[kind] = score;
     const xp = score * 3, coins = Math.floor(score / 4);
     if (xp) E.gainXP(xp, coins); else E.save();
     E.checkAchievements();
     if (record && score) { sfx('win'); confetti(); }
+    if (record && score >= 15) E.grantPower('slow', 1, 'record');
     main.innerHTML = `<div class="results ${is3D ? 's3card' : ''}"><h1>${record && score ? '🏅 New high score!' : '⏱ Time!'}</h1>
       <div class="rstats"><div><b>${score}</b><span>score</span></div><div><b>${Math.max(best, score)}</b><span>best</span></div><div><b>+${xp}</b><span>XP</span></div><div><b>+${coins}</b><span>🪙</span></div></div>
       <div class="col-btns"><button class="btn primary wide" data-act="arcade" data-arg="${kind}">Play again</button><button class="btn ghost wide" data-act="go" data-arg="arcade">Back</button></div></div>`;
@@ -706,6 +771,8 @@
       <div class="card"><h3>Shop <span class="muted small">you have ${s.coins} 🪙</span></h3>
         <div class="shop"><div><b>🧊 Streak freeze</b><p class="muted small">Protects your streak for one missed day (max 2).</p><button class="btn primary" data-act="buy" data-arg="freeze">50 🪙</button></div>
         <div><b>🚀 XP boost</b><p class="muted small">Double XP on your next 3 lessons${s.boost ? ` (${s.boost} left)` : ''}.</p><button class="btn primary" data-act="buy" data-arg="boost">80 🪙</button></div></div></div>
+      <div class="card"><h3>🪄 Power-ups</h3><div class="pwcards">${Object.entries(E.POWERS).map(([k, p]) => `<div><b>${p[0]} ${p[1]} × ${E.powers()[k]}</b><span class="muted small">${p[2]}</span></div>`).join('')}</div>
+        <p class="muted small">Earn them by finishing daily quests, keeping your day streak (every 3rd day 🛡, every 7th ⏳), reaching an 8× combo in a lesson (💡) and setting Arcade records. Use them from the bar above a question: 💡 in any choice question, 🛡 in guardian battles and against the shades, ⏳ in timed games.</p></div>
       ${wardrobeCard()}
       <div class="card"><h3>🏆 Trophy room <span class="muted small">${Object.keys(s.ach).length}/${KG.achievements.length}</span></h3>
         <div class="achs">${KG.achievements.map(a => `<div class="ach ${s.ach[a.id] ? 'got' : ''}" title="${esc(a.desc)}"><div class="ai">${a.icon}</div><b>${esc(a.name)}</b><span>${esc(a.desc)}</span></div>`).join('')}</div></div>
@@ -789,7 +856,8 @@
     next: () => next(),
     review: () => startReview('review'), mistakes: () => startReview('mistakes'), weak: () => startReview('weak'),
     arcade: k => startArcade(k), apick: (i, el) => arcadePick(i, el),
-    quitArcade: () => { if (A) clearInterval(A.timer); A = null; go('arcade'); },
+    quitArcade: () => { if (A) { clearInterval(A.timer); if (A.mini && A.is3D) ST().stopMini(); } A = null; go('arcade'); },
+    power: k => usePower(k),
     readVerse,
     equip: a => { const [sl, id] = a.split(':'); if (E.equip(sl, id)) { sfx('tap'); renderProfile(); } },
     buyItem: a => {

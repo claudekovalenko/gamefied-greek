@@ -1,21 +1,17 @@
-// The 3D adventure: a third-person journey through nine regions (one per unit).
-// Mentors give lessons as quests, scroll pedestals hold NT readings, guardians
-// block each gate until the unit's boss is beaten, and wandering Shades of
+// The 3D adventure: nine separate worlds (one per unit), joined by portals.
+// Each world has its own road, landmarks, weather and creatures. Mentors give
+// lessons as quests, scroll pedestals hold NT readings, a guardian holds each
+// world's gate until the unit's boss is beaten, and wandering Shades of
 // Forgetting are fought by answering vocabulary questions (spaced review).
 import * as THREE from './vendor/three.module.min.js';
 import { createStage } from './stage.js';
+import { DEFS, R, fbm, vnoise, smooth, hash, rng } from './worlds.js';
+import { makeProps } from './props.js';
 
 const KG = window.KG, E = KG.engine, U = KG.util;
 const W = KG.world = { ok: false, show() {}, hide() {}, onLessonDone() {} };
 const esc = U.esc;
-
-// ── world layout ──────────────────────────────────────────────
-const L = 90;                         // length of one region
-const NZ = KG.units.length;           // 9 regions
-const END_Z = -NZ * L - 34;
-const pathX = z => Math.sin(z * 0.021) * 16 + Math.sin(z * 0.047 + 1) * 7;
-const zoneOf = z => Math.max(0, Math.min(NZ - 1, Math.floor(-z / L)));
-const gateZ = i => -(i + 1) * L + 4;
+const NZ = KG.units.length; // 9 worlds
 
 const ZONES = [
   { name: 'Alphabet Hollow', grass: 0x6fae4f, leaf: [0x4f8f3a, 0x6aa84a], mentor: ['Ἀλφαῖος', 'Alphaeus', 'the village elder'], robe: 0x7a5230, guard: 'Stone Warden of the Hollow', greet: ['Χαῖρε, μαθητά!', 'Greetings, student!'] },
@@ -28,51 +24,21 @@ const ZONES = [
   { name: 'Declension Peaks', grass: 0x93a39b, leaf: [0x4a6a5a, 0x5a7a6a], mentor: ['Σίλας', 'Silas', 'the mountain guide'], robe: 0x6a5a2e, guard: 'The Frost Giant', greet: ['Χαίρετε!', 'Rejoice!'] },
   { name: 'The Great Library', grass: 0x7fae5f, leaf: [0x5a8a3a, 0x7a9a4a], mentor: ['Λουκᾶς', 'Luke', 'the librarian'], robe: 0x9a3f3f, guard: 'The Guardian of the Library', greet: ['Κράτιστε Θεόφιλε!', 'Most excellent Theophilus!'] },
 ];
-
-// ── deterministic noise & terrain height ─────────────────────
-function hash(x, z) { const s = Math.sin(x * 127.1 + z * 311.7) * 43758.5453; return s - Math.floor(s); }
-function vnoise(x, z) {
-  const xi = Math.floor(x), zi = Math.floor(z), xf = x - xi, zf = z - zi;
-  const u = xf * xf * (3 - 2 * xf), v = zf * zf * (3 - 2 * zf);
-  const a = hash(xi, zi), b = hash(xi + 1, zi), c = hash(xi, zi + 1), d = hash(xi + 1, zi + 1);
-  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
-}
-const fbm = (x, z) => vnoise(x * 0.05, z * 0.05) + vnoise(x * 0.13, z * 0.13) * 0.4 + vnoise(x * 0.31, z * 0.31) * 0.15;
-const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
-
-const RIVER_Z = -3 * L - 45;                   // Verb River crosses region 4
-const LAKE = { x: 0, z: -6 * L - 45, r: 16 };  // Mirror Lake beside region 7's road
-LAKE.x = pathX(LAKE.z) + 27;
-function height(x, z) {
-  const d = Math.abs(x - pathX(z));
-  let h = (fbm(x, z) - 0.75) * 2;
-  const wall = smooth(11, 44, d);
-  h += wall * wall * 30 + wall * fbm(x * 2, z * 2) * 7;
-  if (zoneOf(z) === 7) h += wall * 10;                 // taller peaks
-  if (z > 6) h += (z - 6) * (z - 6) * 0.3;
-  if (z < END_Z) h += (END_Z - z) * (END_Z - z) * 0.3;
-  h -= 2.2 * Math.max(0, 1 - Math.abs(z - RIVER_Z) / 6);
-  const lr = Math.hypot(x - LAKE.x, z - LAKE.z);
-  h -= 4 * smooth(LAKE.r, LAKE.r * 0.4, lr);
-  return h;
-}
-const BRIDGE = { z: RIVER_Z, half: 7, w: 2.6 };
-function groundAt(x, z) {
-  const h = height(x, z);
-  if (Math.abs(z - BRIDGE.z) < BRIDGE.half && Math.abs(x - pathX(z)) < BRIDGE.w) return Math.max(h, bridgeTop);
-  return h;
-}
-let bridgeTop = 0;
+const GOLEM_COL = [0x8a8a8a, 0x5a7a3a, 0xc9a43a, 0x4a7aa8, 0x5a5a66, 0xa08060, 0xc0c8d8, 0xcfe0ff, 0xe0c060];
 
 // ── state ─────────────────────────────────────────────────────
 function ws() {
   const S = E.state;
-  if (!S.world) S.world = { x: pathX(-6), z: -6, letters: [], coins: { day: '', got: [] }, intro: false, wisps: 0 };
+  if (!S.world) S.world = { zone: 0, x: null, z: null, letters: [], coins: { day: '', got: [] }, intro: false, wisps: 0 };
   const w = S.world;
+  // saves from the single-valley world: move to the start of the same world
+  if (w.zone === undefined) { w.zone = Math.max(0, Math.min(NZ - 1, Math.floor(-(w.z || 0) / 90))); w.x = w.z = null; }
   if (w.coins.day !== U.day()) w.coins = { day: U.day(), got: [] };
+  w.cine = w.cine || [];
   return w;
 }
 const gateOpen = i => E.state.settings.unlockAll || E.stars(KG.units[i].nodes[KG.units[i].nodes.length - 1].id) > 0;
+const reachable = i => i === 0 || gateOpen(i - 1);
 
 // ── renderer, scene, camera ──────────────────────────────────
 let renderer, scene, camera, sun, clock;
@@ -87,7 +53,9 @@ try {
 const mobile = matchMedia('(pointer: coarse)').matches;
 // "Low" graphics (Profile → Settings) trades grass, shadows and effects for smoothness on older phones
 const LOW = (E.state.settings || {}).gfx === 'low';
-renderer.setPixelRatio(Math.min(devicePixelRatio, LOW ? 1 : mobile ? 1.5 : 2));
+const MAXPR = Math.min(devicePixelRatio, LOW ? 1 : mobile ? 1.5 : 2);
+let pixelRatio = MAXPR;
+renderer.setPixelRatio(pixelRatio);
 renderer.shadowMap.enabled = !LOW;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -96,58 +64,40 @@ root.prepend(renderer.domElement);
 renderer.domElement.className = 'world-canvas';
 
 scene = new THREE.Scene();
-const SKY = 0xa9d4f0;
-scene.fog = new THREE.Fog(SKY, 60, 230);
+scene.fog = new THREE.Fog(0xa9d4f0, 60, 230);
 camera = new THREE.PerspectiveCamera(60, 1, 0.1, 600);
 clock = new THREE.Clock();
 
-// sky dome with a vertical gradient
-{
-  const g = new THREE.SphereGeometry(500, 24, 12);
-  const top = new THREE.Color(0x4a88c8), mid = new THREE.Color(SKY), bot = new THREE.Color(0xe8e0c8);
-  const cols = [];
-  const p = g.attributes.position;
-  for (let i = 0; i < p.count; i++) {
-    const y = p.getY(i) / 500;
-    const c = y > 0 ? mid.clone().lerp(top, Math.min(1, y * 1.6)) : mid.clone().lerp(bot, Math.min(1, -y * 4));
-    cols.push(c.r, c.g, c.b);
-  }
-  g.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
-  const sky = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false }));
-  sky.name = 'sky';
-  scene.add(sky);
-}
+// sky dome with a vertical gradient, repainted for each world
+const skyGeo = new THREE.SphereGeometry(500, 24, 12);
+skyGeo.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(skyGeo.attributes.position.count * 3), 3));
+const sky = new THREE.Mesh(skyGeo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false }));
+scene.add(sky);
 const hemi = new THREE.HemisphereLight(0xdff0ff, 0x5a6a3a, 1.1);
 scene.add(hemi);
-// Each world has its own sky, fog and light; they blend as you travel.
 const ATMOS = [
-  { top: 0x4a88c8, mid: 0xa9d4f0, bot: 0xe8e0c8, sun: 0xfff1d6, sunI: 2.2, hemi: 1.1, fog: [60, 230] },   // Alphabet Hollow: bright morning
-  { top: 0x3a6a5a, mid: 0x9cc8b0, bot: 0xd8e8d0, sun: 0xe8ffd8, sunI: 1.6, hemi: 1.0, fog: [30, 150] },   // Wordwood: green mist
-  { top: 0x5a7ab8, mid: 0xf0d8a0, bot: 0xf8e8c0, sun: 0xffd890, sunI: 2.4, hemi: 1.1, fog: [60, 230] },   // Fields: golden hour
-  { top: 0x2a78d8, mid: 0x9ad0f8, bot: 0xe0f0f8, sun: 0xffffff, sunI: 2.4, hemi: 1.2, fog: [70, 250] },   // Verb River: clear blue
-  { top: 0x6a7888, mid: 0xc0c8d0, bot: 0xe0e0e0, sun: 0xf0f0f0, sunI: 1.5, hemi: 1.2, fog: [40, 180] },   // Builders' Ridge: overcast
-  { top: 0x3a2a6a, mid: 0xf0a070, bot: 0xf8d0a0, sun: 0xffa060, sunI: 2.0, hemi: 0.9, fog: [50, 200] },   // Ruins of Time: dusk
+  { top: 0x4a88c8, mid: 0xa9d4f0, bot: 0xe8e0c8, sun: 0xfff1d6, sunI: 2.2, hemi: 1.1, fog: [60, 200] },   // Alphabet Hollow: bright morning
+  { top: 0x2f5a4a, mid: 0x8fbfa4, bot: 0xd8e8d0, sun: 0xe8ffd8, sunI: 1.5, hemi: 1.0, fog: [18, 110] },   // Wordwood: green mist
+  { top: 0x5a7ab8, mid: 0xf0d8a0, bot: 0xf8e8c0, sun: 0xffd890, sunI: 2.4, hemi: 1.1, fog: [60, 220] },   // Fields: golden hour
+  { top: 0x2a78d8, mid: 0x9ad0f8, bot: 0xe0f0f8, sun: 0xffffff, sunI: 2.4, hemi: 1.2, fog: [70, 230] },   // Verb River: clear blue
+  { top: 0x6a7888, mid: 0xc0c8d0, bot: 0xe0e0e0, sun: 0xf0f0f0, sunI: 1.6, hemi: 1.2, fog: [40, 170] },   // Builders' Ridge: overcast
+  { top: 0x3a2a6a, mid: 0xf0a070, bot: 0xf8d0a0, sun: 0xffa060, sunI: 2.0, hemi: 0.9, fog: [45, 190] },   // Ruins of Time: dusk
   { top: 0x1a2a5a, mid: 0x6a80b8, bot: 0xb0c0e0, sun: 0xc0d0ff, sunI: 1.3, hemi: 0.85, fog: [40, 190] },  // Mirror Lake: twilight
-  { top: 0x8aa0c0, mid: 0xe0e8f0, bot: 0xffffff, sun: 0xffffff, sunI: 2.0, hemi: 1.3, fog: [30, 160] },   // Peaks: cold white
-  { top: 0x4a3a8a, mid: 0xf8c070, bot: 0xfff0c8, sun: 0xffc860, sunI: 2.3, hemi: 1.1, fog: [60, 230] },   // Great Library: golden sunset
+  { top: 0x8aa0c0, mid: 0xe0e8f0, bot: 0xffffff, sun: 0xffffff, sunI: 2.0, hemi: 1.3, fog: [30, 170] },   // Peaks: cold white
+  { top: 0x4a3a8a, mid: 0xf8c070, bot: 0xfff0c8, sun: 0xffc860, sunI: 2.3, hemi: 1.1, fog: [60, 220] },   // Great Library: golden sunset
 ];
-const atm = { top: new THREE.Color(ATMOS[0].top), mid: new THREE.Color(ATMOS[0].mid), bot: new THREE.Color(ATMOS[0].bot), sun: new THREE.Color(ATMOS[0].sun), sunI: 2.2, hemi: 1.1, near: 60, far: 230 };
-function paintSky() {
-  const sk = scene.getObjectByName('sky'), g = sk.geometry, p = g.attributes.position, col = g.attributes.color, c = new THREE.Color();
-  for (let i = 0; i < p.count; i++) {
-    const y = p.getY(i) / 500;
-    if (y > 0) c.copy(atm.mid).lerp(atm.top, Math.min(1, y * 1.6)); else c.copy(atm.mid).lerp(atm.bot, Math.min(1, -y * 4));
-    col.setXYZ(i, c.r, c.g, c.b);
+function setAtmosphere(i) {
+  const A = ATMOS[i], top = new THREE.Color(A.top), mid = new THREE.Color(A.mid), bot = new THREE.Color(A.bot), c = new THREE.Color();
+  const p = skyGeo.attributes.position, col = skyGeo.attributes.color;
+  for (let k = 0; k < p.count; k++) {
+    const y = p.getY(k) / 500;
+    if (y > 0) c.copy(mid).lerp(top, Math.min(1, y * 1.6)); else c.copy(mid).lerp(bot, Math.min(1, -y * 4));
+    col.setXYZ(k, c.r, c.g, c.b);
   }
   col.needsUpdate = true;
-  scene.fog.color.copy(atm.mid); scene.fog.near = atm.near; scene.fog.far = atm.far;
-  sun.color.copy(atm.sun); sun.intensity = atm.sunI; hemi.intensity = atm.hemi;
-}
-function blendAtmosphere(zi, k) {
-  const A = ATMOS[zi], T = new THREE.Color();
-  atm.top.lerp(T.setHex(A.top), k); atm.mid.lerp(T.setHex(A.mid), k); atm.bot.lerp(T.setHex(A.bot), k); atm.sun.lerp(T.setHex(A.sun), k);
-  atm.sunI += (A.sunI - atm.sunI) * k; atm.hemi += (A.hemi - atm.hemi) * k; atm.near += (A.fog[0] - atm.near) * k; atm.far += (A.fog[1] - atm.far) * k;
-  paintSky();
+  scene.fog.color.copy(mid); scene.fog.near = A.fog[0]; scene.fog.far = A.fog[1];
+  sun.color.setHex(A.sun); sun.intensity = A.sunI; hemi.intensity = A.hemi;
+  root.style.background = '#' + mid.getHexString();
 }
 sun = new THREE.DirectionalLight(0xfff1d6, 2.2);
 sun.castShadow = true;
@@ -162,9 +112,10 @@ const mat = (color, opts = {}) => {
   const k = color + JSON.stringify(opts);
   return mats[k] || (mats[k] = new THREE.MeshStandardMaterial(Object.assign({ color, roughness: 0.85, flatShading: true }, opts)));
 };
-function mesh(geo, color, opts) { const m = new THREE.Mesh(geo, color instanceof THREE.Material ? color : mat(color, opts)); m.castShadow = true; m.receiveShadow = true; return m; }
-function put(obj, x, z, yOff = 0) { obj.position.set(x, groundAt(x, z) + yOff, z); scene.add(obj); return obj; }
-
+function mesh(geo, color, opts) { const m = new THREE.Mesh(geo, color instanceof THREE.Material ? color : mat(color, opts)); m.castShadow = !LOW; m.receiveShadow = !LOW; return m; }
+let WG = new THREE.Group(); // everything that belongs to the current world
+scene.add(WG);
+function put(obj, x, z, yOff = 0) { obj.position.set(x, groundAt(x, z) + yOff, z); WG.add(obj); return obj; }
 const GREEK_FONT = '"Gentium Plus", "Noto Serif", Georgia, serif';
 function textSprite(text, { size = 40, color = '#fff', bg = 'rgba(24,32,48,.78)', font = '800 ' + size + 'px Nunito, sans-serif', scale = 0.011 } = {}) {
   const c = document.createElement('canvas'), x = c.getContext('2d');
@@ -196,212 +147,212 @@ function glyphSprite(ch, color = '#ffd166') {
   return s;
 }
 
-// ── terrain ───────────────────────────────────────────────────
+// ── the current world's layout ───────────────────────────────
+let WI = -1, D = null, LY = null, HG = null, BR = null; // index, definition, road, height grid, bridge
+const colliders = [], anims = [];
+let waters = [];
+function makeRoad(def) {
+  const segs = []; let len = 0;
+  for (let i = 0; i < def.pts.length - 1; i++) {
+    const [x0, z0] = def.pts[i], [x1, z1] = def.pts[i + 1], l = Math.hypot(x1 - x0, z1 - z0);
+    segs.push({ x0, z0, dx: x1 - x0, dz: z1 - z0, l, s: len }); len += l;
+  }
+  return { segs, len };
+}
+// distance to the road and how far along it the nearest point is (0…1)
+function roadInfo(x, z) {
+  let best = 1e9, t = 0;
+  for (const s of LY.segs) {
+    const u = Math.max(0, Math.min(1, ((x - s.x0) * s.dx + (z - s.z0) * s.dz) / (s.l * s.l)));
+    const d = Math.hypot(x - s.x0 - s.dx * u, z - s.z0 - s.dz * u);
+    if (d < best) { best = d; t = (s.s + u * s.l) / LY.len; }
+  }
+  return { d: best, t };
+}
+// a point t of the way along the road, pushed sideways by off
+function along(t, side = 0, off = 0) {
+  const L = Math.max(0, Math.min(1, t)) * LY.len;
+  const s = LY.segs.find(s => L <= s.s + s.l) || LY.segs[LY.segs.length - 1];
+  const u = Math.min(1, (L - s.s) / s.l), px = s.x0 + s.dx * u, pz = s.z0 + s.dz * u;
+  const nx = s.dz / s.l, nz = -s.dx / s.l;
+  return { x: px + nx * side * off, z: pz + nz * side * off, px, pz, a: Math.atan2(s.dx, s.dz) };
+}
+function rawHeight(x, z) {
+  const { d } = roadInfo(x, z);
+  const paved = D.paved && Math.abs(x) < D.paved + 3 && z > -48;
+  let h = (D.baseY ? D.baseY(x, z) : 0) + D.relief(x, z, d) * smooth(2.6, 12, d) + (paved ? 0 : (vnoise(x * 0.4, z * 0.4) - 0.5) * 0.15);
+  if (D.carve) h += D.carve(x, z);
+  const e = Math.max(Math.abs(x), Math.abs(z)), wall = smooth(R - 18, R - 2, e);
+  return h + wall * wall * 28 + wall * fbm(x * 2, z * 2) * 6;
+}
+// heights are computed once per world on a grid; the ground mesh uses the same triangles
+function buildHeights() {
+  const cell = LOW ? 1.8 : mobile ? 1.45 : 1.1, n = Math.ceil(2 * R / cell) + 1, h = new Float32Array(n * n);
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) h[i * n + j] = rawHeight(-R + j * cell, -R + i * cell);
+  HG = { cell, n, h };
+}
+function groundAt(x, z) {
+  const { cell, n, h } = HG;
+  const fx0 = Math.max(0, Math.min(n - 1.001, (x + R) / cell)), fz0 = Math.max(0, Math.min(n - 1.001, (z + R) / cell));
+  const j = Math.floor(fx0), i = Math.floor(fz0), fx = fx0 - j, fz = fz0 - i;
+  const h00 = h[i * n + j], h10 = h[i * n + j + 1], h01 = h[(i + 1) * n + j], h11 = h[(i + 1) * n + j + 1];
+  const y = fx + fz <= 1 ? h00 + (h10 - h00) * fx + (h01 - h00) * fz : h11 + (h01 - h11) * (1 - fx) + (h10 - h11) * (1 - fz);
+  if (BR && Math.abs(z - BR.z) < BR.half && Math.abs(x - BR.x) < BR.w) return Math.max(y, BR.top);
+  return y;
+}
+
 function buildTerrain() {
-  const WID = 170, LEN = -END_Z + 60, SX = mobile ? 90 : 130, SZ = mobile ? 300 : 460;
-  const g = new THREE.PlaneGeometry(WID, LEN, SX, SZ);
-  g.rotateX(-Math.PI / 2);
-  const p = g.attributes.position, cols = [];
-  const dirt = new THREE.Color(0xb8925a), rock = new THREE.Color(0x8a8378), snow = new THREE.Color(0xf2f4f6), sand = new THREE.Color(0xd8c48a);
-  const zc = ZONES.map(z => new THREE.Color(z.grass));
-  const c = new THREE.Color();
-  for (let i = 0; i < p.count; i++) {
-    const x = p.getX(i), z = p.getZ(i) + (END_Z + 30) / 2 + 10;
-    const h = height(x, z);
-    p.setX(i, x); p.setZ(i, z); p.setY(i, h);
-    const zf = Math.min(NZ - 1, Math.max(0, -z / L - 0.5));
-    const zi = Math.floor(zf);
-    c.copy(zc[zi]).lerp(zc[Math.min(NZ - 1, zi + 1)], smooth(0.75, 1, zf - zi));
-    c.offsetHSL(0, 0, (fbm(x * 3, z * 3) - 0.8) * 0.08);
-    const d = Math.abs(x - pathX(z));
-    const pathAmt = 1 - smooth(1.6, 3.2 + vnoise(x, z) * 0.8, d);
-    c.lerp(dirt, pathAmt * 0.85);
-    const wall = smooth(18, 40, d);
-    c.lerp(rock, wall * 0.75);
-    if (h > 18) c.lerp(snow, smooth(18, 28, h) * (zoneOf(z) === 7 ? 1 : 0.6));
-    if (h < -1.2) c.lerp(sand, 0.6);
-    cols.push(c.r, c.g, c.b);
+  const { cell, n, h } = HG, pos = new Float32Array(n * n * 3), cols = new Float32Array(n * n * 3), idx = [];
+  const grass = new THREE.Color(ZONES[WI].grass), dirt = new THREE.Color(WI === 8 ? 0xd8ccb0 : WI === 5 ? 0xc8a878 : WI === 7 ? 0xa89a88 : 0xb8925a);
+  const rock = new THREE.Color(WI === 5 ? 0xb09070 : 0x8a8378), snow = new THREE.Color(0xf2f4f6), sand = new THREE.Color(0xd8c48a), c = new THREE.Color();
+  const wy = D.water ? D.water.y : -99;
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+    const k = i * n + j, x = -R + j * cell, z = -R + i * cell, y = h[k];
+    pos.set([x, y, z], k * 3);
+    const gx = (h[i * n + Math.min(n - 1, j + 1)] - h[i * n + Math.max(0, j - 1)]) / (2 * cell), gz = (h[Math.min(n - 1, i + 1) * n + j] - h[Math.max(0, i - 1) * n + j]) / (2 * cell);
+    const slope = Math.hypot(gx, gz), { d } = roadInfo(x, z);
+    c.copy(grass).offsetHSL(0, 0, (fbm(x * 3, z * 3) - 0.8) * 0.08);
+    if (D.sand) c.lerp(sand, D.sand * fbm(x * 0.7, z * 0.7));
+    c.lerp(rock, Math.min(1, smooth(0.55, 1.1, slope) + (D.rock || 0) * smooth(0.3, 0.7, slope)));
+    if (D.snowLine !== undefined) c.lerp(snow, smooth(D.snowLine, D.snowLine + 8, y) * (slope < 1.2 ? 0.95 : 0.2));
+    else if (y > 16) c.lerp(snow, smooth(16, 26, y) * 0.5);
+    c.lerp(dirt, (1 - smooth(1.7, 3.2 + vnoise(x, z) * 0.8, d)) * 0.88);
+    if (y < wy + 0.6) c.lerp(sand, 0.6);
+    cols.set([c.r, c.g, c.b], k * 3);
+    if (i < n - 1 && j < n - 1) { const a = k, b = k + 1, d2 = k + n, e = k + n + 1; idx.push(a, d2, b, b, d2, e); }
   }
-  g.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
-  g.computeVertexNormals();
-  const t = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: false }));
-  t.receiveShadow = true;
-  scene.add(t);
-
-  // water: river and lake
-  const water = new THREE.MeshStandardMaterial({ color: 0x3f8fc0, transparent: true, opacity: 0.82, roughness: 0.2, metalness: 0.1 });
-  water.roughness = 0.12; water.metalness = 0.25; water.color.setHex(0x3a9ad0);
-  const river = new THREE.Mesh(new THREE.PlaneGeometry(120, 9, 60, 6), water);
-  river.rotation.x = -Math.PI / 2; river.position.set(pathX(RIVER_Z), height(pathX(RIVER_Z), RIVER_Z) + 0.9, RIVER_Z);
-  scene.add(river);
-  W.water = [river];
-  const lake = new THREE.Mesh(new THREE.CircleGeometry(LAKE.r * 1.05, 48, 0, Math.PI * 2), water);
-  lake.rotation.x = -Math.PI / 2; lake.position.set(LAKE.x, height(LAKE.x, LAKE.z) + 2.6, LAKE.z);
-  scene.add(lake); W.water.push(lake);
-
-  // bridge over the river
-  const bx = pathX(RIVER_Z);
-  bridgeTop = height(bx, RIVER_Z - BRIDGE.half) + 0.35;
-  const deck = mesh(new THREE.BoxGeometry(BRIDGE.w * 2, 0.4, BRIDGE.half * 2 + 1), 0x8a5a2a);
-  deck.position.set(bx, bridgeTop - 0.2, RIVER_Z); scene.add(deck);
-  for (const s of [-1, 1]) for (let k = -3; k <= 3; k++) {
-    const post = mesh(new THREE.CylinderGeometry(0.12, 0.12, 1.2, 6), 0x6a4020);
-    post.position.set(bx + s * BRIDGE.w, bridgeTop + 0.5, RIVER_Z + k * 2.2); scene.add(post);
-  }
-  for (const s of [-1, 1]) {
-    const rail = mesh(new THREE.BoxGeometry(0.15, 0.15, BRIDGE.half * 2), 0x6a4020);
-    rail.position.set(bx + s * BRIDGE.w, bridgeTop + 1.05, RIVER_Z); scene.add(rail);
-  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+  g.setIndex(idx); g.computeVertexNormals();
+  const t = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 }));
+  t.receiveShadow = !LOW; WG.add(t);
 }
 
-// ── scenery ───────────────────────────────────────────────────
-const colliders = []; // {x, z, r}
+// water: pond, river or lake
+const waterMat = new THREE.MeshStandardMaterial({ color: 0x3a9ad0, transparent: true, opacity: 0.84, roughness: 0.12, metalness: 0.25, flatShading: true });
+function buildWater() {
+  waters = [];
+  const Wd = D.water; if (!Wd) return;
+  waterMat.color.setHex(WI === 6 ? 0x4a6aa8 : 0x3a9ad0); waterMat.metalness = WI === 6 ? 0.55 : 0.25; waterMat.roughness = WI === 6 ? 0.05 : 0.12;
+  let g;
+  if (Wd.kind === 'river') {
+    g = new THREE.PlaneGeometry(2 * R + 10, Wd.w * 2, LOW ? 40 : 80, 4); g.rotateX(-Math.PI / 2);
+    const p = g.attributes.position; for (let i = 0; i < p.count; i++) p.setZ(i, p.getZ(i) + Wd.f(p.getX(i)));
+  } else { g = new THREE.CircleGeometry(Wd.r, LOW ? 24 : 48); g.rotateX(-Math.PI / 2); }
+  const m = new THREE.Mesh(g, waterMat);
+  m.position.set(Wd.kind === 'river' ? 0 : Wd.x, Wd.y, Wd.kind === 'river' ? 0 : Wd.z);
+  WG.add(m); waters.push(m);
+}
+
+// instanced trees: round, pine, tall pine, cypress, dead and willow
 function scatterTrees() {
-  const trunkG = new THREE.CylinderGeometry(0.18, 0.28, 1.6, 6);
-  const leafG = new THREE.IcosahedronGeometry(1.3, 0);
-  const pineG = new THREE.ConeGeometry(1.2, 3.2, 7);
-  const N = LOW ? 400 : mobile ? 650 : 1100;
-  const trunks = new THREE.InstancedMesh(trunkG, mat(0x6a4a2a), N);
-  const leaves = new THREE.InstancedMesh(leafG, new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.9 }), N);
-  const pines = new THREE.InstancedMesh(pineG, new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.9 }), N);
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), pos = new THREE.Vector3(), col = new THREE.Color();
-  let nl = 0, np = 0, nt = 0;
-  for (let i = 0; i < N * 3 && nt < N; i++) {
-    const z = 4 - Math.random() * (-END_Z + 4), zi = zoneOf(z);
-    const side = Math.random() < 0.5 ? -1 : 1;
-    const density = zi === 1 ? 0.9 : zi === 2 ? 0.25 : 0.6;
-    const d = 6.5 + Math.pow(Math.random(), 1.3) * 34;
-    if (Math.random() > density && d < 18) continue;
-    const x = pathX(z) + side * d, y = height(x, z);
-    if (y < -0.8) continue;
-    if (Math.abs(z - RIVER_Z) < 6) continue;
-    const s = 0.7 + Math.random() * 0.9;
-    const pine = zi >= 6 || (zi === 1 && Math.random() < 0.4) || y > 10;
-    q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.random() * 6.28);
-    m.compose(pos.set(x, y + 0.8 * s, z), q, sc.set(s, s, s)); trunks.setMatrixAt(nt++, m);
-    const leafCol = col.setHex(U.pick(ZONES[zi].leaf)).offsetHSL(0, 0, (Math.random() - 0.5) * 0.08);
-    if (pine) { m.compose(pos.set(x, y + 2.6 * s, z), q, sc.set(s, s * 1.1, s)); pines.setMatrixAt(np, m); pines.setColorAt(np++, leafCol); }
-    else {
-      m.compose(pos.set(x, y + 2.3 * s, z), q, sc.set(s * 1.1, s, s * 1.1)); leaves.setMatrixAt(nl, m); leaves.setColorAt(nl++, leafCol);
-      if (nl < N) { m.compose(pos.set(x + 0.5 * s, y + 3.1 * s, z - 0.3 * s), q, sc.set(s * 0.75, s * 0.7, s * 0.75)); leaves.setMatrixAt(nl, m); leaves.setColorAt(nl++, leafCol.clone().offsetHSL(0, 0, 0.05)); }
-    }
+  const T = D.trees, N = Math.round(T.n * (LOW ? 0.45 : mobile ? 0.7 : 1)), rand = rng(WI * 977 + 13), sc0 = T.scale || 1;
+  const parts = {
+    trunk: new THREE.InstancedMesh(new THREE.CylinderGeometry(0.18, 0.28, 1.6, 6), mat(0x6a4a2a), N),
+    round: new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1.3, 0), new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.9 }), N * 2),
+    cone: new THREE.InstancedMesh(new THREE.ConeGeometry(1.2, 3.2, 7), new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.9 }), N * 2),
+    snowcap: new THREE.InstancedMesh(new THREE.ConeGeometry(0.62, 1.1, 7), mat(0xf4f8fb), T.snowy ? N : 1),
+  };
+  const cnt = { trunk: 0, round: 0, cone: 0, snowcap: 0 };
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s3 = new THREE.Vector3(), p3 = new THREE.Vector3(), col = new THREE.Color(), up = new THREE.Vector3(0, 1, 0);
+  const addI = (part, x, y, z, sx, sy, sz, c) => { const im = parts[part]; if (cnt[part] >= im.count) return; m.compose(p3.set(x, y, z), q, s3.set(sx, sy, sz)); im.setMatrixAt(cnt[part], m); if (c) im.setColorAt(cnt[part], c); cnt[part]++; };
+  const kinds = Object.entries(T.kinds), wy = D.water ? D.water.y : -99;
+  for (let i = 0; i < N * 4 && cnt.trunk < N; i++) {
+    const x = (rand() * 2 - 1) * (R - 3), z = (rand() * 2 - 1) * (R - 3), { d } = roadInfo(x, z);
+    if (d < T.near || (T.avoid && T.avoid(x, z))) continue;
+    if (colliders.some(c => Math.hypot(c.x - x, c.z - z) < c.r + 1.6)) continue;
+    const y = groundAt(x, z); if (y < wy + 0.4) continue;
+    let r = rand(), kind = kinds[0][0]; for (const [k, w] of kinds) { if ((r -= w) <= 0) { kind = k; break; } }
+    const s = (0.7 + rand() * 0.9) * sc0;
+    q.setFromAxisAngle(up, rand() * 6.28);
+    const leaf = col.setHex(U.pick(ZONES[WI].leaf)).offsetHSL(0, 0, (rand() - 0.5) * 0.08);
+    if (kind === 'dead') { addI('trunk', x, y + 1.6 * s, z, s * 0.8, s * 2, s * 0.8); continue; }
+    addI('trunk', x, y + 0.8 * s, z, s, s, s);
+    if (kind === 'pine' || kind === 'tall') {
+      const k = kind === 'tall' ? 1.6 : 1;
+      addI('cone', x, y + 2.6 * s * k, z, s, s * 1.1 * k, s, leaf);
+      if (T.snowy) addI('snowcap', x, y + (2.6 * k + 1.2) * s, z, s, s, s);
+    } else if (kind === 'cypress') addI('cone', x, y + 3 * s, z, s * 0.45, s * 1.5, s * 0.45, col.setHex(0x2f4a2a).offsetHSL(0, 0, (rand() - 0.5) * 0.05));
+    else if (kind === 'willow') { addI('round', x, y + 2.4 * s, z, s * 1.5, s * 1.1, s * 1.5, col.setHex(0x7aa84a)); addI('round', x, y + 1.6 * s, z, s * 1.3, s * 0.9, s * 1.3, col.setHex(0x6a983a)); }
+    else { addI('round', x, y + 2.3 * s, z, s * 1.1, s, s * 1.1, leaf); addI('round', x + 0.5 * s, y + 3.1 * s, z - 0.3 * s, s * 0.75, s * 0.7, s * 0.75, leaf.offsetHSL(0, 0, 0.05)); }
+    if (d < 9) colliders.push({ x, z, r: 0.4 * s });
   }
-  trunks.count = nt; leaves.count = nl; pines.count = np;
-  for (const im of [trunks, leaves, pines]) { im.castShadow = true; im.receiveShadow = true; scene.add(im); }
-
-  // rocks & flowers
-  const rocks = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(0.7, 0), mat(0x8f8a80), 260);
-  for (let i = 0; i < 260; i++) {
-    const z = -Math.random() * -END_Z, side = Math.random() < 0.5 ? -1 : 1, x = pathX(z) + side * (4 + Math.random() * 30);
-    const s = 0.4 + Math.random() * 1.4;
-    q.setFromEuler(new THREE.Euler(Math.random(), Math.random(), Math.random()));
-    m.compose(pos.set(x, height(x, z) + 0.2 * s, z), q, sc.set(s, s * 0.7, s)); rocks.setMatrixAt(i, m);
-  }
-  rocks.castShadow = rocks.receiveShadow = true; scene.add(rocks);
-  const fl = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.12, 0), new THREE.MeshStandardMaterial({ roughness: 1 }), 700);
-  const fcols = [0xffe066, 0xff8fab, 0xffffff, 0xb197fc, 0xff6b6b];
-  for (let i = 0; i < 700; i++) {
-    const z = -Math.random() * (L * 3), x = pathX(z) + (Math.random() < 0.5 ? -1 : 1) * (3 + Math.random() * 14);
-    m.compose(pos.set(x, height(x, z) + 0.18, z), q.identity(), sc.set(1, 1, 1)); fl.setMatrixAt(i, m); fl.setColorAt(i, col.setHex(U.pick(fcols)));
-  }
-  scene.add(fl);
+  for (const [k, im] of Object.entries(parts)) { im.count = cnt[k]; im.castShadow = !LOW && k !== 'snowcap'; im.receiveShadow = !LOW; if (cnt[k]) WG.add(im); }
 }
 
-// a round-doored hill house, Hobbit style
-function hillHouse(x, z, door = 0x2f6a3a, face = 0) {
-  const g = new THREE.Group();
-  const hill = mesh(new THREE.SphereGeometry(4.2, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), 0x5f9a45);
-  hill.scale.set(1, 0.7, 1); g.add(hill);
-  const frame = mesh(new THREE.TorusGeometry(1.15, 0.18, 6, 20), 0x7a5a3a);
-  frame.position.set(0, 1.1, 3.75); g.add(frame);
-  const d = mesh(new THREE.CircleGeometry(1.05, 20), door); d.position.set(0, 1.1, 3.8); g.add(d);
-  const knob = mesh(new THREE.SphereGeometry(0.1, 6, 6), 0xffd166, { metalness: 0.8, roughness: 0.3 }); knob.position.set(0, 1.1, 3.88); g.add(knob);
-  for (const s of [-1, 1]) {
-    const w = mesh(new THREE.CircleGeometry(0.5, 14), 0xffe9a8, { emissive: 0x6a5020 }); w.position.set(s * 2.2, 1.3, 3.25); w.rotation.y = s * 0.45; g.add(w);
-  }
-  const chim = mesh(new THREE.CylinderGeometry(0.3, 0.35, 1.4, 6), 0x8a7a6a); chim.position.set(1.4, 3, -0.8); g.add(chim);
-  g.rotation.y = face;
-  put(g, x, z, -0.3);
-  colliders.push({ x, z, r: 4.2 });
-  return g;
-}
-function temple(x, z, s = 1, face = 0, ruined = false) {
-  const g = new THREE.Group(), stone = 0xe8dfcc;
-  const base = mesh(new THREE.BoxGeometry(9, 0.8, 6.5), stone); base.position.y = 0.4; g.add(base);
-  const step = mesh(new THREE.BoxGeometry(10, 0.4, 7.5), 0xd8cfbc); step.position.y = 0.2; g.add(step);
-  let k = 0;
-  for (let i = 0; i < 4; i++) for (const zz of [-2.6, 2.6]) {
-    if (ruined && (k++ % 3 === 1)) continue;
-    const h = ruined && Math.random() < 0.4 ? 2 + Math.random() * 2 : 4.4;
-    const col = mesh(new THREE.CylinderGeometry(0.38, 0.45, h, 10), stone); col.position.set(-3.6 + i * 2.4, 0.8 + h / 2, zz); g.add(col);
-  }
-  if (!ruined) {
-    const roof = mesh(new THREE.BoxGeometry(9.6, 0.6, 7), stone); roof.position.y = 5.5; g.add(roof);
-    const ped = mesh(new THREE.CylinderGeometry(4.2, 4.2, 9.6, 3, 1), 0xc9452b); ped.rotation.z = Math.PI / 2; ped.scale.set(1, 1, 0.26); ped.position.y = 6.4; g.add(ped);
-  } else {
-    for (let i = 0; i < 4; i++) { const b = mesh(new THREE.CylinderGeometry(0.4, 0.4, 1.4, 8), stone); b.rotation.z = Math.PI / 2; b.position.set(-4 + Math.random() * 8, 1.1, -4 + Math.random() * 8); g.add(b); }
-  }
-  g.scale.setScalar(s); g.rotation.y = face;
-  put(g, x, z, -0.2);
-  colliders.push({ x, z, r: 4.8 * s });
-  return g;
-}
-function lampPost(x, z) {
-  const g = new THREE.Group();
-  const p = mesh(new THREE.CylinderGeometry(0.08, 0.1, 2.4, 6), 0x3a3a3a); p.position.y = 1.2; g.add(p);
-  const l = mesh(new THREE.SphereGeometry(0.22, 8, 8), 0xffe9a8, { emissive: 0xffc04a, emissiveIntensity: 1.2 }); l.position.y = 2.5; g.add(l);
-  put(g, x, z);
-}
-function signPost(x, z, text) {
-  const g = new THREE.Group();
-  const p = mesh(new THREE.CylinderGeometry(0.1, 0.1, 2.2, 6), 0x6a4a2a); p.position.y = 1.1; g.add(p);
-  const b = mesh(new THREE.BoxGeometry(2.2, 0.6, 0.12), 0x8a6a3a); b.position.y = 2; g.add(b);
-  const t = textSprite(text, { size: 30, bg: null, color: '#ffe9a8', scale: 0.008 }); t.position.y = 2.75; g.add(t);
-  put(g, x, z);
-}
-// wind-blown grass along the road, drawn in one call with a swaying shader
+// wind-blown grass (or wheat) near the road, drawn in one call with a swaying shader
 const windUniform = { value: 0 };
 function grass() {
   if (LOW) return;
-  const N = mobile ? 9000 : 18000;
+  const wheat = !!D.wheat, N = Math.round((wheat ? 16000 : 9000) * (mobile ? 0.55 : 1)), rand = rng(WI * 31 + 5);
   const blade = new THREE.BufferGeometry();
-  blade.setAttribute('position', new THREE.Float32BufferAttribute([-0.05, 0, 0, 0.05, 0, 0, 0, 0.42, 0], 3));
+  blade.setAttribute('position', new THREE.Float32BufferAttribute([-0.05, 0, 0, 0.05, 0, 0, 0, wheat ? 1.0 : 0.42, 0], 3));
   blade.setAttribute('normal', new THREE.Float32BufferAttribute([0, 0, 1, 0, 0, 1, 0, 0, 1], 3));
   blade.setAttribute('color', new THREE.Float32BufferAttribute([0.62, 0.62, 0.62, 0.62, 0.62, 0.62, 1.1, 1.1, 1.0], 3));
-  const mat = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, vertexColors: true });
-  mat.onBeforeCompile = sh => {
+  const gm = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, vertexColors: true });
+  gm.onBeforeCompile = sh => {
     sh.uniforms.uTime = windUniform;
     sh.vertexShader = 'uniform float uTime;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
       float sway = sin(uTime * 1.8 + instanceMatrix[3].x * 0.35 + instanceMatrix[3].z * 0.25) * 0.18 * position.y;
       transformed.x += sway; transformed.z += sway * 0.6;`);
   };
-  const im = new THREE.InstancedMesh(blade, mat, N);
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3(), c = new THREE.Color();
+  const im = new THREE.InstancedMesh(blade, gm, N);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3(), c = new THREE.Color(), up = new THREE.Vector3(0, 1, 0);
+  const wy = D.water ? D.water.y : -99, base = wheat ? 0xe0c060 : ZONES[WI].grass;
+  let n = 0;
+  for (let i = 0; i < N * 3 && n < N; i++) {
+    let x, z;
+    if (wheat) { x = (rand() * 2 - 1) * (R - 12); z = (rand() * 2 - 1) * (R - 12); const { d } = roadInfo(x, z); if (d < 4.5) continue; }
+    else { const a = along(rand(), rand() < 0.5 ? -1 : 1, 2.4 + Math.pow(rand(), 1.8) * 14); x = a.x + (rand() - 0.5) * 3; z = a.z + (rand() - 0.5) * 3; }
+    if (Math.abs(x) > R - 6 || Math.abs(z) > R - 6) continue;
+    const y = groundAt(x, z); if (y < wy + 0.3) continue;
+    if (wheat && colliders.some(cl => Math.abs(cl.x - x) < cl.r + 1 && Math.abs(cl.z - z) < cl.r + 1)) continue;
+    const s = 0.6 + rand() * 0.9;
+    q.setFromAxisAngle(up, rand() * 6.28);
+    m.compose(p.set(x, y - 0.02, z), q, sc.set(s, s * (0.7 + rand() * 0.8), s));
+    im.setMatrixAt(n, m);
+    im.setColorAt(n++, c.setHex(base).offsetHSL(0, 0.05, (rand() - 0.3) * 0.12));
+  }
+  im.count = n; WG.add(im);
+}
+function flowers() {
+  const N = Math.round((D.flowers || 0) * (LOW ? 0.4 : 1)); if (!N) return;
+  const rand = rng(WI * 7 + 1), fl = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.12, 0), new THREE.MeshStandardMaterial({ roughness: 1 }), N);
+  const m = new THREE.Matrix4(), c = new THREE.Color(), fcols = [0xffe066, 0xff8fab, 0xffffff, 0xb197fc, 0xff6b6b];
+  const wy = D.water ? D.water.y : -99;
   let n = 0;
   for (let i = 0; i < N * 2 && n < N; i++) {
-    const z = 2 - Math.random() * (-END_Z), side = Math.random() < 0.5 ? -1 : 1, d = 2.4 + Math.pow(Math.random(), 1.8) * 14;
-    const x = pathX(z) + side * d, y = height(x, z);
-    if (y < -0.9 || Math.abs(z - RIVER_Z) < 5) continue;
-    const s = 0.6 + Math.random() * 0.9;
-    q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.random() * 6.28);
-    m.compose(p.set(x, y - 0.02, z), q, sc.set(s, s * (0.7 + Math.random() * 0.8), s));
-    im.setMatrixAt(n, m);
-    im.setColorAt(n++, c.setHex(ZONES[zoneOf(z)].grass).offsetHSL(0, 0.05, (Math.random() - 0.3) * 0.12));
+    const a = along(rand(), rand() < 0.5 ? -1 : 1, 3 + rand() * 16), y = groundAt(a.x, a.z);
+    if (y < wy + 0.3) continue;
+    m.makeTranslation(a.x, y + 0.18, a.z); fl.setMatrixAt(n, m); fl.setColorAt(n++, c.setHex(U.pick(fcols)));
   }
-  im.count = n;
-  im.receiveShadow = true;
-  scene.add(im);
+  fl.count = n; WG.add(fl);
+}
+// distant hills ring every world, so each feels like its own valley
+function horizon() {
+  const rand = rng(WI * 13 + 3), cm = mat(D.ring), snowM = mat(0xf2f4f6);
+  for (let i = 0; i < 20; i++) {
+    const an = i / 20 * Math.PI * 2 + rand() * 0.2, r = 100 + rand() * 30, h = (WI === 7 ? 50 : WI === 2 || WI === 8 ? 16 : 30) + rand() * 25;
+    const w = Math.min(h * 0.9 + 10, r - 66); // the hills stay outside the world's walls
+    const m = new THREE.Mesh(new THREE.ConeGeometry(w, h, 7), cm); m.position.set(Math.cos(an) * r, h / 2 - 6, Math.sin(an) * r); WG.add(m);
+    if (WI === 7 || h > 48) { const c = new THREE.Mesh(new THREE.ConeGeometry(w * 0.3, h * 0.3, 7), snowM); c.position.set(m.position.x, h - 6 - h * 0.15 + 0.5, m.position.z); WG.add(c); }
+  }
 }
 // clouds and a glowing sun
 const clouds = [];
 function skyDecor() {
+  clouds.length = 0;
   const cm = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true, transparent: true, opacity: 0.92 });
-  for (let i = 0; i < 26; i++) {
+  const rand = rng(WI + 99);
+  for (let i = 0; i < (LOW ? 6 : 12); i++) {
     const c = new THREE.Group();
-    for (let k = 0; k < 5; k++) { const b = new THREE.Mesh(new THREE.IcosahedronGeometry(3 + Math.random() * 3, 1), cm); b.position.set(k * 4 - 8, Math.random() * 2, Math.random() * 3); b.scale.y = 0.6; c.add(b); }
-    c.position.set((Math.random() - 0.5) * 160, 48 + Math.random() * 18, 20 - Math.random() * (-END_Z + 60));
-    scene.add(c); clouds.push(c);
+    for (let k = 0; k < 5; k++) { const b = new THREE.Mesh(new THREE.IcosahedronGeometry(3 + rand() * 3, 1), cm); b.position.set(k * 4 - 8, rand() * 2, rand() * 3); b.scale.y = 0.6; c.add(b); }
+    c.position.set((rand() - 0.5) * 180, 45 + rand() * 18, (rand() - 0.5) * 180);
+    WG.add(c); clouds.push(c);
   }
+}
+{
   const sc = document.createElement('canvas'); sc.width = sc.height = 128; const x = sc.getContext('2d');
   const g = x.createRadialGradient(64, 64, 4, 64, 64, 64); g.addColorStop(0, 'rgba(255,250,230,1)'); g.addColorStop(0.25, 'rgba(255,230,160,.8)'); g.addColorStop(1, 'rgba(255,200,120,0)');
   x.fillStyle = g; x.fillRect(0, 0, 128, 128);
@@ -429,48 +380,29 @@ function dotTexture() {
   return (dotTex = new THREE.CanvasTexture(c));
 }
 function setAmbience(zi) {
-  if (amb) scene.remove(amb.pts);
+  if (amb) { scene.remove(amb.pts); amb.pts.geometry.dispose(); amb.pts.material.dispose(); }
   const A = AMB[zi], n = LOW ? Math.round(A.n * 0.3) : mobile ? Math.round(A.n * 0.6) : A.n, arr = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) arr.set([(Math.random() - 0.5) * 50, Math.random() * 16, (Math.random() - 0.5) * 50], i * 3);
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(arr, 3));
   const pts = new THREE.Points(g, new THREE.PointsMaterial({ color: A.color, size: A.size * 2.2, map: dotTexture(), alphaTest: 0.05, transparent: true, opacity: 0.85, depthWrite: false, blending: A.blink ? THREE.AdditiveBlending : THREE.NormalBlending }));
   pts.frustumCulled = false;
-  scene.add(pts); amb = { pts, A, zi, base: new THREE.Vector3() };
+  scene.add(pts); amb = { pts, A, zi };
 }
 function updateAmbience(dt, t, pos) {
   windUniform.value = t;
-  for (const c of clouds) { c.position.x += dt * 1.5; if (c.position.x > 90) c.position.x = -90; }
-  if (W.sunSprite) W.sunSprite.position.set(camera.position.x + 120, camera.position.y + 140, camera.position.z - 220);
-  const zi = zoneOf(pos.z);
-  if (!amb || amb.zi !== zi) setAmbience(zi);
+  for (const c of clouds) { c.position.x += dt * 1.5; if (c.position.x > 100) c.position.x = -100; }
+  W.sunSprite.position.set(camera.position.x + 120, camera.position.y + 140, camera.position.z - 220);
   const A = amb.A, p = amb.pts.geometry.attributes.position;
   amb.pts.position.set(pos.x, groundAt(pos.x, pos.z), pos.z);
   for (let i = 0; i < p.count; i++) {
-    let x = p.getX(i) + Math.sin(t * 0.7 + i) * A.drift * dt, y = p.getY(i) + A.vy * dt, z = p.getZ(i) + Math.cos(t * 0.6 + i * 1.3) * A.drift * dt;
+    const x = p.getX(i) + Math.sin(t * 0.7 + i) * A.drift * dt, z = p.getZ(i) + Math.cos(t * 0.6 + i * 1.3) * A.drift * dt;
+    let y = p.getY(i) + A.vy * dt;
     if (y > 16) y = 0; if (y < 0) y = 16;
     p.setXYZ(i, x, y, z);
   }
   p.needsUpdate = true;
   if (A.blink) amb.pts.material.opacity = 0.55 + Math.sin(t * 3) * 0.35;
 }
-function scenery() {
-  // Region 1: the village of round doors
-  const homes = [[-14, 12, 0x2f6a3a], [16, 20, 0xc9452b], [-17, 34, 0x2f5f8f], [15, 46, 0xe0a526], [-15, 58, 0x8f3f5f]];
-  for (const [dx, dz, col] of homes) { const z = -dz, x = pathX(z) + dx; hillHouse(x, z, col, Math.atan2(pathX(z) - x, 0) > 0 ? Math.PI / 2 : -Math.PI / 2); }
-  for (let z = -6; z > -L + 10; z -= 16) lampPost(pathX(z) + 3, z);
-  // temples and ruins along the road
-  const T = [[2, 30, 14, false], [4, 20, -15, true], [4, 60, 15, false], [5, 18, 14, true], [5, 40, -15, true], [5, 64, 14, true], [7, 30, -15, false], [8, 26, 15, false], [8, 52, -15, false]];
-  for (const [zi, off, dx, ruined] of T) { const z = -zi * L - off; const x = pathX(z) + dx; temple(x, z, 0.9, dx > 0 ? -Math.PI / 2 : Math.PI / 2, ruined); }
-  // the Great Library at the end of the road
-  const lz = -NZ * L - 14, lx = pathX(lz);
-  const lib = temple(lx, lz, 2.1, 0, false);
-  const dome = mesh(new THREE.SphereGeometry(3.2, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), 0xe0a526, { metalness: 0.6, roughness: 0.35 });
-  dome.position.y = 7.4; lib.add(dome);
-  W.libraryPos = new THREE.Vector3(lx, groundAt(lx, lz), lz + 9);
-  // region signposts
-  for (let i = 0; i < NZ; i++) { const z = -i * L - 6, x = pathX(z) - 3.2; signPost(x, z, ZONES[i].name); }
-}
-
 // ── characters ────────────────────────────────────────────────
 // Storybook characters: soft cel shading, ink outlines and simple faces.
 const toonRamp = (() => { const t = new THREE.DataTexture(new Uint8Array([90, 90, 90, 255, 175, 175, 175, 255, 255, 255, 255, 255]), 3, 1); t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; return t; })();
@@ -535,130 +467,122 @@ function animatePerson(p, speed, dt) {
   u.arms[0].rotation.x = -sw * 0.8; u.arms[1].rotation.x = sw * 0.8;
   u.body.position.y = Math.abs(Math.cos(u.phase)) * 0.08 * amt + Math.sin(u.phase * 0.35) * 0.015;
 }
-function golem(color = 0x8a8a8a) {
+// Guardians: one stone body, dressed for each world
+function golem(color = 0x8a8a8a, style = 0) {
   const g = new THREE.Group(), body = new THREE.Group(); g.add(body);
-  const torso = mesh(new THREE.BoxGeometry(1.8, 1.8, 1.1), color); torso.position.y = 2.2; body.add(torso);
-  const head = mesh(new THREE.BoxGeometry(0.9, 0.8, 0.8), color); head.position.y = 3.5; body.add(head);
-  for (const s of [-1, 1]) { const e = mesh(new THREE.BoxGeometry(0.18, 0.1, 0.05), 0xffd166, { emissive: 0xffb000, emissiveIntensity: 2 }); e.position.set(s * 0.2, 3.55, 0.41); body.add(e); }
+  const metal = style === 2 || style === 4 || style === 6 || style === 8;
+  const o = metal ? { metalness: 0.6, roughness: 0.35 } : style === 7 ? { emissive: 0x3a6a9a, emissiveIntensity: 0.25 } : {};
+  const torso = mesh(new THREE.BoxGeometry(1.8, 1.8, 1.1), color, o); torso.position.y = 2.2; body.add(torso);
+  const head = mesh(new THREE.BoxGeometry(0.9, 0.8, 0.8), color, o); head.position.y = 3.5; body.add(head);
+  const eyeC = [0xffb000, 0x9aff4a, 0xffffff, 0x4af0ff, 0xff5a2a, 0xffd166, 0x9ad0ff, 0x7fe8ff, 0xffd166][style];
+  for (const s of [-1, 1]) { const e = mesh(new THREE.BoxGeometry(0.18, 0.1, 0.05), eyeC, { emissive: eyeC, emissiveIntensity: 2 }); e.position.set(s * 0.2, 3.55, 0.41); body.add(e); }
   const legs = [], arms = [];
   for (const s of [-1, 1]) {
     const hip = new THREE.Group(); hip.position.set(s * 0.5, 1.3, 0);
-    const l = mesh(new THREE.BoxGeometry(0.6, 1.3, 0.6), color); l.position.y = -0.65; hip.add(l); g.add(hip); legs.push(hip);
+    const l = mesh(new THREE.BoxGeometry(0.6, 1.3, 0.6), color, o); l.position.y = -0.65; hip.add(l); g.add(hip); legs.push(hip);
     const sh = new THREE.Group(); sh.position.set(s * 1.2, 2.9, 0);
-    const a = mesh(new THREE.BoxGeometry(0.5, 1.6, 0.5), color); a.position.y = -0.8; sh.add(a); body.add(sh); arms.push(sh);
+    const a = mesh(new THREE.BoxGeometry(0.5, 1.6, 0.5), color, o); a.position.y = -0.8; sh.add(a); body.add(sh); arms.push(sh);
   }
-  const rune = textSprite('Ω', { size: 60, bg: null, color: '#ffd166', font: `700 60px ${GREEK_FONT}`, scale: 0.012 });
+  const add = (geo, c, x, y, z, op) => { const m = mesh(geo, c, op); m.position.set(x, y, z); body.add(m); return m; };
+  if (style === 0) for (let i = 0; i < 5; i++) add(new THREE.IcosahedronGeometry(0.28, 0), 0x5f8f45, -0.7 + i * 0.35, 3.05 + (i % 2) * 0.1, 0.45);
+  if (style === 1) for (let i = 0; i < 7; i++) { const t = add(new THREE.ConeGeometry(0.16, 0.7, 5), 0x3a5a2a, -0.9 + i * 0.3, 3.2 + (i % 2) * 0.2, -0.3); t.rotation.x = -0.5; }
+  if (style === 2) for (let i = 0; i < 5; i++) add(new THREE.ConeGeometry(0.1, 0.4, 5), 0xffe080, -0.32 + i * 0.16, 4.1, 0, { metalness: 0.8, roughness: 0.3 });
+  if (style === 3) { const f = add(new THREE.ConeGeometry(0.4, 1.2, 4), 0x2a6a9a, 0, 4.2, -0.1); f.scale.z = 0.3; }
+  if (style === 4) { add(new THREE.BoxGeometry(1, 0.25, 0.9), 0x2a2a30, 0, 3.95, 0, { metalness: 0.8, roughness: 0.3 }); for (let i = 0; i < 4; i++) add(new THREE.SphereGeometry(0.07, 6, 4), 0x9a9aa0, -0.6 + i * 0.4, 2.8, 0.56); }
+  if (style === 5) { const h = add(new THREE.ConeGeometry(0.35, 0.5, 8), 0xe8c070, 0, 4.25, 0); h.rotation.x = Math.PI; add(new THREE.ConeGeometry(0.35, 0.5, 8), 0xe8c070, 0, 4.7, 0).rotation.x = 0; }
+  if (style === 6) { add(new THREE.BoxGeometry(0.15, 1.6, 1.2), 0xe8eef8, -1.55, 2.2, 0.4, { metalness: 0.9, roughness: 0.1 }); add(new THREE.ConeGeometry(0.5, 0.6, 4), 0xe8eef8, 0, 4.2, 0, { metalness: 0.9, roughness: 0.1 }); }
+  if (style === 7) for (let i = 0; i < 6; i++) { const s = add(new THREE.OctahedronGeometry(0.25, 0), 0xdff4ff, -1 + i * 0.4, 3.3 + (i % 2) * 0.3, -0.4); s.scale.y = 2; }
+  if (style === 8) { const b = add(new THREE.BoxGeometry(1.4, 0.2, 1), 0x7a2f3a, 1.2, 1.7, 0.6); b.rotation.z = 0.3; add(new THREE.BoxGeometry(1.3, 0.15, 0.9), 0xf5ecd0, 1.2, 1.78, 0.6).rotation.z = 0.3; }
+  const rune = textSprite('ΑΒΓΔΕΖΗΘΙ'[style] || 'Ω', { size: 60, bg: null, color: '#ffd166', font: `700 60px ${GREEK_FONT}`, scale: 0.012 });
   rune.position.set(0, 2.3, 0.6); body.add(rune);
   g.userData = { body, legs, arms, phase: 0 };
   return g;
 }
 
-// ── entities: mentors, pedestals, guardians, gates ───────────
-const ents = []; // {kind, zone, obj, x, z, r, node?, label}
-const portals = [];
-function marker(text, color) { const m = textSprite(text, { size: 64, bg: null, color, font: `900 64px Nunito, sans-serif`, scale: 0.016 }); return m; }
-function addEnt(e) {
-  const nameTag = textSprite(e.label, { size: 30 });
-  nameTag.position.y = e.tagY || 2.7; e.obj.add(nameTag);
-  e.mark = marker('!', '#ffd166'); e.mark.position.y = (e.tagY || 2.7) + 0.9; e.mark.visible = false; e.obj.add(e.mark);
-  ents.push(e); colliders.push({ x: e.x, z: e.z, r: e.r || 0.8 });
-  return e;
+// small creatures that make each world feel alive
+function critterMesh(kind) {
+  const g = new THREE.Group(), body = new THREE.Group(); g.add(body);
+  const T = (geo, c, x, y, z) => { const m = mesh(geo, c); m.position.set(x, y, z); body.add(m); return m; };
+  const legs = [];
+  const fourLegs = (c, h, w, l) => { for (const [x, z] of [[-w, -l], [w, -l], [-w, l], [w, l]]) { const leg = T(new THREE.CylinderGeometry(0.05, 0.05, h, 4), c, x, h / 2, z); legs.push(leg); } };
+  if (kind === 'sheep' || kind === 'goat') {
+    const wool = kind === 'sheep' ? 0xf4f0e8 : 0x8a7a6a;
+    T(new THREE.IcosahedronGeometry(0.45, 1), wool, 0, 0.65, 0).scale.set(1, 0.8, 1.3);
+    T(new THREE.SphereGeometry(0.18, 8, 6), kind === 'sheep' ? 0x2a2a2a : 0x6a5a4a, 0, 0.8, 0.55);
+    if (kind === 'goat') for (const s of [-1, 1]) { const h = T(new THREE.ConeGeometry(0.05, 0.3, 5), 0xd8d0c0, s * 0.08, 1.02, 0.5); h.rotation.x = -0.5; }
+    fourLegs(0x2a2a2a, 0.4, 0.18, 0.25);
+  } else if (kind === 'deer') {
+    T(new THREE.CylinderGeometry(0.22, 0.22, 0.9, 8), 0x9a6a3a, 0, 0.9, 0).rotation.x = Math.PI / 2;
+    const n = T(new THREE.CylinderGeometry(0.08, 0.12, 0.6, 6), 0x9a6a3a, 0, 1.25, 0.45); n.rotation.x = 0.5;
+    T(new THREE.SphereGeometry(0.15, 8, 6), 0x9a6a3a, 0, 1.55, 0.6);
+    for (const s of [-1, 1]) { const a = T(new THREE.CylinderGeometry(0.02, 0.02, 0.4, 4), 0xe8dcc0, s * 0.1, 1.8, 0.55); a.rotation.z = s * 0.4; }
+    fourLegs(0x7a5a3a, 0.7, 0.12, 0.32);
+  } else if (kind === 'duck' || kind === 'swan') {
+    const c = kind === 'swan' ? 0xffffff : 0x8a6a4a;
+    T(new THREE.SphereGeometry(0.3, 10, 8), c, 0, 0.15, 0).scale.set(1, 0.6, 1.4);
+    if (kind === 'swan') { const n = T(new THREE.CylinderGeometry(0.05, 0.07, 0.6, 6), c, 0, 0.5, 0.3); n.rotation.x = -0.25; T(new THREE.SphereGeometry(0.09, 8, 6), c, 0, 0.82, 0.38); T(new THREE.ConeGeometry(0.04, 0.14, 5), 0xff8a2a, 0, 0.8, 0.5).rotation.x = Math.PI / 2; }
+    else { T(new THREE.SphereGeometry(0.13, 8, 6), 0x2a6a3a, 0, 0.38, 0.32); T(new THREE.ConeGeometry(0.04, 0.12, 5), 0xffa040, 0, 0.36, 0.48).rotation.x = Math.PI / 2; }
+    g.userData.swim = true;
+  } else if (kind === 'lizard') {
+    T(new THREE.BoxGeometry(0.18, 0.08, 0.5), 0x6a9a3a, 0, 0.05, 0);
+    T(new THREE.ConeGeometry(0.06, 0.5, 5), 0x6a9a3a, 0, 0.05, -0.45).rotation.x = -Math.PI / 2;
+    T(new THREE.SphereGeometry(0.08, 6, 4), 0x6a9a3a, 0, 0.06, 0.3);
+    g.userData.dart = true;
+  } else if (kind === 'dove') {
+    T(new THREE.SphereGeometry(0.16, 8, 6), 0xffffff, 0, 0, 0).scale.z = 1.4;
+    for (const s of [-1, 1]) { const w = T(new THREE.BoxGeometry(0.4, 0.03, 0.18), 0xf0f0f8, s * 0.25, 0.03, 0); w.userData.wing = s; }
+    g.userData.fly = true;
+  }
+  g.userData.body = body; g.userData.legs = legs;
+  return g;
 }
-function buildEntities() {
-  KG.units.forEach((u, i) => {
-    const Z = ZONES[i], side = i % 2 ? -1 : 1;
-    // mentor
-    let z = -i * L - 24, x = pathX(z) + side * 4.5;
-    const m = person({ robe: Z.robe, hair: 0xdddddd, beard: i % 3 === 0, staff: true, hood: i % 2 === 1, skin: [0xf0c8a0, 0xd8a878, 0xb07850][i % 3] });
-    m.rotation.y = side > 0 ? -Math.PI / 2 : Math.PI / 2;
-    put(m, x, z);
-    addEnt({ kind: 'mentor', zone: i, obj: m, x, z, label: `${Z.mentor[0]} · ${Z.mentor[1]}` });
-    // reading pedestals
-    const reads = u.nodes.filter(n => n.type === 'reading');
-    reads.forEach((n, k) => {
-      const zz = -i * L - 38 - k * (36 / Math.max(1, reads.length)), s2 = k % 2 ? -1 : 1, xx = pathX(zz) + s2 * 6.5;
-      const g = new THREE.Group();
-      const col = mesh(new THREE.CylinderGeometry(0.4, 0.55, 1.1, 8), 0xe8dfcc); col.position.y = 0.55; g.add(col);
-      const top = mesh(new THREE.BoxGeometry(1.1, 0.15, 0.8), 0xd8cfbc); top.position.y = 1.15; g.add(top);
-      const scroll = new THREE.Group();
-      const roll = mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.9, 10), 0xf5e6c0, { emissive: 0x8a6a20, emissiveIntensity: 0.4 }); roll.rotation.z = Math.PI / 2; scroll.add(roll);
-      for (const s of [-1, 1]) { const knob = mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.2, 6), 0x6a4a2a); knob.rotation.z = Math.PI / 2; knob.position.x = s * 0.55; scroll.add(knob); }
-      scroll.position.y = 1.7; g.add(scroll);
-      const glow = glyphSprite('✝'); glow.position.y = 1.7; glow.scale.set(2.2, 2.2, 1); g.add(glow);
-      put(g, xx, zz);
-      addEnt({ kind: 'pedestal', zone: i, obj: g, x: xx, z: zz, node: n, label: KG.readings[n.reading].ref, tagY: 2.6, spin: scroll, glow });
-    });
-    // gate + guardian
-    const gz = gateZ(i), gx = pathX(gz);
-    const gate = new THREE.Group();
-    for (const s of [-1, 1]) {
-      const p = mesh(new THREE.BoxGeometry(1.4, 7, 1.4), 0xcfc6b0); p.position.set(s * 4, 3.5, 0); gate.add(p);
-      const cap = mesh(new THREE.BoxGeometry(1.8, 0.5, 1.8), 0xbfb6a0); cap.position.set(s * 4, 7.2, 0); gate.add(cap);
-    }
-    const lintel = mesh(new THREE.BoxGeometry(10, 1, 1.4), 0xcfc6b0); lintel.position.y = 7.6; gate.add(lintel);
-    const title = textSprite(`${'ΑΒΓΔΕΖΗΘΙ'[i]}′ · ${KG.units[i].title}`, { size: 34, bg: null, color: '#3a2a10', scale: 0.012 });
-    title.position.set(0, 7.6, 0.75); gate.add(title);
-    const barrier = new THREE.Mesh(new THREE.PlaneGeometry(140, 12), new THREE.MeshBasicMaterial({ color: 0xffd166, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false }));
-    barrier.position.y = 4; gate.add(barrier);
-    // the portal that appears once the guardian is beaten
-    const portal = new THREE.Group(); portal.position.y = 3.6;
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(3, 0.25, 10, 48), new THREE.MeshStandardMaterial({ color: 0xffd166, emissive: 0xffb020, emissiveIntensity: 1.2, metalness: 0.6, roughness: 0.3 }));
-    portal.add(ring);
-    const pc = document.createElement('canvas'); pc.width = pc.height = 256; const px = pc.getContext('2d');
-    const grd = px.createRadialGradient(128, 128, 10, 128, 128, 128); grd.addColorStop(0, 'rgba(255,255,255,.95)'); grd.addColorStop(0.4, 'rgba(160,200,255,.7)'); grd.addColorStop(1, 'rgba(120,80,255,.15)');
-    px.fillStyle = grd; px.fillRect(0, 0, 256, 256);
-    px.strokeStyle = 'rgba(255,255,255,.6)'; px.lineWidth = 6;
-    for (let k = 0; k < 6; k++) { px.beginPath(); for (let a = 0; a < 9; a += 0.1) { const r = 6 + a * 13; px.lineTo(128 + Math.cos(a + k * 1.05) * r, 128 + Math.sin(a + k * 1.05) * r); } px.stroke(); }
-    const disc = new THREE.Mesh(new THREE.CircleGeometry(2.8, 40), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(pc), transparent: true, depthWrite: false, side: THREE.DoubleSide }));
-    portal.add(disc); portal.userData.disc = disc;
-    gate.add(portal);
-    portals[i] = portal;
-    put(gate, gx, gz);
-    const gzz = gz + 6, gxx = gx + 3.5;
-    const gol = golem([0x8a8a8a, 0x6a7a4a, 0xc9a43a, 0x4a6a8a, 0x6a6a7a, 0xa08060, 0xa0b0c0, 0xcfe0ff, 0xe0c060][i]);
-    gol.rotation.y = 0;
-    put(gol, gxx, gzz);
-    addEnt({ kind: 'guardian', zone: i, obj: gol, x: gxx, z: gzz, node: u.nodes[u.nodes.length - 1], label: Z.guard, tagY: 4.6, r: 1.4, gate: barrier });
-  });
-}
-
-// ── collectibles ──────────────────────────────────────────────
-const letters = [], coins = [], scrolls = [];
-function buildCollectibles() {
-  const w = ws();
-  KG.alphabet.forEach((Lt, i) => {
-    const z = -6 - i * 3.3 - (i > 18 ? 6 : 0), side = i % 2 ? 1 : -1, x = pathX(z) + side * (5 + (i * 7 % 6));
-    const s = glyphSprite(Lt.l);
-    s.position.set(x, groundAt(x, z) + 1.3, z); scene.add(s);
-    s.visible = !w.letters.includes(i);
-    letters.push({ i, s, x, z });
-  });
-  // lost scrolls: NT passages to collect for the Reading Room
-  const found = (E.state.scrolls || {});
-  const byUnit = {};
-  KG.passages.forEach(p => {
-    const k = (byUnit[p.unit] = (byUnit[p.unit] || 0) + 1);
-    const z = -p.unit * L - 30 - k * 11, side = k % 2 ? 1 : -1, x = pathX(z) + side * (9 + (k * 3) % 5);
-    const g = new THREE.Group();
-    const roll = mesh(new THREE.CylinderGeometry(0.22, 0.22, 1.1, 12), 0xf5e6c0, { emissive: 0xa07a20, emissiveIntensity: 0.6 }); roll.rotation.z = Math.PI / 2; g.add(roll);
-    for (const sd of [-1, 1]) { const kn = mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.25, 8), 0x8a5a2a); kn.rotation.z = Math.PI / 2; kn.position.x = sd * 0.65; g.add(kn); }
-    const seal = mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.05, 10), 0xc9452b); seal.rotation.x = Math.PI / 2; seal.position.z = 0.22; g.add(seal);
-    const halo = glyphSprite('📜'); halo.scale.set(2.4, 2.4, 1); g.add(halo);
-    g.position.set(x, groundAt(x, z) + 1.2, z); scene.add(g);
-    g.visible = !found[p.id];
-    scrolls.push({ p, g, x, z });
-  });
-  const coinG = new THREE.CylinderGeometry(0.32, 0.32, 0.08, 16);
-  const coinM = new THREE.MeshStandardMaterial({ color: 0xffd166, metalness: 0.9, roughness: 0.25, emissive: 0x6a4a00 });
-  for (let i = 0; i < NZ * 14; i++) {
-    const zi = Math.floor(i / 14), z = -zi * L - 8 - (i % 14) * 5.6 - hash(i, 3) * 3, x = pathX(z) + (hash(i, 7) - 0.5) * 18;
-    const c = new THREE.Mesh(coinG, coinM); c.rotation.x = Math.PI / 2; c.castShadow = true;
-    c.position.set(x, groundAt(x, z) + 0.8, z); scene.add(c);
-    c.visible = !w.coins.got.includes(i);
-    coins.push({ i, c, x, z });
+const critters = [];
+function buildCritters() {
+  critters.length = 0;
+  const kind = D.critter; if (!kind) return;
+  const rand = rng(WI * 3 + 77), n = LOW ? 3 : 6;
+  for (let i = 0; i < n; i++) {
+    const c = { obj: critterMesh(kind), t: rand() * 10, kind };
+    let x, z;
+    if (kind === 'duck' || kind === 'swan') {
+      const Wd = D.water;
+      if (Wd.kind === 'river') { x = -40 + rand() * 80; z = Wd.f(x) + (rand() - 0.5) * 3; } else { const a = rand() * 6.28, r = rand() * Wd.r * 0.7 + 7; x = Wd.x + Math.cos(a) * r; z = Wd.z + Math.sin(a) * r; }
+    } else { const a = along(0.1 + rand() * 0.8, rand() < 0.5 ? -1 : 1, 7 + rand() * 12); x = a.x; z = a.z; }
+    c.home = { x, z }; c.obj.position.set(x, 0, z);
+    WG.add(c.obj); critters.push(c);
   }
 }
-
+function critterTarget(c) {
+  let x = c.home.x + (Math.random() - 0.5) * 10, z = c.home.z + (Math.random() - 0.5) * 10;
+  if (c.obj.userData.swim) {
+    if (D.water.kind === 'river') z = D.water.f(x) + (Math.random() - 0.5) * 3;
+    else if (Math.hypot(x - D.water.x, z - D.water.z) > D.water.r - 2) { x = c.home.x; z = c.home.z; }
+  }
+  return { x, z };
+}
+function updateCritters(dt, t, pos) {
+  for (const c of critters) {
+    const o = c.obj.position, u = c.obj.userData;
+    c.t += dt;
+    if (u.fly) {
+      const an = c.t * 0.4 + c.home.x; o.set(c.home.x + Math.cos(an) * 10, groundAt(c.home.x, c.home.z) + 8 + Math.sin(c.t) * 1.5, c.home.z + Math.sin(an) * 10);
+      c.obj.rotation.y = -an; for (const ch of u.body.children) if (ch.userData.wing) ch.rotation.z = ch.userData.wing * Math.sin(t * 12) * 0.6;
+      continue;
+    }
+    if (!c.target) c.target = critterTarget(c);
+    const dT = Math.hypot(c.target.x - o.x, c.target.z - o.z);
+    if (dT < 0.4 && (c.wait = (c.wait || 0) - dt) <= 0) { c.target = critterTarget(c); c.wait = 1 + Math.random() * 4; }
+    // shy creatures keep their distance from the hero
+    const dp = Math.hypot(pos.x - o.x, pos.z - o.z), flee = dp < 3.5 && !u.swim;
+    const tx = flee ? o.x + (o.x - pos.x) : c.target.x, tz = flee ? o.z + (o.z - pos.z) : c.target.z;
+    const dx = tx - o.x, dz = tz - o.z, dl = Math.hypot(dx, dz) || 1;
+    const moving = flee || dT >= 0.4;
+    const sp = (u.dart ? 3 : flee ? 2.4 : 0.8) * (moving ? 1 : 0);
+    if (moving) { o.x += dx / dl * sp * dt; o.z += dz / dl * sp * dt; c.obj.rotation.y = Math.atan2(dx, dz); }
+    o.y = u.swim ? D.water.y + Math.sin(c.t * 2) * 0.03 : groundAt(o.x, o.z);
+    u.body.position.y = moving && !u.swim ? Math.abs(Math.sin(c.t * 10)) * 0.06 : 0;
+  }
+}
 // ── wisps: Shades of Forgetting ──────────────────────────────
 const wisps = [];
 function wispMesh(elite = false) {
@@ -675,27 +599,192 @@ function wispMesh(elite = false) {
   return g;
 }
 function spawnWisp(w) {
-  const z = -w.zone * L - 12 - Math.random() * (L - 30), x = pathX(z) + (Math.random() - 0.5) * 24;
-  w.obj.position.set(x, groundAt(x, z) + 1.4, z);
-  w.home = new THREE.Vector3(x, 0, z); w.target = null; w.obj.visible = true; w.dead = false;
+  const a = along(0.15 + Math.random() * 0.75, Math.random() < 0.5 ? -1 : 1, Math.random() * 12);
+  w.obj.position.set(a.x, groundAt(a.x, a.z) + 1.4, a.z);
+  w.home = new THREE.Vector3(a.x, 0, a.z); w.target = null; w.obj.visible = true; w.dead = false;
+}
+
+// ── entities: mentor, pedestals, guardian, gate and portals ──
+const ents = []; // {kind, zone, obj, x, z, r, node?, label}
+let gate = null, backPortal = null;
+function marker(text, color) { return textSprite(text, { size: 64, bg: null, color, font: `900 64px Nunito, sans-serif`, scale: 0.016 }); }
+function addEnt(e) {
+  const nameTag = textSprite(e.label, { size: 30 });
+  nameTag.position.y = e.tagY || 2.7; e.obj.add(nameTag);
+  e.mark = marker('!', '#ffd166'); e.mark.position.y = (e.tagY || 2.7) + 0.9; e.mark.visible = false; e.obj.add(e.mark);
+  ents.push(e); colliders.push({ x: e.x, z: e.z, r: e.r || 0.8 });
+  return e;
+}
+let portalTex = null;
+function portalDisc(r) {
+  if (!portalTex) {
+    const pc = document.createElement('canvas'); pc.width = pc.height = 256; const px = pc.getContext('2d');
+    const grd = px.createRadialGradient(128, 128, 10, 128, 128, 128); grd.addColorStop(0, 'rgba(255,255,255,.95)'); grd.addColorStop(0.4, 'rgba(160,200,255,.7)'); grd.addColorStop(1, 'rgba(120,80,255,.15)');
+    px.fillStyle = grd; px.fillRect(0, 0, 256, 256);
+    px.strokeStyle = 'rgba(255,255,255,.6)'; px.lineWidth = 6;
+    for (let k = 0; k < 6; k++) { px.beginPath(); for (let a = 0; a < 9; a += 0.1) { const rr = 6 + a * 13; px.lineTo(128 + Math.cos(a + k * 1.05) * rr, 128 + Math.sin(a + k * 1.05) * rr); } px.stroke(); }
+    portalTex = new THREE.CanvasTexture(pc);
+  }
+  return new THREE.Mesh(new THREE.CircleGeometry(r, 40), new THREE.MeshBasicMaterial({ map: portalTex, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+}
+function buildEntities() {
+  ents.length = 0;
+  const i = WI, u = KG.units[i], Z = ZONES[i], side = i % 2 ? -1 : 1;
+  // mentor
+  const mp = along(0.28, side, 4.5);
+  const m = person({ robe: Z.robe, hair: 0xdddddd, beard: i % 3 === 0, staff: true, hood: i % 2 === 1, skin: [0xf0c8a0, 0xd8a878, 0xb07850][i % 3] });
+  m.rotation.y = Math.atan2(mp.px - mp.x, mp.pz - mp.z);
+  put(m, mp.x, mp.z);
+  addEnt({ kind: 'mentor', zone: i, obj: m, x: mp.x, z: mp.z, label: `${Z.mentor[0]} · ${Z.mentor[1]}` });
+  // reading pedestals
+  const reads = u.nodes.filter(n => n.type === 'reading');
+  reads.forEach((n, k) => {
+    const p = along(0.42 + k * (0.36 / Math.max(1, reads.length)), k % 2 ? -1 : 1, 6.5);
+    const g = new THREE.Group();
+    const col = mesh(new THREE.CylinderGeometry(0.4, 0.55, 1.1, 8), 0xe8dfcc); col.position.y = 0.55; g.add(col);
+    const top = mesh(new THREE.BoxGeometry(1.1, 0.15, 0.8), 0xd8cfbc); top.position.y = 1.15; g.add(top);
+    const scroll = new THREE.Group();
+    const roll = mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.9, 10), 0xf5e6c0, { emissive: 0x8a6a20, emissiveIntensity: 0.4 }); roll.rotation.z = Math.PI / 2; scroll.add(roll);
+    for (const s of [-1, 1]) { const knob = mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.2, 6), 0x6a4a2a); knob.rotation.z = Math.PI / 2; knob.position.x = s * 0.55; scroll.add(knob); }
+    scroll.position.y = 1.7; g.add(scroll);
+    const glow = glyphSprite('✝'); glow.position.y = 1.7; glow.scale.set(2.2, 2.2, 1); g.add(glow);
+    put(g, p.x, p.z);
+    addEnt({ kind: 'pedestal', zone: i, obj: g, x: p.x, z: p.z, node: n, label: KG.readings[n.reading].ref, tagY: 2.6, spin: scroll, glow });
+  });
+  // the gate at the end of the road; its portal leads to the next world
+  const gp = along(1);
+  gate = new THREE.Group();
+  const last = i === NZ - 1;
+  for (const s of [-1, 1]) {
+    const p = mesh(new THREE.BoxGeometry(1.4, 7, 1.4), 0xcfc6b0); p.position.set(s * 4, 3.5, 0); gate.add(p);
+    const cap = mesh(new THREE.BoxGeometry(1.8, 0.5, 1.8), 0xbfb6a0); cap.position.set(s * 4, 7.2, 0); gate.add(cap);
+    colliders.push({ x: gp.x + Math.cos(gp.a) * s * 4, z: gp.z - Math.sin(gp.a) * s * 4, r: 1 });
+  }
+  const lintel = mesh(new THREE.BoxGeometry(10, 1, 1.4), 0xcfc6b0); lintel.position.y = 7.6; gate.add(lintel);
+  const title = textSprite(`${'ΑΒΓΔΕΖΗΘΙ'[i]}′ · ${KG.units[i].title}`, { size: 34, bg: null, color: '#3a2a10', scale: 0.012 });
+  title.position.set(0, 7.6, -0.75); gate.add(title);
+  const barrier = new THREE.Mesh(new THREE.PlaneGeometry(6.6, 7), new THREE.MeshBasicMaterial({ color: 0xffd166, transparent: true, opacity: 0.3, side: THREE.DoubleSide, depthWrite: false }));
+  barrier.position.y = 3.5; gate.add(barrier);
+  const portal = new THREE.Group(); portal.position.y = 3.6;
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(3, 0.25, 10, 48), new THREE.MeshStandardMaterial({ color: 0xffd166, emissive: 0xffb020, emissiveIntensity: 1.2, metalness: 0.6, roughness: 0.3 }));
+  portal.add(ring);
+  const disc = portalDisc(2.8); portal.add(disc); portal.userData.disc = disc;
+  gate.add(portal);
+  if (!last) { const dest = textSprite(`→ ${ZONES[i + 1].name}`, { size: 30 }); dest.position.y = 3.6 + 3.8; portal.add(dest); }
+  gate.rotation.y = gp.a;
+  put(gate, gp.x, gp.z);
+  gate.userData = { portal, barrier, x: gp.x, z: gp.z, last };
+  if (last) { portal.visible = false; gate.visible = false; }
+  // the guardian waits just before the gate
+  const gd = along(0.955, 1, 3.2);
+  const gol = golem(GOLEM_COL[i], i);
+  gol.rotation.y = gp.a + Math.PI;
+  put(gol, gd.x, gd.z);
+  addEnt({ kind: 'guardian', zone: i, obj: gol, x: gd.x, z: gd.z, node: u.nodes[u.nodes.length - 1], label: Z.guard, tagY: 4.6, r: 1.4 });
+  // the portal you arrived through leads back to the world before
+  backPortal = null;
+  if (i > 0) {
+    const bp = along(0), g = new THREE.Group();
+    for (const s of [-1, 1]) { const st = mesh(new THREE.BoxGeometry(0.9, 4.6, 0.9), 0xb8b0a0); st.position.set(s * 2.4, 2.3, 0); g.add(st); }
+    const top = mesh(new THREE.BoxGeometry(5.6, 0.6, 1), 0xb8b0a0); top.position.y = 4.8; g.add(top);
+    const d = portalDisc(1.9); d.position.y = 2.3; g.add(d); g.userData.disc = d;
+    const tag = textSprite(`← ${ZONES[i - 1].name}`, { size: 28 }); tag.position.y = 5.7; g.add(tag);
+    g.rotation.y = bp.a; put(g, bp.x, bp.z);
+    for (const s of [-1, 1]) colliders.push({ x: bp.x + Math.cos(bp.a) * s * 2.4, z: bp.z - Math.sin(bp.a) * s * 2.4, r: 0.6 });
+    backPortal = { g, x: bp.x, z: bp.z, armed: false };
+  }
+  if (last) W.libraryPos = new THREE.Vector3(0, groundAt(0, -32), -32);
+}
+
+// ── collectibles ──────────────────────────────────────────────
+const letters = [], coins = [], scrolls = [];
+function buildCollectibles() {
+  letters.length = coins.length = scrolls.length = 0;
+  const w = ws();
+  if (WI === 0) KG.alphabet.forEach((Lt, i) => {
+    const p = along(0.03 + i * 0.022, i % 2 ? 1 : -1, 4.5 + (i * 7 % 5));
+    const s = glyphSprite(Lt.l);
+    s.position.set(p.x, groundAt(p.x, p.z) + 1.3, p.z); WG.add(s);
+    s.visible = !w.letters.includes(i);
+    letters.push({ i, s, x: p.x, z: p.z });
+  });
+  // lost scrolls: NT passages to collect for the Reading Room
+  const found = (E.state.scrolls || {});
+  KG.passages.filter(p => p.unit === WI).forEach((p, k) => {
+    const a = along(0.33 + k * 0.13, k % 2 ? 1 : -1, 9 + (k * 3) % 5);
+    const g = new THREE.Group();
+    const roll = mesh(new THREE.CylinderGeometry(0.22, 0.22, 1.1, 12), 0xf5e6c0, { emissive: 0xa07a20, emissiveIntensity: 0.6 }); roll.rotation.z = Math.PI / 2; g.add(roll);
+    for (const sd of [-1, 1]) { const kn = mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.25, 8), 0x8a5a2a); kn.rotation.z = Math.PI / 2; kn.position.x = sd * 0.65; g.add(kn); }
+    const seal = mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.05, 10), 0xc9452b); seal.rotation.x = Math.PI / 2; seal.position.z = 0.22; g.add(seal);
+    const halo = glyphSprite('📜'); halo.scale.set(2.4, 2.4, 1); g.add(halo);
+    g.position.set(a.x, groundAt(a.x, a.z) + 1.2, a.z); WG.add(g);
+    g.visible = !found[p.id];
+    scrolls.push({ p, g, x: a.x, z: a.z });
+  });
+  const coinG = new THREE.CylinderGeometry(0.32, 0.32, 0.08, 16);
+  const coinM = new THREE.MeshStandardMaterial({ color: 0xffd166, metalness: 0.9, roughness: 0.25, emissive: 0x6a4a00 });
+  for (let k = 0; k < 14; k++) {
+    const i = WI * 14 + k, a = along(0.04 + k * 0.066 + hash(i, 3) * 0.02, hash(i, 5) < 0.5 ? -1 : 1, hash(i, 7) * 9);
+    const c = new THREE.Mesh(coinG, coinM); c.rotation.x = Math.PI / 2; c.castShadow = !LOW;
+    c.position.set(a.x, groundAt(a.x, a.z) + 0.8, a.z); WG.add(c);
+    c.visible = !w.coins.got.includes(i);
+    coins.push({ i, c, x: a.x, z: a.z });
+  }
 }
 function buildWisps() {
-  for (let zi = 1; zi < NZ; zi++) for (let k = 0; k < 3; k++) {
+  for (const w of wisps) scene.remove(w.obj);
+  wisps.length = 0;
+  if (WI === 0) return;
+  for (let k = 0; k < 3; k++) {
     // one elite shade per world hunts your weakest words
     const elite = k === 2;
-    const w = { zone: zi, obj: wispMesh(elite), t: Math.random() * 10, elite };
+    const w = { zone: WI, obj: wispMesh(elite), t: Math.random() * 10, elite };
     if (elite) w.obj.scale.setScalar(1.45);
-    scene.add(w.obj); spawnWisp(w); wisps.push(w);
+    WG.add(w.obj); spawnWisp(w); wisps.push(w);
   }
 }
 
-// ── player ────────────────────────────────────────────────────
+// ── building and leaving a world ─────────────────────────────
+function disposeWorld() {
+  scene.remove(WG);
+  WG.traverse(o => {
+    if (o.geometry) o.geometry.dispose();
+    if (o.material) for (const m of [].concat(o.material)) { if (m.map && m.map !== portalTex && m.map !== dotTex) m.map.dispose(); if (!Object.values(mats).includes(m) && m !== waterMat && !Object.values(toonCache).includes(m) && m !== inkMat) m.dispose(); }
+  });
+  WG = new THREE.Group(); scene.add(WG);
+  colliders.length = 0; anims.length = 0; waters = []; beacon = null; BR = null;
+}
+function buildWorld(i) {
+  if (WI >= 0) disposeWorld();
+  WI = i; D = DEFS[i]; LY = makeRoad(D);
+  buildHeights();
+  if (D.bridge) BR = Object.assign({}, D.bridge, { top: Math.max(rawHeight(D.bridge.x, D.bridge.z - D.bridge.half), rawHeight(D.bridge.x, D.bridge.z + D.bridge.half)) + 0.35 });
+  setAtmosphere(i);
+  buildTerrain(); buildWater();
+  const col = (x, z, r) => colliders.push({ x, z, r });
+  const pctx = { THREE, mesh, put, add: o => WG.add(o), col, ground: groundAt, textSprite, glyphSprite, anim: fn => anims.push(fn), waterMat, GREEK: GREEK_FONT, waterY: D.water ? D.water.y : 0, bridgeTop: BR ? BR.top : 0 };
+  const api = Object.assign(makeProps(pctx), { THREE, mesh, put, col, along, textSprite, rand: rng(i * 101 + 9), GREEK: GREEK_FONT, faceAngle: (x, z, tx, tz) => Math.atan2(tx - x, tz - z) });
+  D.build(api);
+  W.libraryDoor = pctx.libraryDoor || null;
+  buildEntities();
+  scatterTrees(); grass(); flowers(); horizon(); skyDecor();
+  buildCollectibles(); buildWisps(); buildCritters();
+  setAmbience(i);
+  P.zone = i;
+  refreshMarkers();
+}
 // ── the hero's look: robe, hat, staff and companion from the wardrobe ──
 function addHat(body, hat) {
   if (hat === 'wizard') {
     const c = mesh(new THREE.ConeGeometry(0.36, 1.0, 12), 0x3a2a7a); c.position.y = 2.55; c.rotation.z = 0.12; body.add(c);
     const b = mesh(new THREE.TorusGeometry(0.4, 0.07, 6, 20), 0x2a1a5a); b.rotation.x = Math.PI / 2; b.position.y = 2.08; body.add(b);
     const st = mesh(new THREE.OctahedronGeometry(0.08), 0xffd166, { emissive: 0xffb000, emissiveIntensity: 1 }); st.position.set(0.12, 2.6, 0.22); body.add(st);
+  } else if (hat === 'apprentice') {
+    // a soft, slightly bent apprentice's hat
+    const brim = mesh(new THREE.CylinderGeometry(0.52, 0.52, 0.05, 16), 0x5a3a7a); brim.position.y = 2.06; body.add(brim);
+    const c1 = mesh(new THREE.ConeGeometry(0.33, 0.6, 12), 0x6a4a9a); c1.position.y = 2.36; body.add(c1);
+    const tip = mesh(new THREE.ConeGeometry(0.16, 0.42, 10), 0x6a4a9a); tip.position.set(0.1, 2.72, -0.06); tip.rotation.z = -0.7; body.add(tip);
+    const band = mesh(new THREE.TorusGeometry(0.31, 0.04, 6, 18), 0xe0b030); band.rotation.x = Math.PI / 2; band.position.y = 2.12; body.add(band);
   } else if (hat === 'laurel') {
     const t = mesh(new THREE.TorusGeometry(0.31, 0.06, 6, 18), 0x4f8f3a); t.rotation.x = Math.PI / 2; t.position.y = 2.02; body.add(t);
   } else if (hat === 'crown') {
@@ -703,8 +792,14 @@ function addHat(body, hat) {
     for (let k = 0; k < 6; k++) { const sp = mesh(new THREE.ConeGeometry(0.06, 0.18, 5), 0xe0b030, { metalness: 0.8, roughness: 0.3 }); const a = k / 6 * Math.PI * 2; sp.position.set(Math.cos(a) * 0.28, 2.3, Math.sin(a) * 0.28); body.add(sp); }
   }
 }
-function addStaff(body, staff) {
+function addStaff(body, staff, arm) {
   if (staff === 'none') return;
+  if (staff === 'wand') {
+    // held in the hand, so it follows every swing and spell
+    const w = mesh(new THREE.CylinderGeometry(0.03, 0.045, 0.75, 6), 0x6a4a2a); w.position.set(0, -0.82, 0.25); w.rotation.x = 1.25; arm.add(w);
+    const st = mesh(new THREE.OctahedronGeometry(0.08), 0xffe9a8, { emissive: 0xffc04a, emissiveIntensity: 1.5 }); st.position.set(0, -0.9, 0.62); arm.add(st);
+    return;
+  }
   const col = { oak: 0x6a4a2a, crystal: 0x8a8aa0, lightning: 0xd0a030 }[staff], gem = { oak: [0x5ab04a, 0x2a8020], crystal: [0x7fd0ff, 0x3fa0ff], lightning: [0xffee66, 0xffcc00] }[staff];
   const st = mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.2, 6), col); st.position.set(0.55, 1.15, 0.15); body.add(st);
   const g = mesh(new THREE.OctahedronGeometry(0.16), gem[0], { emissive: gem[1], emissiveIntensity: 1.2 }); g.position.set(0.55, 2.35, 0.15); body.add(g);
@@ -716,7 +811,7 @@ function applyLook(g) {
   const m = person({ robe, hair: 0x7a4a1e, hood: L.hat === 'hood' });
   for (const c of [...m.children]) g.add(c);
   g.userData = m.userData;
-  addHat(g.userData.body, L.hat); addStaff(g.userData.body, L.staff);
+  addHat(g.userData.body, L.hat); addStaff(g.userData.body, L.staff, g.userData.arms[1]);
   return g;
 }
 function buildPet(type) {
@@ -771,80 +866,198 @@ hud.innerHTML = `
     <div class="wbtns"><button class="wb" id="wmapbtn" title="World map">🗺</button><button class="wb" data-act="go" data-arg="codex" title="Library">📖</button><button class="wb" data-act="go" data-arg="review" title="Review">🔁<span id="wdue" class="wbadge"></span></button><button class="wb" data-act="go" data-arg="path" title="Journal">📜</button><button class="wb" data-act="go" data-arg="profile" title="Profile">👤</button></div>
   </div>
   <div class="wquest" id="wquest"><div class="wq-arrow" id="wqarrow">▲</div><div><div class="wq-k">Quest</div><div id="wqtext"></div></div></div>
+  <div class="wpowers" id="wpowers"></div>
   <div class="wbanner" id="wbanner"></div>
   <div class="wprompt" id="wprompt"></div>
   <div class="wjoy" id="wjoy"><div class="wjoy-knob" id="wknob"></div></div>
   <div class="wact"><button class="wbig" id="wtalk">💬</button><button class="wbig wjump" id="wjump">⤒</button></div>
   <div class="whelp" id="whelp">WASD / arrows to move · Shift to run · Space to jump · E to talk · drag to look</div>
   <div class="wdlg" id="wdlg"></div>
-  <div class="wbattle" id="wbattle"></div>`;
+  <div class="wbattle" id="wbattle"></div>
+  <div class="wcine" id="wcine"></div>`;
 const $ = id => document.getElementById(id);
 
 function updateHUD() {
   const s = E.state, lv = E.levelInfo();
-  $('whearts').innerHTML = '❤'.repeat(P.hearts) + `<span class="lost">${'❤'.repeat(P.maxHearts - P.hearts)}</span>`;
+  $('whearts').innerHTML = '❤'.repeat(P.hearts) + `<span class="lost">${'❤'.repeat(P.maxHearts - P.hearts)}</span>` + (P.shield ? '<span class="wshield">🛡</span>' : '');
   $('wlv').textContent = lv.level; $('wxp').style.width = (lv.cur / lv.need) * 100 + '%';
   $('wcoins').textContent = s.coins;
   const due = E.dueWords().length; $('wdue').textContent = due || ''; $('wdue').style.display = due ? '' : 'none';
+  const pw = E.powers();
+  $('wpowers').innerHTML = `<span title="Hints">💡${pw.hint}</span><span title="Shields">🛡${pw.shield}</span><span title="Slow Time">⏳${pw.slow}</span>`;
 }
 
 // quest target: whoever offers the next lesson on the path
 function questTarget() {
   const n = E.nextNode();
   if (!n) return { done: true };
+  if (n.unit !== WI) return { node: n, away: true };
   let e;
-  if (n.type === 'boss') e = ents.find(x => x.kind === 'guardian' && x.zone === n.unit);
+  if (n.type === 'boss') e = ents.find(x => x.kind === 'guardian');
   else if (n.type === 'reading') e = ents.find(x => x.kind === 'pedestal' && x.node.id === n.id);
-  else e = ents.find(x => x.kind === 'mentor' && x.zone === n.unit);
+  else e = ents.find(x => x.kind === 'mentor');
   return { node: n, ent: e };
 }
-let beacon;
+let beacon = null;
 function refreshMarkers() {
   const t = questTarget();
   for (const e of ents) {
     e.mark.visible = !!(t.ent === e);
-    if (e.kind === 'guardian') { e.gate.visible = !gateOpen(e.zone); portals[e.zone].visible = gateOpen(e.zone); }
     if (e.kind === 'pedestal') {
       const done = E.stars(e.node.id) > 0;
       e.glow.material.opacity = done ? 1 : E.unlocked(e.node) ? 0.8 : 0.25;
     }
   }
+  const open = gateOpen(WI);
+  gate.userData.barrier.visible = !open && !gate.userData.last;
+  gate.userData.portal.visible = open && !gate.userData.last;
+  if (W.libraryDoor) W.libraryDoor.material = mat(open ? 0xffe9a8 : 0x6a3a1a, open ? { emissive: 0xffc04a, emissiveIntensity: 1 } : {});
+  // a portal back toward where the quest continues when it lies in another world
+  let target = t.ent;
+  if (t.away) target = t.node.unit > WI ? { x: gate.userData.x, z: gate.userData.z, portal: true } : backPortal ? { x: backPortal.x, z: backPortal.z, portal: true } : null;
   if (!beacon) {
     beacon = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 60, 12, 1, true), new THREE.MeshBasicMaterial({ color: 0xffd166, transparent: true, opacity: 0.18, depthWrite: false, side: THREE.DoubleSide, fog: false }));
-    scene.add(beacon);
+    WG.add(beacon);
   }
-  beacon.visible = !!t.ent;
-  if (t.ent) beacon.position.set(t.ent.x, groundAt(t.ent.x, t.ent.z) + 30, t.ent.z);
-  const who = t.ent ? (t.ent.kind === 'mentor' ? `Visit ${ZONES[t.ent.zone].mentor[1]}` : t.ent.kind === 'pedestal' ? 'Restore the lost scroll' : `Challenge ${t.ent.label}`) : '';
-  $('wqtext').innerHTML = t.done ? 'All quests complete! Enter the Great Library.' : `${who}: <b>${esc(t.node.title)}</b>`;
-  W.target = t.ent;
+  beacon.visible = !!target;
+  if (target) beacon.position.set(target.x, groundAt(target.x, target.z) + 30, target.z);
+  let txt;
+  if (t.done) txt = WI === NZ - 1 ? 'All quests complete! Enter the Great Library.' : 'All quests complete! Travel on to the Great Library.';
+  else if (t.away) txt = `${t.node.unit > WI ? 'Go through the portal to' : 'Return to'} <b>${esc(ZONES[t.node.unit].name)}</b>: ${esc(t.node.title)}`;
+  else {
+    const who = t.ent.kind === 'mentor' ? `Visit ${ZONES[WI].mentor[1]}` : t.ent.kind === 'pedestal' ? 'Restore the lost scroll' : `Challenge ${t.ent.label}`;
+    txt = `${who}: <b>${esc(t.node.title)}</b>`;
+  }
+  $('wqtext').innerHTML = txt;
+  W.target = target;
   updateHUD();
 }
 
 let bannerT = 0;
-function storyBeat(zi) {
-  const Z = ZONES[zi];
-  // only tell a world's story while you are still in it; otherwise save it for your next visit
-  if (zoneOf(player.position.z) !== zi || dlgOpen || battle || !active) { const w = ws(); w.seen = (w.seen || []).filter(x => x !== zi); E.save(); return; }
-  dialog(`📖 ${esc(Z.name)}`, `<p>${esc(KG.story.arrive[zi])}</p><p class="muted small">Find <b>${esc(Z.mentor[1])}</b>, ${esc(Z.mentor[2])}. Follow the golden light.</p>`, [{ label: 'Onward', cls: 'primary' }]);
-}
-// travel to any world you have reached
-function worldMap() {
-  const reach = i => i === 0 || gateOpen(i - 1);
-  dialog('🗺 World Map', `<div class="wmap">${ZONES.map((Z, i) => `<button class="wm ${reach(i) ? '' : 'locked'} ${i === P.zone ? 'here' : ''}" data-wm="${i}" ${reach(i) ? '' : 'disabled'}>
-      <b>${i + 1}. ${esc(Z.name)}</b><span>${reach(i) ? esc(KG.units[i].title) + (i === P.zone ? ' · you are here' : '') : '🔒 Beat the guardian before it'}</span></button>`).join('')}</div>`, [{ label: 'Close' }]);
-  document.querySelectorAll('[data-wm]').forEach(b => b.onclick = () => {
-    const i = +b.dataset.wm, m = ents.find(e => e.kind === 'mentor' && e.zone === i);
-    closeDialog();
-    root.classList.add('portalfx'); KG.app.sfx('level');
-    setTimeout(() => { player.position.set(m.x - 2, groundAt(m.x - 2, m.z + 3), m.z + 3); snapCamera(); }, 250);
-    setTimeout(() => root.classList.remove('portalfx'), 900);
-  });
-}
 function showBanner(i) {
   const u = KG.units[i];
-  $('wbanner').innerHTML = `<div class="wb-k">Region ${i + 1} · ${esc(u.title)}</div><div class="wb-t">${esc(ZONES[i].name)}</div><div class="wb-s">${esc(u.sub)}</div>`;
+  $('wbanner').innerHTML = `<div class="wb-k">World ${i + 1} · ${esc(u.title)}</div><div class="wb-t">${esc(ZONES[i].name)}</div><div class="wb-s">${esc(u.sub)}</div>`;
   $('wbanner').classList.add('on'); bannerT = 3;
+}
+
+// ── travel between worlds ────────────────────────────────────
+let traveling = false;
+function placeAt(where) {
+  let p, face;
+  if (where === 'gate') { p = along(0.92); face = p.a + Math.PI; }
+  else if (where === 'mentor') { const m = ents.find(e => e.kind === 'mentor'); p = along(0.28); p = { x: (p.px + m.x) / 2 + Math.sin(p.a) * 2, z: (p.pz + m.z) / 2 + Math.cos(p.a) * 2 }; face = along(0.28).a + Math.PI; }
+  else if (where && where.x !== undefined) { p = where; face = where.yaw !== undefined ? where.yaw - Math.PI : 0; }
+  else { p = along(0.05); face = p.a; }
+  player.position.set(p.x, groundAt(p.x, p.z), p.z);
+  player.rotation.y = face; cam.yaw = face + Math.PI;
+  P.vel.set(0, 0, 0);
+  if (backPortal) backPortal.armed = false;
+  if (pet) pet.position.copy(player.position).add(new THREE.Vector3(1, 1, 1));
+}
+function travel(to, where) {
+  if (traveling || to === WI) return;
+  traveling = true; closeDialog();
+  root.classList.add('portalfx'); KG.app.sfx('level');
+  setTimeout(() => {
+    buildWorld(to); placeAt(where); snapCamera();
+    const w = ws(); w.zone = to; savePos();
+    showBanner(to); traveling = false;
+    setTimeout(arrive, 500);
+  }, 320);
+  setTimeout(() => root.classList.remove('portalfx'), 1000);
+}
+function worldMap() {
+  dialog('🗺 World Map', `<div class="wmap">${ZONES.map((Z, i) => `<button class="wm ${reachable(i) ? '' : 'locked'} ${i === WI ? 'here' : ''}" data-wm="${i}" ${reachable(i) ? '' : 'disabled'}>
+      <b>${i + 1}. ${esc(Z.name)}</b><span>${reachable(i) ? esc(KG.units[i].title) + (i === WI ? ' · you are here' : '') : '🔒 Beat the guardian before it'}</span></button>`).join('')}</div>`, [{ label: 'Close' }]);
+  document.querySelectorAll('[data-wm]').forEach(b => b.onclick = () => { const i = +b.dataset.wm; closeDialog(); if (i !== WI) travel(i, 'mentor'); });
+}
+
+// ── cutscenes: the camera moves and characters speak ─────────
+let cine = null;
+const camLook = new THREE.Vector3();
+function cutscene(shots, onDone) {
+  if (cine) return;
+  closeDialog();
+  cine = { shots, i: -1, onDone, t: 0 };
+  root.classList.add('cine');
+  nextShot();
+}
+function nextShot() {
+  if (!cine) return;
+  if (cine.shot && cine.shot.speaker) cine.shot.speaker.userData.arms && (cine.shot.speaker.userData.arms[1].rotation.x = 0);
+  const s = cine.shot = cine.shots[++cine.i];
+  if (!s) return endCutscene();
+  cine.t = 0;
+  if (s.do) s.do();
+  const len = s.text ? s.text.replace(/<[^>]+>/g, '').length : 0;
+  cine.dur = s.dur || Math.max(2.6, 1.2 + len * 0.055);
+  $('wcine').innerHTML = `<button class="wc-skip" id="wcskip">Skip ⏭</button>${s.text ? `<div class="wc-box"><div class="wc-who">${s.who || ''}</div><div class="wc-text">${s.text}</div><div class="wc-tap">▸</div></div>` : ''}`;
+  $('wcine').classList.add('on');
+  $('wcskip').onclick = e => { e.stopPropagation(); endCutscene(); };
+  if (s.speak && E.state.settings.speech) KG.app.speak(s.speak);
+}
+function endCutscene() {
+  if (!cine) return;
+  const cb = cine.onDone;
+  if (cine.shot && cine.shot.speaker && cine.shot.speaker.userData.arms) cine.shot.speaker.userData.arms[1].rotation.x = 0;
+  cine = null;
+  root.classList.remove('cine'); $('wcine').classList.remove('on'); $('wcine').innerHTML = '';
+  snapCamera();
+  if (cb) cb();
+}
+$('wcine').addEventListener('click', () => { if (cine && cine.t > 0.4) nextShot(); });
+function updateCine(dt, t) {
+  const s = cine.shot; cine.t += dt;
+  const k = Math.min(1, cine.t / cine.dur), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+  const want = s.cam(e), look = s.look(e);
+  if (cine.t <= dt * 1.01 && s.cut !== false) { camera.position.copy(want); camLook.copy(look); }
+  camera.position.lerp(want, Math.min(1, dt * 4)); camLook.lerp(look, Math.min(1, dt * 4));
+  camera.lookAt(camLook);
+  if (s.speaker && s.speaker.userData.arms) s.speaker.userData.arms[1].rotation.x = -1.6 + Math.sin(t * 5) * 0.35;
+  if (cine.t > cine.dur + (s.text ? 1.6 : 0)) nextShot();
+}
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+const headOf = o => V(o.position.x, o.position.y + 1.8, o.position.z);
+// an orbit around a point, high above the world
+const orbitShot = (cx, cz, r, h, a0, a1) => e => { const a = a0 + (a1 - a0) * e; return V(cx + Math.cos(a) * r, groundAt(cx, cz) + h, cz + Math.sin(a) * r); };
+// a close shot from in front of a character
+function faceShot(o, dist = 4, h = 1.2, side = 0.6) {
+  const fy = o.rotation.y, fx = Math.sin(fy), fz = Math.cos(fy), x = o.position.x + fx * dist + fz * side, z = o.position.z + fz * dist - fx * side;
+  return () => V(x, Math.max(o.position.y + h + 0.4, groundAt(x, z) + 1), z);
+}
+function behindPlayer() { const pos = player.position; return () => V(pos.x - Math.sin(player.rotation.y) * 7, pos.y + 3.4, pos.z - Math.cos(player.rotation.y) * 7); }
+function arrivalShots(i) {
+  const Z = ZONES[i], m = ents.find(e => e.kind === 'mentor').obj, mid = along(0.5);
+  const shots = [];
+  if (i === 0) {
+    shots.push({ cam: orbitShot(mid.px, mid.pz, 46, 26, 0.6, 1.5), look: () => V(mid.px, groundAt(mid.px, mid.pz), mid.pz), who: '📜 The Apprentice’s Journey', text: 'You are <b>Θεόφιλος</b> (Theophilus), an apprentice Koine wizard in Alphabet Hollow. The scrolls of the Great Library lie scattered across nine worlds, and their words are fading into forgetfulness.' });
+    shots.push({ cam: orbitShot(mid.px, mid.pz, 40, 18, 1.5, 2.3), look: () => V(mid.px, groundAt(mid.px, mid.pz) + 2, mid.pz), who: '📜 The Apprentice’s Journey', text: 'In Greek, every rule you master is a <b>spell</b>. Learn them from the masters, restore the lost scrolls, banish the Shades of Forgetting, and win your way through the portals to the Library.' });
+    shots.push({ cam: faceShot(m), look: () => headOf(m), who: `${esc(Z.mentor[0])} · ${esc(Z.mentor[1])}`, speaker: m, speak: Z.greet[0], text: `<span class="gk">${esc(Z.greet[0])}</span> <i>(${esc(Z.greet[1])})</i> Welcome, young wizard! Every spell begins with letters. Gather the glowing letters along the road, then come to me.` });
+  } else {
+    const lm = D.pts[Math.floor(D.pts.length / 2)];
+    shots.push({ cam: orbitShot(lm[0], lm[1], 44, 24, 0.4, 1.3), look: () => V(lm[0], groundAt(lm[0], lm[1]), lm[1]), who: `📖 ${esc(Z.name)}`, text: esc(KG.story.arrive[i]) });
+    shots.push({ cam: faceShot(m), look: () => headOf(m), who: `${esc(Z.mentor[0])} · ${esc(Z.mentor[1])}, ${esc(Z.mentor[2])}`, speaker: m, speak: Z.greet[0], text: `<span class="gk">${esc(Z.greet[0])}</span> <i>(${esc(Z.greet[1])})</i> ${esc(KG.story.mentor[i])}` });
+  }
+  shots.push({ cam: behindPlayer(), look: () => V(player.position.x, player.position.y + 1.4, player.position.z), dur: 1.2, cut: false });
+  return shots;
+}
+function arrive() {
+  const w = ws();
+  if (!active || mode !== 'world' || w.cine.includes(WI) || dlgOpen || battle) return;
+  w.cine.push(WI); w.intro = true; E.save();
+  cutscene(arrivalShots(WI));
+}
+function guardianShots(i) {
+  const g = ents.find(e => e.kind === 'guardian'), go = g.obj, gu = gate.userData, last = i === NZ - 1;
+  const portalPos = V(gu.x, groundAt(gu.x, gu.z) + 3.6, gu.z);
+  return [
+    { cam: faceShot(go, 7, 3, 1.5), look: () => V(go.position.x, go.position.y + 3, go.position.z), who: `⚔ ${esc(g.label)}`, speaker: go, text: `“${esc(KG.story.guardian[i])}”`,
+      do: () => { const b = go.userData.body; let k = 0; anims.push(dt => { k = Math.min(1, k + dt); b.rotation.x = k * 0.5; b.position.y = -k * 0.6; return k < 1; }); } },
+    { cam: orbitShot(gu.x, gu.z, 13, 6, gate.rotation.y + 2.2, gate.rotation.y + 1.2), look: () => portalPos, who: last ? '🏛 The Great Library' : '✨ The gate opens',
+      text: last ? 'The great doors of the Library swing open. Every scroll inside waits for a reader.' : `A portal blazes to life in the gate. Step through it to reach <b>${esc(ZONES[i + 1].name)}</b>.`,
+      do: () => { refreshMarkers(); burst(portalPos, 0xffd166); KG.app.sfx('level'); } },
+    { cam: behindPlayer(), look: () => V(player.position.x, player.position.y + 1.4, player.position.z), dur: 1.2, cut: false },
+  ];
 }
 
 // dialogue
@@ -866,12 +1079,12 @@ function talk(e) {
     const t = questTarget(), mine = KG.units[e.zone].nodes.filter(n => n.type !== 'reading' && n.type !== 'boss');
     const greet = `<p><span class="gk">${esc(Z.greet[0])}</span> <i>(${esc(Z.greet[1])})</i></p>`;
     let html = greet, btns = [];
-    if (t.done) html += '<p>You have learned all I can teach. Go to the Great Library, scribe!</p>';
+    if (t.done) html += '<p>You have learned every spell I can teach. Go to the Great Library, wizard!</p>';
     else if (t.ent === e) {
-      html += `<p>I am ${esc(Z.mentor[1])}, ${esc(Z.mentor[2])}. Your next lesson with me is <b>${esc(t.node.title)}</b>.</p>`;
+      html += `<p>I am ${esc(Z.mentor[1])}, ${esc(Z.mentor[2])}. Your next lesson in the craft is <b>${esc(t.node.title)}</b>.</p>`;
       btns.push({ label: `Begin: ${esc(t.node.title)} ▶`, cls: 'primary', fn: () => launch(t.node.id) });
-    } else if (t.node.unit === e.zone) html += `<p>${t.ent.kind === 'pedestal' ? `A lost scroll lies nearby: <b>${esc(t.ent.label)}</b>. Restore it at its pedestal (follow the golden light).` : `You are ready! Face <b>${esc(t.ent.label)}</b> at the gate to prove what you've learned.`}</p>`;
-    else if (t.node.unit > e.zone) html += `<p>You have finished my lessons. Your path lies onward through the gate: seek ${esc(ZONES[t.node.unit].mentor[1])} in ${esc(ZONES[t.node.unit].name)}.</p>`;
+    } else if (t.node.unit === e.zone) html += `<p>${t.ent.kind === 'pedestal' ? `A lost scroll lies nearby: <b>${esc(t.ent.label)}</b>. Restore it at its pedestal (follow the golden light).` : `You are ready, apprentice! Face <b>${esc(t.ent.label)}</b> at the gate to prove your spells.`}</p>`;
+    else if (t.node.unit > e.zone) html += `<p>You have finished my lessons. Your path lies onward through the portal: seek ${esc(ZONES[t.node.unit].mentor[1])} in ${esc(ZONES[t.node.unit].name)}.</p>`;
     else html += `<p>You are not ready for my lessons yet. Return to ${esc(ZONES[t.node.unit].name)} first.</p>`;
     const done = mine.filter(n => E.stars(n.id) > 0);
     if (done.length) {
@@ -882,15 +1095,15 @@ function talk(e) {
     dialog(`${esc(Z.mentor[0])} <span class="muted">· ${esc(Z.mentor[1])}, ${esc(Z.mentor[2])}</span>`, html, btns);
   } else if (e.kind === 'pedestal') {
     const n = e.node, R = KG.readings[n.reading], done = E.stars(n.id) > 0;
-    if (!E.unlocked(n)) return dialog(`📜 ${esc(R.ref)}`, '<p>The scroll is sealed with a strange light. Learn more from the mentor first.</p>', [{ label: 'Leave' }]);
+    if (!E.unlocked(n)) return dialog(`📜 ${esc(R.ref)}`, '<p>The scroll is sealed with a strange light. Learn more spells from your master first.</p>', [{ label: 'Leave' }]);
     dialog(`📜 ${esc(R.ref)}`, done ? `<p>You restored this scroll. Its words shine again:</p><p class="gk wd-verse">${esc(R.words.map(w => w.w + w.p).join(' '))}</p>` :
       `<p>A lost scroll of the Scriptures! Its letters are fading. Read it and translate it to restore it.</p>`,
       [{ label: done ? 'Read & translate again' : 'Restore the scroll ▶', cls: 'primary', fn: () => launch(n.id) }, { label: 'Leave' }]);
   } else if (e.kind === 'guardian') {
     const n = e.node;
-    if (gateOpen(e.zone)) return dialog(esc(e.label), '<p><span class="gk">Πάρελθε.</span> <i>(Pass by.)</i> You have proven yourself, scribe. The way is open.</p>', [{ label: 'Rematch ⚔', fn: () => launch(n.id) }, { label: 'Onward' }]);
-    if (!E.unlocked(n)) return dialog(esc(e.label), '<p><b>NONE SHALL PASS</b> who have not mastered the lessons of this land! Return when your mentor has taught you all.</p>', [{ label: 'Leave' }]);
-    dialog(esc(e.label), `<p><b>So, little scribe, you would pass my gate?</b> Answer my riddles. Fail three times and you are cast back!</p><p class="muted small">Boss battle: 15 questions from all of ${esc(KG.units[e.zone].title)}, 3 hearts.</p>`,
+    if (gateOpen(e.zone)) return dialog(esc(e.label), `<p><span class="gk">Πάρελθε.</span> <i>(Pass by.)</i> You have proven yourself, wizard. ${e.zone < NZ - 1 ? 'The portal is open.' : 'The Library is open.'}</p>`, [{ label: 'Rematch ⚔', fn: () => launch(n.id) }, { label: 'Onward' }]);
+    if (!E.unlocked(n)) return dialog(esc(e.label), '<p><b>NONE SHALL PASS</b> who have not mastered the spells of this land! Return when your master has taught you all.</p>', [{ label: 'Leave' }]);
+    dialog(esc(e.label), `<p><b>So, little apprentice, you would pass my gate?</b> Answer my riddles. Fail three times and you are cast back!</p><p class="muted small">Boss battle: 15 questions from all of ${esc(KG.units[e.zone].title)}, 3 hearts.</p>`,
       [{ label: 'Fight ⚔', cls: 'primary', fn: () => launch(n.id) }, { label: 'Not yet' }]);
   }
 }
@@ -908,12 +1121,20 @@ function startBattle(w) {
   const q = E.vocabQ(word, pool.length > 8 ? pool : KG.vocab, hard ? 'e2g' : 'g2e');
   battle = { w, q, done: false };
   KG.app.sfx('bad');
-  const b = $('wbattle');
+  const b = $('wbattle'), pw = E.powers();
   b.innerHTML = `<div class="wbt-box ${w.elite ? 'elite' : ''}"><div class="wbt-h">${w.elite ? '🔥 An ELITE Shade attacks! It knows your weakest words…' : '👻 A Shade of Forgetting attacks!'}</div><div class="muted small">Banish it by remembering the word.</div>
     <div class="wbt-q">${q.prompt}</div><div class="wbt-big gk">${esc(q.big || '')}</div>
-    <div class="wbt-opts">${q.options.map((o, i) => `<button class="wbt-opt ${q.greekOpts ? 'gk' : ''}" data-bo="${i}"><span class="k">${i + 1}</span>${q.greekOpts ? esc(o) : o}</button>`).join('')}</div><div id="wbtfb"></div></div>`;
+    <div class="wbt-opts">${q.options.map((o, i) => `<button class="wbt-opt ${q.greekOpts ? 'gk' : ''}" data-bo="${i}"><span class="k">${i + 1}</span>${q.greekOpts ? esc(o) : o}</button>`).join('')}</div>
+    <div class="wbt-pw"><button class="pw" id="wbthint" ${pw.hint ? '' : 'disabled'}>💡 Hint <b>${pw.hint}</b></button><button class="pw" id="wbtshield" ${pw.shield && !P.shield ? '' : 'disabled'}>🛡 Shield <b>${pw.shield}</b></button></div><div id="wbtfb"></div></div>`;
   b.classList.add('on');
   b.querySelectorAll('[data-bo]').forEach(el => el.onclick = () => answerBattle(+el.dataset.bo, el));
+  $('wbthint').onclick = () => {
+    if (battle.done || battle.hinted || !E.usePower('hint')) return;
+    battle.hinted = true; $('wbthint').disabled = true;
+    U.sample(q.options.map((_, i) => i).filter(i => i !== q.answer), 2).forEach(i => { const el = b.querySelector(`[data-bo="${i}"]`); el.disabled = true; el.classList.add('gone'); });
+    updateHUD();
+  };
+  $('wbtshield').onclick = () => { if (battle.done || P.shield || !E.usePower('shield')) return; P.shield = true; $('wbtshield').disabled = true; KG.app.sfx('combo'); updateHUD(); };
   if (q.speak) KG.app.speak(q.speak);
 }
 function answerBattle(i, el) {
@@ -921,11 +1142,16 @@ function answerBattle(i, el) {
   const { q, w } = battle, ok = i === q.answer;
   battle.done = true;
   E.recordAnswer(q, ok, true);
-  $('wbattle').querySelectorAll('.wbt-opt').forEach((b, k) => { b.disabled = true; if (k === q.answer) b.classList.add('right'); });
+  $('wbattle').querySelectorAll('.wbt-opt, .pw').forEach((b, k) => { b.disabled = true; if (k === q.answer) b.classList.add('right'); });
   if (!ok) el.classList.add('wrong');
-  $('wbtfb').innerHTML = `<div class="wbt-fb ${ok ? 'ok' : 'no'}">${ok ? `✨ The shade dissolves into light! +${w.elite ? 16 : 8} XP` : `💔 It strikes you! ${q.explain || ''}`}</div><button class="btn ${ok ? 'good' : 'bad'} wide" id="wbtgo">Continue</button>`;
+  let blocked = false;
   if (ok) { KG.app.sfx('good'); E.gainXP(w.elite ? 16 : 8, w.elite ? 3 : 1); ws().wisps++; E.checkAchievements(); w.dead = true; w.obj.visible = false; w.respawn = 40; E.questProgress('shades'); burst(w.obj.position, 0xb388ff); }
-  else { KG.app.sfx('bad'); P.hearts = Math.max(0, P.hearts - 1); P.hurtT = 1; const away = player.position.clone().sub(w.obj.position).setY(0).normalize(); P.vel.addScaledVector(away, 9); w.cool = 4; }
+  else {
+    KG.app.sfx('bad');
+    if (P.shield) { P.shield = false; blocked = true; } else { P.hearts = Math.max(0, P.hearts - 1); P.hurtT = 1; }
+    const away = player.position.clone().sub(w.obj.position).setY(0).normalize(); P.vel.addScaledVector(away, 9); w.cool = 4;
+  }
+  $('wbtfb').innerHTML = `<div class="wbt-fb ${ok ? 'ok' : 'no'}">${ok ? `✨ The shade dissolves into light! +${w.elite ? 16 : 8} XP` : `${blocked ? '🛡 Your shield takes the blow!' : '💔 It strikes you!'} ${q.explain || ''}`}</div><button class="btn ${ok ? 'good' : 'bad'} wide" id="wbtgo">Continue</button>`;
   updateHUD();
   $('wbtgo').onclick = endBattle; $('wbtgo').focus();
 }
@@ -933,14 +1159,13 @@ function endBattle() {
   $('wbattle').classList.remove('on'); $('wbattle').innerHTML = '';
   battle = null;
   if (P.hearts <= 0) {
-    const m = ents.find(e => e.kind === 'mentor' && e.zone === zoneOf(player.position.z));
-    dialog('😵 You fainted…', `<p>The shades overwhelmed you. You wake beside ${esc(ZONES[m.zone].mentor[1])}, who gives you some bread and water.</p><p class="muted small">Tip: review your words in 🔁 Review to make the shades easier.</p>`, [{ label: 'Get up', cls: 'primary' }]);
+    const m = ents.find(e => e.kind === 'mentor');
+    dialog('😵 You fainted…', `<p>The shades overwhelmed you. You wake beside ${esc(ZONES[WI].mentor[1])}, who gives you some bread and water.</p><p class="muted small">Tip: review your words in 🔁 Review to make the shades easier.</p>`, [{ label: 'Get up', cls: 'primary' }]);
     P.hearts = P.maxHearts;
     player.position.set(m.x - 2, groundAt(m.x - 2, m.z + 2), m.z + 2);
     updateHUD();
   }
 }
-
 // particle burst
 const bursts = [];
 function burst(pos, color) {
@@ -952,10 +1177,10 @@ function burst(pos, color) {
 }
 
 // ── input ─────────────────────────────────────────────────────
-const KEYMAP = { KeyW: 'f+', ArrowUp: 'f+', KeyS: 'f-', ArrowDown: 'f-', KeyA: 'r-', ArrowLeft: 'r-', KeyD: 'r+', ArrowRight: 'r+' };
 addEventListener('keydown', e => {
   if (!active) return;
   if (mode === 'stage') { if (stage.key(e)) e.preventDefault(); return; }
+  if (cine) { if (e.key === 'Escape') endCutscene(); else if (e.key === 'Enter' || e.code === 'Space') { if (cine.t > 0.4) nextShot(); e.preventDefault(); } return; }
   if (battle) { if (/^[1-4]$/.test(e.key)) { const b = document.querySelector(`[data-bo="${+e.key - 1}"]`); if (b) b.click(); } else if (e.key === 'Enter') { const g = $('wbtgo'); if (g) g.click(); } return; }
   if (dlgOpen) { if (e.key === 'Escape') closeDialog(); return; }
   input.keys[e.code] = true;
@@ -992,22 +1217,22 @@ canvas.addEventListener('pointerup', endPtr); canvas.addEventListener('pointerca
 canvas.addEventListener('wheel', e => { cam.dist = Math.min(16, Math.max(4, cam.dist + e.deltaY * 0.01)); e.preventDefault(); }, { passive: false });
 $('wjump').addEventListener('pointerdown', e => { input.jump = true; e.preventDefault(); });
 $('wtalk').addEventListener('click', () => tryTalk());
-$('wmapbtn').addEventListener('click', () => { if (!battle) worldMap(); });
+$('wmapbtn').addEventListener('click', () => { if (!battle && !cine) worldMap(); });
 
 let nearEnt = null;
-function tryTalk() { if (nearEnt && !dlgOpen && !battle) talk(nearEnt); }
+function tryTalk() { if (nearEnt && !dlgOpen && !battle && !cine) talk(nearEnt); }
 
 // ── update loop ───────────────────────────────────────────────
 let active = false, raf = 0, saveT = 0;
 const tmp = new THREE.Vector3();
 function step(dt) {
   const t = clock.elapsedTime, pos = player.position;
-  const busy = dlgOpen || battle;
+  const busy = dlgOpen || battle || cine || traveling;
   // input → movement
   let f = 0, r = 0;
   if (!busy) {
     const k = input.keys;
-    if (KEYMAP && (k.KeyW || k.ArrowUp)) f += 1; if (k.KeyS || k.ArrowDown) f -= 1;
+    if (k.KeyW || k.ArrowUp) f += 1; if (k.KeyS || k.ArrowDown) f -= 1;
     if (k.KeyA || k.ArrowLeft) r -= 1; if (k.KeyD || k.ArrowRight) r += 1;
     if (input.joy) { f -= input.joy.dy; r += input.joy.dx; }
   }
@@ -1027,55 +1252,66 @@ function step(dt) {
   if (input.jump && P.onGround && !busy) { P.vel.y = 7.5; P.onGround = false; }
   input.jump = false;
   P.vel.y -= 22 * dt;
+  const ox = pos.x, oz = pos.z, g0 = groundAt(ox, oz);
   pos.x += P.vel.x * dt; pos.z += P.vel.z * dt; pos.y += P.vel.y * dt;
-  // world bounds: stay in the valley, behind closed gates
-  const px = pathX(pos.z), lim = 30;
-  if (pos.x - px > lim) pos.x = px + lim; if (px - pos.x > lim) pos.x = px - lim;
-  if (pos.z > 3) pos.z = 3;
-  if (pos.z < END_Z + 8) pos.z = END_Z + 8;
-  for (let i = 0; i < NZ; i++) if (!gateOpen(i) && pos.z < gateZ(i) + 0.8 && pos.z > gateZ(i) - 6) { pos.z = gateZ(i) + 0.8; P.vel.z = Math.max(0, P.vel.z); }
+  // stay inside the world, and don't walk up cliffs
+  const lim = R - 7;
+  pos.x = Math.max(-lim, Math.min(lim, pos.x)); pos.z = Math.max(-lim, Math.min(lim, pos.z));
   for (const c of colliders) {
-    const dx = pos.x - c.x, dz = pos.z - c.z, d = Math.hypot(dx, dz), r2 = c.r + 0.45;
+    const dx = pos.x - c.x, dz = pos.z - c.z;
+    if (Math.abs(dx) > c.r + 0.5 || Math.abs(dz) > c.r + 0.5) continue;
+    const d = Math.hypot(dx, dz), r2 = c.r + 0.45;
     if (d < r2 && d > 0.001) { pos.x = c.x + dx / d * r2; pos.z = c.z + dz / d * r2; }
   }
+  const moved = Math.hypot(pos.x - ox, pos.z - oz), g1 = groundAt(pos.x, pos.z);
+  if (moved > 0 && g1 - g0 > moved * 1.3 + 0.02 && pos.y < g1 + 0.2) { pos.x = ox; pos.z = oz; }
+  if (D.water && groundAt(pos.x, pos.z) < D.water.y - 0.5) { pos.x = ox; pos.z = oz; } // no swimming
   const gy = groundAt(pos.x, pos.z);
   if (pos.y <= gy) { pos.y = gy; P.vel.y = 0; P.onGround = true; }
   animatePerson(player, P.onGround ? Math.hypot(P.vel.x, P.vel.z) : 0, dt);
   if (pet) {
     const back = player.rotation.y + Math.PI * 0.75, tx = pos.x + Math.sin(back) * 1.4, tz = pos.z + Math.cos(back) * 1.4;
     pet.position.x += (tx - pet.position.x) * Math.min(1, dt * 3); pet.position.z += (tz - pet.position.z) * Math.min(1, dt * 3);
-    const gy = groundAt(pet.position.x, pet.position.z);
-    pet.position.y = gy + (pet.userData.fly ? pet.userData.fly + Math.sin(t * 2.5) * 0.25 : Math.abs(Math.sin(t * 6)) * (Math.hypot(P.vel.x, P.vel.z) > 0.5 ? 0.25 : 0.03));
+    const py = groundAt(pet.position.x, pet.position.z);
+    pet.position.y = py + (pet.userData.fly ? pet.userData.fly + Math.sin(t * 2.5) * 0.25 : Math.abs(Math.sin(t * 6)) * (Math.hypot(P.vel.x, P.vel.z) > 0.5 ? 0.25 : 0.03));
     pet.rotation.y = Math.atan2(pos.x - pet.position.x, pos.z - pet.position.z);
     animatePet(pet, t, dt);
   }
   player.userData.body.rotation.x = P.onGround ? 0 : -0.15;
 
-  // camera: follow and gently swing behind the player while walking
-  cam.auto = Math.max(0, cam.auto - dt);
-  if (mag > 0.3 && cam.auto <= 0 && f > 0.2) {
-    let d = (player.rotation.y + Math.PI) - cam.yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
-    cam.yaw += d * dt * 1.2;
+  // camera: a cutscene, or follow and gently swing behind the player while walking
+  if (cine) updateCine(dt, t);
+  else {
+    cam.auto = Math.max(0, cam.auto - dt);
+    if (mag > 0.3 && cam.auto <= 0 && f > 0.2) {
+      let d = (player.rotation.y + Math.PI) - cam.yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
+      cam.yaw += d * dt * 1.2;
+    }
+    // pull the camera in when a hill or wall stands between it and the hero
+    let cd = cam.dist;
+    for (let k = 1; k <= 6; k++) {
+      const f = k / 6, cx = pos.x + Math.sin(cam.yaw) * Math.cos(cam.pitch) * cam.dist * f, cz = pos.z + Math.cos(cam.yaw) * Math.cos(cam.pitch) * cam.dist * f;
+      if (groundAt(cx, cz) + 0.6 > pos.y + 1.4 + Math.sin(cam.pitch) * cam.dist * f) { cd = Math.max(2.5, cam.dist * (f - 1 / 6)); break; }
+    }
+    const cy = Math.sin(cam.pitch) * cd, ch = Math.cos(cam.pitch) * cd;
+    tmp.set(pos.x + Math.sin(cam.yaw) * ch, pos.y + 1.4 + cy, pos.z + Math.cos(cam.yaw) * ch);
+    tmp.y = Math.max(tmp.y, groundAt(tmp.x, tmp.z) + 0.8);
+    camera.position.lerp(tmp, Math.min(1, dt * 8));
+    camera.lookAt(pos.x, pos.y + 1.4, pos.z);
   }
-  const cd = cam.dist, cy = Math.sin(cam.pitch) * cd, ch = Math.cos(cam.pitch) * cd;
-  tmp.set(pos.x + Math.sin(cam.yaw) * ch, pos.y + 1.4 + cy, pos.z + Math.cos(cam.yaw) * ch);
-  tmp.y = Math.max(tmp.y, groundAt(tmp.x, tmp.z) + 0.8);
-  camera.position.lerp(tmp, Math.min(1, dt * 8));
-  camera.lookAt(pos.x, pos.y + 1.4, pos.z);
   sun.position.set(pos.x + 30, pos.y + 60, pos.z + 20); sun.target.position.set(pos.x, pos.y, pos.z);
-  scene.getObjectByName('sky').position.copy(camera.position);
+  sky.position.copy(camera.position);
 
-  // regions
-  const zi = zoneOf(pos.z);
-  if (zi !== P.zone) {
-    const first = P.zone < 0;
-    P.zone = zi; showBanner(zi);
-    if (!first) { root.classList.add('portalfx'); setTimeout(() => root.classList.remove('portalfx'), 900); KG.app.sfx('level'); }
-    const w = ws(); w.seen = w.seen || [];
-    if (!w.seen.includes(zi)) { w.seen.push(zi); E.save(); if (KG.story.arrive[zi] && !dlgOpen) setTimeout(() => storyBeat(zi), first ? 300 : 900); }
+  // portals
+  const gu = gate.userData;
+  if (gu.portal.visible) { gu.portal.userData.disc.rotation.z -= dt * 1.5; gu.portal.children[0].rotation.z += dt * 0.4; }
+  if (backPortal) {
+    backPortal.g.userData.disc.rotation.z += dt;
+    const bd = Math.hypot(pos.x - backPortal.x, pos.z - backPortal.z);
+    if (bd > 5) backPortal.armed = true;
+    else if (bd < 1.6 && backPortal.armed && !busy) travel(WI - 1, 'gate');
   }
-  blendAtmosphere(zi, Math.min(1, dt * 1.2));
-  for (const pt of portals) if (pt && pt.visible) { pt.userData.disc.rotation.z -= dt * 1.5; pt.children[0].rotation.z += dt * 0.4; }
+  if (!busy && gu.portal.visible && Math.hypot(pos.x - gu.x, pos.z - gu.z) < 2.2) travel(WI + 1, 'spawn');
   if (bannerT > 0 && (bannerT -= dt) <= 0) $('wbanner').classList.remove('on');
 
   // NPCs idle & interaction
@@ -1084,7 +1320,7 @@ function step(dt) {
     const d = Math.hypot(pos.x - e.x, pos.z - e.z);
     e.mark.position.y = (e.tagY || 2.7) + 0.9 + Math.sin(t * 3) * 0.12;
     if (e.kind === 'pedestal') { e.spin.rotation.y += dt; e.spin.position.y = 1.7 + Math.sin(t * 2) * 0.1; }
-    else if (d < 12) { const want = Math.atan2(pos.x - e.x, pos.z - e.z); let dr = want - e.obj.rotation.y; dr = Math.atan2(Math.sin(dr), Math.cos(dr)); e.obj.rotation.y += dr * Math.min(1, dt * 3); }
+    else if (d < 12 && !cine) { const want = Math.atan2(pos.x - e.x, pos.z - e.z); let dr = want - e.obj.rotation.y; dr = Math.atan2(Math.sin(dr), Math.cos(dr)); e.obj.rotation.y += dr * Math.min(1, dt * 3); }
     if (e.kind !== 'pedestal') animatePerson(e.obj, 0, dt);
     if (d < best) { best = d; nearEnt = e; }
   }
@@ -1096,7 +1332,6 @@ function step(dt) {
   if (W.target) {
     const a = Math.atan2(W.target.x - pos.x, W.target.z - pos.z) - (cam.yaw + Math.PI);
     $('wqarrow').style.transform = `rotate(${-a}rad)`;
-    $('wqarrow').dataset.d = Math.round(Math.hypot(W.target.x - pos.x, W.target.z - pos.z)) + 'm';
   }
   if (beacon) beacon.material.opacity = 0.14 + Math.sin(t * 2) * 0.06;
 
@@ -1135,7 +1370,7 @@ function step(dt) {
     if (wi.dead) { if ((wi.respawn -= dt) <= 0) spawnWisp(wi); continue; }
     wi.t += dt; wi.cool = Math.max(0, (wi.cool || 0) - dt);
     const o = wi.obj.position, d = Math.hypot(pos.x - o.x, pos.z - o.z);
-    const safe = ents.some(e => e.kind === 'mentor' && Math.hypot(pos.x - e.x, pos.z - e.z) < 9);
+    const safe = ents.some(e => e.kind === 'mentor' && Math.hypot(pos.x - e.x, pos.z - e.z) < 9) || (backPortal && Math.hypot(pos.x - backPortal.x, pos.z - backPortal.z) < 8);
     let tx, tz, sp;
     if (d < 10 && !safe && !busy && wi.cool <= 0) { tx = pos.x; tz = pos.z; sp = 3.6; }
     else { if (!wi.target || Math.hypot(wi.target.x - o.x, wi.target.z - o.z) < 1) wi.target = { x: wi.home.x + (Math.random() - 0.5) * 16, z: wi.home.z + (Math.random() - 0.5) * 16 }; tx = wi.target.x; tz = wi.target.z; sp = 1.4; }
@@ -1153,23 +1388,30 @@ function step(dt) {
   root.classList.toggle('hurt', P.hurtT > 0);
 
   // reaching the library
-  if (W.libraryPos && !w.finale && Math.hypot(pos.x - W.libraryPos.x, pos.z - W.libraryPos.z) < 6 && gateOpen(NZ - 1)) {
+  if (W.libraryPos && WI === NZ - 1 && !w.finale && !busy && Math.hypot(pos.x - W.libraryPos.x, pos.z - W.libraryPos.z) < 5 && gateOpen(NZ - 1)) {
     w.finale = true; E.save(); KG.app.confetti(250); KG.app.sfx('level');
-    dialog('🏛 The Great Library', '<p>The doors swing open. Shelves of scrolls glow with every word you have restored. <b>You can read the New Testament in Greek.</b></p><p><span class="gk">Τετέλεσται.</span> <i>It is finished</i>, but the reading has only begun. Keep your words fresh in Review, and keep reading!</p>', [{ label: 'Ἀμήν', cls: 'primary' }]);
+    const lib = V(0, groundAt(0, -40) + 8, -40);
+    cutscene([
+      { cam: orbitShot(0, -36, 22, 10, 0.9, 2.2), look: () => lib, who: '🏛 The Great Library', text: 'The doors swing open. Shelves of scrolls glow with every word you have restored. <b>You can read the New Testament in Greek.</b>' },
+      { cam: faceShot(ents.find(e => e.kind === 'mentor').obj, 5), look: () => headOf(ents.find(e => e.kind === 'mentor').obj), who: 'Λουκᾶς · Luke', speaker: ents.find(e => e.kind === 'mentor').obj, speak: 'Τετέλεσται', text: '<span class="gk">Τετέλεσται.</span> <i>It is finished</i>, but the reading has only begun, Master Theophilus. Keep your words fresh in Review, and keep reading!' },
+      { cam: behindPlayer(), look: () => V(pos.x, pos.y + 1.4, pos.z), dur: 1.2, cut: false },
+    ]);
   }
 
   for (const b of bursts) {
     b.t -= dt; const p = b.pts.geometry.attributes.position;
     for (let i = 0; i < b.v.length; i++) { b.v[i].y -= 9 * dt; p.setXYZ(i, p.getX(i) + b.v[i].x * dt, p.getY(i) + b.v[i].y * dt, p.getZ(i) + b.v[i].z * dt); }
     p.needsUpdate = true; b.pts.material.opacity = Math.max(0, b.t);
-    if (b.t <= 0) { scene.remove(b.pts); b.dead = true; }
+    if (b.t <= 0) { scene.remove(b.pts); b.pts.geometry.dispose(); b.pts.material.dispose(); b.dead = true; }
   }
   for (let i = bursts.length - 1; i >= 0; i--) if (bursts[i].dead) bursts.splice(i, 1);
-  for (const wa of W.water) {
+  if (!LOW) for (const wa of waters) {
     const g = wa.geometry.attributes.position;
-    for (let i = 0; i < g.count; i++) { const x = g.getX(i), y = g.getY(i); g.setZ(i, Math.sin(x * 0.5 + t * 1.6) * 0.08 + Math.cos(y * 0.7 + t * 1.2) * 0.06); }
-    g.needsUpdate = true; wa.geometry.computeVertexNormals();
+    for (let i = 0; i < g.count; i++) { const x = g.getX(i), z = g.getZ(i); g.setY(i, Math.sin(x * 0.5 + t * 1.6) * 0.06 + Math.cos(z * 0.7 + t * 1.2) * 0.05); }
+    g.needsUpdate = true;
   }
+  for (let i = anims.length - 1; i >= 0; i--) if (anims[i](dt, t) === false) anims.splice(i, 1);
+  updateCritters(dt, t, pos);
   updateAmbience(dt, t, pos);
 
   if ((saveT += dt) > 5) { saveT = 0; savePos(); }
@@ -1179,7 +1421,19 @@ function snapCamera() {
   camera.position.set(pos.x + Math.sin(cam.yaw) * ch, pos.y + 1.4 + Math.sin(cam.pitch) * cd, pos.z + Math.cos(cam.yaw) * ch);
   camera.lookAt(pos.x, pos.y + 1.4, pos.z);
 }
-function savePos() { const w = ws(); w.x = +player.position.x.toFixed(2); w.z = +player.position.z.toFixed(2); w.yaw = +cam.yaw.toFixed(3); E.save(); }
+function savePos() { const w = ws(); w.zone = WI; w.x = +player.position.x.toFixed(2); w.z = +player.position.z.toFixed(2); w.yaw = +cam.yaw.toFixed(3); E.save(); }
+
+// Phones: if frames run slow, lower the resolution a little (and raise it again when there is headroom)
+const perf = { acc: 0, n: 0, t: 0 };
+function adaptQuality(dt) {
+  perf.acc += dt; perf.n++;
+  if ((perf.t += dt) < 2) return;
+  const avg = perf.acc / perf.n; perf.acc = perf.n = perf.t = 0;
+  let pr = pixelRatio;
+  if (avg > 1 / 40 && pr > 0.75) pr = Math.max(0.75, pr - 0.25);
+  else if (avg < 1 / 57 && pr < MAXPR) pr = Math.min(MAXPR, pr + 0.25);
+  if (pr !== pixelRatio) { pixelRatio = pr; renderer.setPixelRatio(pr); renderer.setSize(innerWidth, innerHeight); }
+}
 let mode = 'world', worldShown = false, stage;
 function loop() {
   if (!active) return;
@@ -1187,6 +1441,7 @@ function loop() {
   const dt = Math.min(0.05, clock.getDelta());
   if (mode === 'stage') { stage.update(dt, clock.elapsedTime); stage.render(renderer); }
   else { step(dt); renderer.render(scene, camera); }
+  adaptQuality(dt);
 }
 function startLoop() { if (!active) { active = true; clock.getDelta(); loop(); } }
 function resize() {
@@ -1210,62 +1465,54 @@ W.show = () => {
   refreshMarkers();
   for (const sc of scrolls) sc.g.visible = !(E.state.scrolls || {})[sc.p.id];
   snapCamera();
-  for (const p of pending) p(); pending = [];
   startLoop();
-  const w = ws();
-  if (!w.intro) {
-    w.intro = true; E.save();
-    dialog('📜 The Scribe\'s Journey', `<p>You are <b>Θεόφιλος</b> (Theophilus), an apprentice scribe in Alphabet Hollow.</p>
-      <p>The scrolls of the Great Library have been scattered across the land, and their words are fading into forgetfulness. Only someone who can read the ancient tongue can restore them.</p>
-      <p>Learn Greek from the mentors, restore the lost scrolls, banish the Shades of Forgetting, and win your way past each guardian to the Great Library.</p>
-      <p class="muted small">Start by collecting the glowing letters along the road, then speak to <b>Alphaeus</b>. Follow the golden light!</p>`, [{ label: 'Begin the journey', cls: 'primary' }]);
-  }
+  const todo = pending; pending = [];
+  if (todo.length) todo.forEach(p => p());
+  else setTimeout(arrive, 400);
 };
 W.hide = () => {
   if (mode === 'world' && worldShown) savePos();
+  if (cine) endCutscene();
   worldShown = false; mode = 'world'; if (stage) stage.exit();
   active = false; cancelAnimationFrame(raf); root.classList.remove('on', 'staging'); closeDialog();
 };
 // The 3D trial stage used by every lesson, boss, review and arcade game.
 W.stage = {
   get ok() { return !!stage; },
-  enter(kind, unit) { if (mode === 'world' && worldShown) savePos(); closeDialog(); mode = 'stage'; root.classList.add('on', 'staging'); resize(); stage.enter(kind, unit); startLoop(); },
+  enter(kind, unit) { if (mode === 'world' && worldShown) savePos(); if (cine) endCutscene(); closeDialog(); mode = 'stage'; root.classList.add('on', 'staging'); resize(); stage.enter(kind, unit); startLoop(); },
   ask: (q, h) => stage.ask(q, h), reveal: (ok, c, r) => stage.reveal(ok, c, r), result: ok => stage.result(ok),
   teach: item => stage.teach(item), trial: foe => stage.trial(foe), mini: (q, done) => stage.mini(q, done),
   hp: f => stage.hp(f), combo: n => stage.combo(n), celebrate: w => stage.celebrate(w), orderLine: () => stage.orderLine(), lock: () => stage.lock(),
+  hint: idx => stage.hint(idx), slow: s => stage.slow(s), shield: on => stage.shield(on), stopMini: () => stage.stopMini(),
   get active() { return mode === 'stage'; },
 };
 W.onLessonDone = (node, r) => {
-  if (node.type === 'boss' && r.passed) pending.push(() => {
-    const e = ents.find(x => x.kind === 'guardian' && x.zone === node.unit);
-    KG.app.toast(`⚔ ${esc(e.label)} bows. <b>The gate opens!</b>`, 'gold');
-    setTimeout(() => dialog(esc(e.label), `<p>“${esc(KG.story.guardian[node.unit])}”</p><p class="muted small">${node.unit < NZ - 1 ? `A portal now glows in the gate. Step through it to reach <b>${esc(ZONES[node.unit + 1].name)}</b>.` : 'The way to the Great Library is open.'}</p>`, [{ label: 'Onward', cls: 'primary' }]), 600);
-    burst(new THREE.Vector3(pathX(gateZ(node.unit)), groundAt(pathX(gateZ(node.unit)), gateZ(node.unit)) + 3, gateZ(node.unit)), 0xffd166);
+  if (node.type === 'boss' && r.passed && r.firstClear) pending.push(() => {
+    if (WI !== node.unit) { buildWorld(node.unit); placeAt('gate'); snapCamera(); }
+    setTimeout(() => cutscene(guardianShots(node.unit)), 300);
   });
   if (node.type === 'reading' && r.passed && r.firstClear) pending.push(() => {
     const e = ents.find(x => x.kind === 'pedestal' && x.node.id === node.id);
     if (e) burst(new THREE.Vector3(e.x, groundAt(e.x, e.z) + 2, e.z), 0xffffff);
   });
 };
-W.debug = { player, cam, P, ents, wisps, questTarget, teleport: (x, z) => { player.position.set(x, groundAt(x, z), z); snapCamera(); } };
+W.travel = (i, where) => travel(i, where);
+W.debug = { player, cam, P, ents, wisps, questTarget, get world() { return WI; }, groundAt: (x, z) => groundAt(x, z), along: (t, s, o) => along(t, s, o), travel, cutscene, endCutscene, get cine() { return cine; }, gate: () => gate,
+  teleport: (x, z) => { player.position.set(x, groundAt(x, z), z); snapCamera(); } };
 
 // ── build ─────────────────────────────────────────────────────
 (async () => {
   try { await Promise.race([document.fonts.load(`700 40px "Gentium Plus"`), new Promise(r => setTimeout(r, 2500))]); } catch (e) { /* fall back to serif */ }
-  buildTerrain();
-  scatterTrees();
-  grass();
-  skyDecor();
-  scenery();
-  buildEntities();
-  buildCollectibles();
-  buildWisps();
   const w = ws();
-  player.position.set(w.x, groundAt(w.x, w.z), w.z);
-  if (typeof w.yaw === 'number') cam.yaw = w.yaw;
-  camera.position.set(w.x, groundAt(w.x, w.z) + 5, w.z + 8);
+  const start = reachable(w.zone) ? w.zone : 0;
+  buildWorld(start);
+  if (typeof w.x === 'number' && start === w.zone) placeAt({ x: Math.max(-R + 8, Math.min(R - 8, w.x)), z: Math.max(-R + 8, Math.min(R - 8, w.z)), yaw: w.yaw });
+  else placeAt('spawn');
+  if (typeof w.yaw === 'number' && start === w.zone) cam.yaw = w.yaw;
+  if (backPortal && Math.hypot(player.position.x - backPortal.x, player.position.z - backPortal.z) > 5) backPortal.armed = true;
+  snapCamera();
   setPet();
-  stage = createStage({ renderer, person, golem, wispMesh, ZONES, KG, animatePerson, applyLook, buildPet, animatePet });
+  stage = createStage({ renderer, person, golem, wispMesh, ZONES, KG, animatePerson, applyLook, buildPet, animatePet, GOLEM_COL });
   W.debug.stage = stage;
   W.ok = true;
   document.dispatchEvent(new Event('world-ready'));

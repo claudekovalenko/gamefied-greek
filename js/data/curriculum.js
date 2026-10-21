@@ -133,8 +133,8 @@ KG.units = [
 ];
 
 KG.levelTitles = [
-  [1, 'Alphabet Novice'], [3, 'Catechumen'], [5, 'Scribe'], [8, 'Lector'], [11, 'Disciple'],
-  [15, 'Scholar'], [20, 'Exegete'], [25, 'Translator'], [30, 'Master of Koine'],
+  [1, 'Alphabet Novice'], [3, 'Apprentice'], [5, 'Spell-Reader'], [8, 'Lector'], [11, 'Word-Weaver'],
+  [15, 'Scholar Wizard'], [20, 'Exegete'], [25, 'Translator'], [30, 'Archmage of Koine'],
 ];
 
 // Achievement checks receive (state, helpers) and return true when earned.
@@ -161,7 +161,7 @@ KG.achievements = [
   { id: 'bossall', icon: '🏆', name: 'Champion', desc: 'Defeat all 9 bosses', test: (s, h) => KG.units.every(u => h.unitDone(u.id)) },
   { id: 'arcade', icon: '🎮', name: 'Arcade Ace', desc: 'Score 20+ in an arcade game', test: s => Object.values(s.arcade).some(v => v >= 20) },
   { id: 'review50', icon: '🔁', name: 'Spaced Out', desc: 'Answer 50 review cards', test: s => s.stats.reviews >= 50 },
-  { id: 'level5', icon: '⭐', name: 'Scribe', desc: 'Reach level 5', test: (s, h) => h.level() >= 5 },
+  { id: 'level5', icon: '⭐', name: 'Spell-Reader', desc: 'Reach level 5', test: (s, h) => h.level() >= 5 },
   { id: 'level10', icon: '🌟', name: 'Rising Scholar', desc: 'Reach level 10', test: (s, h) => h.level() >= 10 },
   { id: 'letters', icon: '✨', name: 'Letter Collector', desc: 'Collect all 24 glowing letters in the world', test: s => ((s.world || {}).letters || []).length >= 24 },
   { id: 'shades', icon: '👻', name: 'Shade Banisher', desc: 'Banish 25 Shades of Forgetting', test: s => ((s.world || {}).wisps || 0) >= 25 },

@@ -1,4 +1,4 @@
-// Cosmetics for your scribe: won from guardians' treasure chests or bought with coins.
+// Cosmetics for your apprentice wizard: won from guardians' treasure chests or bought with coins.
 window.KG = window.KG || {};
 
 KG.wardrobe = {
@@ -12,14 +12,16 @@ KG.wardrobe = {
     { id: 'gold', name: 'Golden Robe', color: 0xc9a43a, price: 200 },
   ],
   hat: [
-    { id: 'hood', name: 'Scribe\'s Hood', icon: '🧥', price: 0 },
+    { id: 'apprentice', name: 'Apprentice\'s Hat', icon: '🎓', price: 0 },
+    { id: 'hood', name: 'Traveller\'s Hood', icon: '🧥', price: 0 },
     { id: 'none', name: 'Bare Head', icon: '🙂', price: 0 },
-    { id: 'wizard', name: 'Wizard Hat', icon: '🧙', price: 120 },
+    { id: 'wizard', name: 'Starry Wizard Hat', icon: '🧙', price: 120 },
     { id: 'laurel', name: 'Laurel Wreath', icon: '🌿', price: 90 },
     { id: 'crown', name: 'Scholar\'s Crown', icon: '👑', price: 250 },
   ],
   staff: [
-    { id: 'none', name: 'No Staff', icon: '✋', price: 0 },
+    { id: 'wand', name: 'Apprentice Wand', icon: '🪄', price: 0 },
+    { id: 'none', name: 'Empty Hands', icon: '✋', price: 0 },
     { id: 'oak', name: 'Oak Staff', icon: '🪵', price: 60 },
     { id: 'crystal', name: 'Crystal Staff', icon: '🔷', price: 120 },
     { id: 'lightning', name: 'Lightning Staff', icon: '⚡', price: 200 },

@@ -12,12 +12,16 @@ Koine Quest is a third-person 3D journey in the spirit of *The Hobbit*. You are 
 **Koine wizard**, travelling through nine worlds from Alphabet Hollow to the Great Library. Every grammar rule you
 master is a **spell**, and the goal is to read and translate the Greek New Testament freely.
 
-- **Nine worlds**, each with its own sky, light and weather: morning in Alphabet Hollow, mist in the Wordwood,
-  golden fields, dusk over the Ruins of Time, fireflies on Mirror Lake, snow on the Declension Peaks. A short
-  story greets you in each one.
-- **Mentors** give you lessons as quests. A golden light and the quest arrow always show where to go next.
-- **Guardians** block each world's gate until you beat them in a boss battle. Then the gate becomes a
-  **portal** to the next world, and a **world map** takes you back to any world you've reached.
+- **Nine separate worlds**, each its own valley with its own road, landmarks, creatures and weather:
+  the round-doored village and Great Oak of Alphabet Hollow, the giant Word Tree of the misty Wordwood, the
+  windmill and wheat of the Fields, the bridge and mill of Verb River, Aquila's tents and cranes on Builders'
+  Ridge, the Hourglass of Ages in the Ruins of Time, the island shrine on Mirror Lake, the switchback climb of the
+  Declension Peaks and the colonnaded avenue to the Great Library.
+- **Portals** join the worlds. Beat a world's guardian and its gate becomes a portal to the next world; the
+  portal you arrived through leads back. The **world map** takes you to any world you've reached.
+- **Cutscenes**: arriving in a world, the camera sweeps over it and its master greets you; beating a guardian,
+  it bows, speaks, and the portal blazes open.
+- **Masters** give you lessons as quests. A golden light and the quest arrow always show where to go next.
 - **Shades of Forgetting** roam the road. Touch one and you must remember a word to banish it: this is
   your spaced-repetition review. An **elite shade** in each world hunts your weakest words.
 - **Collect** glowing letters, daily coins, and **lost scrolls**: NT passages to read and translate in the Reading Room.
@@ -27,17 +31,24 @@ On a phone, drag on the left side to walk, drag on the right to look, and use th
 
 ## How a lesson works
 
-Every lesson is played on a floating island stage in 3D:
+Every lesson is played in 3D, in a place from the world you're in: a village green, a forest clearing,
+a wheat field, a riverbank, a builders' yard, the ruins, a lake-shore pier, a snowy mountain ledge or the Library hall.
 
 1. **Your master teaches** one small idea, showing it on real Greek with the key part glowing in the air.
 2. **You try it at once** with a guided question. A miss explains the rule and lets you try again, with no penalty.
 3. Teach → try repeats a few times, then **a trial** begins against a challenger with a health bar
-   (a training dummy, a living spellbook, Kleon the rival apprentice, or a shade).
+   (each world's own creature: a training dummy, a treant, a scarecrow, the riddle toad, a clockwork builder,
+   the sand serpent, the mirror wraith, the snow yeti, the ink drake; or a living spellbook, Kleon the rival
+   apprentice, or a shade).
 4. Trials mix answer tablets you strike with bolts of light, matching beams, translation bridges and **mini-games**:
    - **Word Rain** (vocabulary): catch the falling word that means the English target.
    - **Declension Defense** (nouns): strike each marching form with its case.
    - **Parsing Forge** (verbs): name the tense, then the person and number.
    - **Verse Race** (readings): pick the next piece of the translation against the clock.
+
+**Power-ups** are earned by finishing daily quests, keeping your day streak, reaching an 8× combo and setting
+Arcade records: 💡 **Hint** removes two wrong answers, 🛡 **Shield** blocks one lost heart (guardians and shades),
+⏳ **Slow Time** slows the clock in timed games.
 
 Lessons move on automatically after each answer: quickly when you're right, more slowly when there's a
 correction to read. Tap to skip ahead, or change the speed in Settings. Finished grammar lessons add a spell to
@@ -55,16 +66,17 @@ Twenty passages, from John 1:1–5 to Revelation 21, are collected as scrolls on
 | | |
 |---|---|
 | 🗺 **Path** | 9 units, 82 lessons (including 9 bosses and 22 NT readings). Each lesson unlocks the next. Earn up to ★★★ per lesson. |
-| ⭐ **XP & levels** | Every answer earns XP. Climb from *Alphabet Novice* to *Master of Koine*. |
+| ⭐ **XP & levels** | Every answer earns XP. Climb from *Alphabet Novice* to *Archmage of Koine*. |
 | 🔥 **Streaks & combos** | Daily streak, a daily XP goal you choose, and combo bonuses for answers in a row. |
 | 📋 **Daily quests** | Three goals a day (answers, lessons, reviews, shades, verses, combos…) for coins and XP. |
 | 🎁 **Loot & wardrobe** | Guardians drop treasure chests: robes, hats, staffs and companions (owl, dove, lamb). Coins buy the rest. |
 | 🏆 **31 achievements** | From *First Steps* to *For God So Loved* (translate John 3:16) and *The Great Library*. |
-| 🎮 **Arcade** | 60-second speed rounds: Alphabet Blitz, Vocab Lightning, Parse Rush. |
+| 🎮 **Arcade** | 60-second high-score rounds: the 3D spell games (Word Rain, Declension Defense, Parsing Forge, Verse Race) and the speed rounds (Alphabet Blitz, Vocab Lightning, Parse Rush). |
 | 🔁 **Review** | Spaced-repetition deck for every word you study, plus a notebook of your mistakes. |
 | 📖 **Library** | Reading Room, scroll collection, reading-readiness score, Spellbook and lexicon. |
 
-Settings include auto-advance speed, **Graphics: High/Low** (for older phones), 2D lessons instead of 3D, sound,
+Settings include auto-advance speed, **Graphics: High/Low** (Low drops grass, shadows and outlines and thins the
+trees; on any setting the resolution adapts when frames run slow), 2D lessons instead of 3D, sound,
 read-aloud, and unlocking all lessons if you already know some Greek.
 
 ## The curriculum
@@ -142,8 +154,10 @@ npm run make-icons   # re-render icons/*.png from the SVGs (needs Playwright)
 | `js/app.js` | screens, lesson player, arcade, effects |
 | `js/data/teach.js` | teaching beats and the spell for every grammar lesson |
 | `js/data/passages.js`, `story.js`, `wardrobe.js` | collectible scrolls, story beats, cosmetics |
-| `js/world.js` | the 3D world (Three.js, vendored in `js/vendor/` under the MIT license) |
-| `js/stage.js` | the 3D lesson stage: tablets, challengers, mini-games |
+| `js/world.js` | the 3D world engine: terrain, portals, cutscenes, characters (Three.js, vendored in `js/vendor/` under the MIT license) |
+| `js/worlds.js`, `js/props.js` | the nine worlds' roads, ground shapes and landmarks |
+| `js/stage.js` | the 3D lesson stage: tablets, challengers, mini-games, power-ups |
+| `js/stagesets.js` | the trial places for each world and each world's creature |
 | `js/reader.js` | the Reading Room |
 | `data/nt/` | the whole Greek NT, lexicon and English comparison, built by `scripts/build-nt.mjs` (see its README for sources and licenses) |
 | `sw.js`, `manifest.webmanifest`, `icons/` | PWA: offline cache and home-screen install |

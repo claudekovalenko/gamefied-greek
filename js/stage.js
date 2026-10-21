@@ -1,10 +1,14 @@
 // The 3D trial stage: every lesson, boss fight, review and arcade round is
-// played here. The hero faces an opponent on a floating island; questions
+// played here. The hero faces an opponent in a place from the current world
+// (js/stagesets.js); questions
 // float overhead and answers are stone tablets you strike with light.
 import * as THREE from './vendor/three.module.min.js';
+import { makeSets, THEMES } from './stagesets.js';
 
 export function createStage(ctx) {
-  const { renderer, person, golem, wispMesh, ZONES, KG } = ctx;
+  const { renderer, person, golem, wispMesh, ZONES, KG, GOLEM_COL } = ctx;
+  const LOW = (KG.engine.state.settings || {}).gfx === 'low';
+  const sets = makeSets(THREE, { LOW, golem });
   const U = KG.util;
   const E_look = () => KG.engine.look();
   const GK = '"Gentium Plus", "Noto Serif", Georgia, serif';
@@ -41,57 +45,27 @@ export function createStage(ctx) {
   const M = (color, o = {}) => new THREE.MeshStandardMaterial(Object.assign({ color, roughness: 0.85, flatShading: true }, o));
   const shadowed = m => { m.castShadow = m.receiveShadow = true; return m; };
 
-  // floating island arena
-  const island = new THREE.Group(); scene.add(island);
-  {
-    const top = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(15, 14, 1.2, 40), M(0xd9cdb0)));
-    top.position.y = -0.6; island.add(top);
-    const ring = shadowed(new THREE.Mesh(new THREE.TorusGeometry(9, 0.12, 6, 60), M(0xe0a526, { metalness: 0.6, roughness: 0.4 })));
-    ring.rotation.x = Math.PI / 2; ring.position.y = 0.02; island.add(ring);
-    const inner = shadowed(new THREE.Mesh(new THREE.CircleGeometry(8.9, 48), M(0xcbbd9c)));
-    inner.rotation.x = -Math.PI / 2; inner.position.y = 0.01; island.add(inner);
-    const grass = new THREE.Mesh(new THREE.TorusGeometry(14.6, 0.7, 6, 48), M(0x6fae4f));
-    grass.rotation.x = Math.PI / 2; grass.position.y = -0.1; grass.scale.z = 0.4; island.add(grass);
-    S.grass = grass;
-    const rock = new THREE.Mesh(new THREE.ConeGeometry(14.5, 16, 12), M(0x8a7a66));
-    rock.rotation.x = Math.PI; rock.position.y = -9.2; island.add(rock);
-    // columns around the back half
-    for (let i = 0; i < 9; i++) {
-      const a = Math.PI * (1.1 + i * 0.1) + Math.PI / 2;
-      const x = Math.cos(a) * 12.5, z = Math.sin(a) * 12.5;
-      const h = i % 3 === 1 ? 3.2 : 6;
-      const c = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, h, 12), M(0xeee6d4)));
-      c.position.set(x, h / 2, z); island.add(c);
-      const cap = shadowed(new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.35, 1.4), M(0xe0d6c0)));
-      cap.position.set(x, h + 0.17, z); island.add(cap);
+  // the place where the trial is held: a set for each world, the sky island for the arcade
+  let SET = null, setKey = '';
+  function useSet(theme, tint) {
+    const key = theme + (tint || '');
+    if (setKey !== theme) {
+      if (SET) {
+        scene.remove(SET.group);
+        SET.group.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) for (const m of [].concat(o.material)) { if (m.map) m.map.dispose(); m.dispose(); } });
+      }
+      SET = sets.build(theme, THEMES.indexOf(theme) + 2); scene.add(SET.group); setKey = theme;
+      S.flames = SET.flames;
     }
-    // braziers with flames
-    S.flames = [];
-    for (const s of [-1, 1]) {
-      const b = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.3, 1.2, 10), M(0x6a5a4a, { metalness: 0.4 })));
-      b.position.set(s * 7.5, 0.6, -2); island.add(b);
-      const f = new THREE.Mesh(new THREE.ConeGeometry(0.42, 1.1, 8), new THREE.MeshBasicMaterial({ color: 0xffb040 }));
-      f.position.set(s * 7.5, 1.7, -2); island.add(f); S.flames.push(f);
-      const l = new THREE.PointLight(0xffa040, 6, 14, 1.6); l.position.set(s * 7.5, 2.4, -2); island.add(l); f.userData.light = l;
-    }
+    let [top, mid, bot] = SET.sky;
+    if (tint === 'shade' && !SET.indoor) { const c = (a, b) => new THREE.Color(a).lerp(new THREE.Color(b), 0.45).getHex(); top = c(top, 0x2a1a4a); mid = c(mid, 0x7a6aa8); bot = c(bot, 0x3a2a4a); }
+    paintSky(top, mid, bot); scene.fog.color.setHex(mid); scene.fog.near = SET.fog[0]; scene.fog.far = SET.fog[1];
+    sky.visible = !SET.indoor;
+    hemi.intensity = (SET.hemi || 1.15) * (tint === 'shade' ? 0.7 : 1);
+    sun.intensity = SET.indoor ? 0.8 : 2.4;
+    void key;
   }
-  // distant floating islands and clouds
-  for (let i = 0; i < 9; i++) {
-    const a = i / 9 * Math.PI * 2, r = 55 + (i % 3) * 18;
-    const g = new THREE.Group();
-    const t = new THREE.Mesh(new THREE.CylinderGeometry(5, 4, 1, 9), M(0x7fae5f)); g.add(t);
-    const k = new THREE.Mesh(new THREE.ConeGeometry(4.5, 8, 8), M(0x8a7a66)); k.rotation.x = Math.PI; k.position.y = -4.5; g.add(k);
-    const tr = new THREE.Mesh(new THREE.IcosahedronGeometry(2, 0), M(0x4f8f3a)); tr.position.y = 2.4; g.add(tr);
-    g.position.set(Math.cos(a) * r, -6 + (i % 4) * 5, Math.sin(a) * r - 10);
-    scene.add(g);
-  }
-  const clouds = [];
-  for (let i = 0; i < 14; i++) {
-    const c = new THREE.Group();
-    for (let k = 0; k < 4; k++) { const s = new THREE.Mesh(new THREE.IcosahedronGeometry(2 + Math.random() * 2, 1), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true })); s.position.set(k * 2.5 - 4, Math.random(), Math.random() * 2); c.add(s); }
-    c.position.set((Math.random() - 0.5) * 160, -14 - Math.random() * 10, -60 + Math.random() * 120);
-    scene.add(c); clouds.push(c);
-  }
+  S.flames = [];
 
   // hero
   const hero = ctx.applyLook(new THREE.Group());
@@ -101,10 +75,13 @@ export function createStage(ctx) {
   const aura = new THREE.Mesh(new THREE.TorusGeometry(1, 0.08, 8, 40), new THREE.MeshBasicMaterial({ color: 0xffd166, transparent: true, opacity: 0 }));
   aura.rotation.x = Math.PI / 2; aura.position.set(0, 0.05, 5.2); scene.add(aura);
 
+  // the Shield power-up: a glowing bubble around the hero
+  const shieldBubble = new THREE.Mesh(new THREE.IcosahedronGeometry(1.5, 1), new THREE.MeshBasicMaterial({ color: 0x7fd0ff, transparent: true, opacity: 0.3, depthWrite: false, blending: THREE.AdditiveBlending, wireframe: true }));
+  shieldBubble.position.set(0, 1.2, 5.2); shieldBubble.visible = false; scene.add(shieldBubble);
+
   // opponent slot
   let opp = null, hpBar = null;
   const oppPos = new THREE.Vector3(0, 1.1, -8);
-  { const dais = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(2.6, 3, 1.1, 24), M(0xe0d6c0))); dais.position.set(0, 0.55, -8); island.add(dais); }
   function hpSprite(frac) {
     const c = document.createElement('canvas'); c.width = 256; c.height = 36; const x = c.getContext('2d');
     x.fillStyle = 'rgba(20,20,30,.8)'; x.beginPath(); x.roundRect(0, 0, 256, 36, 18); x.fill();
@@ -113,10 +90,13 @@ export function createStage(ctx) {
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
     return t;
   }
+  const FOES = ['guardian', 'shade', 'dummy', 'imp', 'rival', 'beast'];
   function setOpponent(kind, unit) {
     if (opp) scene.remove(opp);
+    if (S.hpObj) { scene.remove(S.hpObj); S.hpObj = null; }
     const Z = ZONES[unit];
-    if (kind === 'guardian') { opp = golem([0x8a8a8a, 0x6a7a4a, 0xc9a43a, 0x4a6a8a, 0x6a6a7a, 0xa08060, 0xa0b0c0, 0xcfe0ff, 0xe0c060][unit]); opp.scale.setScalar(1.25); }
+    if (kind === 'guardian') { opp = golem(GOLEM_COL[unit], unit); opp.scale.setScalar(1.25); }
+    else if (kind === 'beast') { opp = sets.beast(unit); }
     else if (kind === 'shade') { opp = wispMesh(); opp.scale.setScalar(2.6); opp.userData.float = 2.6; }
     else if (kind === 'arcade') {
       opp = new THREE.Group();
@@ -159,9 +139,9 @@ export function createStage(ctx) {
     opp.position.copy(oppPos); opp.rotation.y = 0;
     scene.add(opp);
     hpBar = null;
-    if (['guardian', 'shade', 'dummy', 'imp', 'rival'].includes(kind)) {
+    if (FOES.includes(kind)) {
       hpBar = new THREE.Sprite(new THREE.SpriteMaterial({ map: hpSprite(1), depthWrite: false }));
-      hpBar.scale.set(4, 0.56, 1); hpBar.position.set(0, kind === 'guardian' ? 6 : kind === 'shade' ? 5.4 : 4.4, 0); hpBar.position.add(oppPos);
+      hpBar.scale.set(4, 0.56, 1); hpBar.position.set(0, kind === 'guardian' ? 6 : kind === 'shade' ? 5.4 : opp.userData.hpY || 4.4, 0); hpBar.position.add(oppPos);
       scene.add(hpBar); S.hpObj = hpBar;
     } else if (S.hpObj) { scene.remove(S.hpObj); S.hpObj = null; }
   }
@@ -412,7 +392,7 @@ export function createStage(ctx) {
   }
   function choose(g) {
     const p = g.userData.pick;
-    if (p.type === 'opt') { if (S.answered) return; S.answered = true; S.h.pick(p.i); }
+    if (p.type === 'opt') { if (S.answered || p.gone) return; S.answered = true; S.h.pick(p.i); }
     else if (p.type === 'mini' && MG) {
       if (MG.q.game === 'rain') rainTap(g);
       else if (MG.q.game === 'defense') { if (p.gate) defenseTap(g); }
@@ -453,13 +433,7 @@ export function createStage(ctx) {
   S.ok = true;
   S.enter = (kind, unit = 0) => {
     S.kind = kind; S.unit = unit;
-    const Z = ZONES[unit];
-    const g = new THREE.Color(Z.grass);
-    S.grass.material.color.copy(g);
-    const tints = { guardian: [0x3a4a6a, 0x9ab0d0, 0x4a3a3a], shade: [0x2a1a4a, 0x7a6aa8, 0x3a2a4a], arcade: [0x1f3b6a, 0x7fb0e0, 0xe0d0b0] };
-    const [top, mid, bot] = tints[kind] || [0x4a88c8, 0xb8d8f0, 0xf0e4c8];
-    paintSky(top, mid, bot); scene.fog.color.setHex(mid);
-    hemi.intensity = kind === 'shade' ? 0.7 : 1.15;
+    useSet(kind === 'arcade' ? 'arena' : THEMES[unit] || 'arena', kind === 'shade' ? 'shade' : '');
     setOpponent(kind, unit);
     clearUI(); S.q = null;
     S.active = true; S.comboN = 0; aura.material.opacity = 0;
@@ -469,7 +443,7 @@ export function createStage(ctx) {
     pet = ctx.buildPet(E_look().pet);
     if (pet) { pet.position.set(1.5, pet.userData.fly ? 2.6 : 0, 5.6); pet.rotation.y = Math.PI; scene.add(pet); }
   };
-  S.exit = () => { S.active = false; clearUI(); S.q = null; S.anims = []; MG = null; };
+  S.exit = () => { S.active = false; clearUI(); S.q = null; S.anims = []; MG = null; S.slowT = 0; S.shield(false); };
   S.ask = (q, handlers) => {
     MG = null;
     clearUI(); S.plank = null; S.q = q; S.h = handlers; S.answered = false; S.locked = false; S.big = null;
@@ -544,6 +518,10 @@ export function createStage(ctx) {
     setTimeout(() => { MG = null; cb({ ok, hits, total, text }); }, 500);
   }
   function removePick(g) { ui.remove(g); S.picks = S.picks.filter(x => x !== g); }
+  // the arcade counts every hit and miss as it happens
+  const hit = () => { if (MG && MG.q.onHit) MG.q.onHit(); };
+  const miss = () => { if (MG && MG.q.onMiss) MG.q.onMiss(); };
+  S.stopMini = () => { MG = null; clearUI(); };
   S.mini = (q, done) => {
     clearUI(); S.q = q; S.answered = false; S.locked = false;
     MG = { q, done, hits: 0, total: 0, t: 0, over: false, items: [] };
@@ -578,17 +556,17 @@ export function createStage(ctx) {
       g.position.y -= g.userData.vy * dt; g.userData.base.y = g.position.y; g.rotation.z = Math.sin(MG.t * 3 + g.position.x) * 0.06;
       if (g.position.y < -hh * 0.95) {
         g.visible = false;
-        if (g.userData.pick.ok) { MG.wait = true; KG.app.sfx('bad'); oppReact(false); setTimeout(rainRound, 700); }
+        if (g.userData.pick.ok) { MG.wait = true; KG.app.sfx('bad'); oppReact(false); miss(); setTimeout(rainRound, 700); }
       }
     }
   }
   function rainTap(g) {
     if (MG.wait || !g.visible) return;
     if (g.userData.pick.ok) {
-      MG.hits++; MG.wait = true; KG.app.sfx('good'); heroCast();
+      MG.hits++; hit(); MG.wait = true; KG.app.sfx('good'); heroCast();
       orb(heroHand(), worldPos(g), 0xffd166, () => { glow(g); oppReact(true); });
       setTimeout(rainRound, 800);
-    } else { KG.app.sfx('bad'); shatter(g); }
+    } else { KG.app.sfx('bad'); shatter(g); miss(); }
   }
 
   // Declension Defense: strike each marching form with its case
@@ -618,16 +596,16 @@ export function createStage(ctx) {
     const g = MG.cur, { hh } = frame();
     if (!g || MG.lock) return;
     g.position.y -= g.userData.vy * dt; g.userData.base.y = g.position.y;
-    if (g.position.y < -hh * 0.42) { MG.lock = true; KG.app.sfx('bad'); oppReact(false); shatter(g); setTimeout(defenseNext, 700); }
+    if (g.position.y < -hh * 0.42) { MG.lock = true; KG.app.sfx('bad'); oppReact(false); shatter(g); miss(); setTimeout(defenseNext, 700); }
   }
   function defenseTap(gate) {
     const g = MG.cur; if (!g || MG.lock) return;
     MG.lock = true;
     const st = g.userData.stone, ok = st.cases.includes(gate.userData.pick.gate);
     heroCast();
-    if (ok) { MG.hits++; KG.app.sfx('good'); glow(gate); orb(heroHand(), worldPos(g), 0xffd166, () => { glow(g); setTimeout(defenseNext, 350); }); }
+    if (ok) { MG.hits++; hit(); KG.app.sfx('good'); glow(gate); orb(heroHand(), worldPos(g), 0xffd166, () => { glow(g); setTimeout(defenseNext, 350); }); }
     else {
-      KG.app.sfx('bad'); shatter(gate); setTimeout(() => { gate.visible = true; gate.scale.setScalar(1); }, 900);
+      KG.app.sfx('bad'); shatter(gate); miss(); setTimeout(() => { gate.visible = true; gate.scale.setScalar(1); }, 900);
       const right = MG.gates.find(x => st.cases.includes(x.userData.pick.gate)); if (right) glow(right, 0xffb040);
       setTimeout(defenseNext, 1100);
     }
@@ -667,9 +645,9 @@ export function createStage(ctx) {
     if (fits) {
       KG.app.sfx('good'); glow(g);
       if (MG.step === 0) { MG.tense = v; MG.step = 1; MG.lock = true; setTimeout(() => { MG.lock = false; forgeStep(); }, 500); }
-      else { MG.hits++; MG.lock = true; S.shake = 0.15; orb(heroHand(), worldPos(MG.big), 0xff9f40, () => { glow(MG.big, 0xff9f40); particles(worldPos(MG.big), 0xff9f40, 60, 6); }); setTimeout(() => { MG.big = null; forgeNext(); }, 1000); }
+      else { MG.hits++; hit(); MG.lock = true; S.shake = 0.15; orb(heroHand(), worldPos(MG.big), 0xff9f40, () => { glow(MG.big, 0xff9f40); particles(worldPos(MG.big), 0xff9f40, 60, 6); }); setTimeout(() => { MG.big = null; forgeNext(); }, 1000); }
     } else {
-      KG.app.sfx('bad'); shatter(g); oppReact(false); MG.lock = true;
+      KG.app.sfx('bad'); shatter(g); oppReact(false); MG.lock = true; miss();
       const r = it.reads[0];
       miniBanner(`${it.form} = ${r.tense} ${r.pn}${it.reads.length > 1 ? ' (or ' + it.reads.slice(1).map(x => x.tense + ' ' + x.pn).join(', ') + ')' : ''}`);
       setTimeout(() => { MG.big = null; forgeNext(); }, 2200);
@@ -683,8 +661,10 @@ export function createStage(ctx) {
     const { hh, hw, portrait } = frame();
     const b = banner(R.words.map(w => w.w + w.p).join(' '), Math.min(hw * 1.94, 14), portrait ? hh * 0.36 : hh * 0.3, true);
     place(b, 0, hh * 0.76); introAnim(b, 0);
-    const bar = new THREE.Mesh(new THREE.BoxGeometry(hw * 1.9, hh * 0.035, 0.1), new THREE.MeshBasicMaterial({ color: 0xffd166 }));
-    place(bar, 0, hh * 0.5); MG.bar = bar; MG.barW = hw * 1.9;
+    if (!MG.q.arcade) { // the arcade has its own clock
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(hw * 1.9, hh * 0.035, 0.1), new THREE.MeshBasicMaterial({ color: 0xffd166 }));
+      place(bar, 0, hh * 0.5); MG.bar = bar; MG.barW = hw * 1.9;
+    }
     raceChoices();
   }
   function raceChoices() {
@@ -707,15 +687,31 @@ export function createStage(ctx) {
     MG.left -= dt;
     if (MG.bar) { const f = Math.max(0, MG.left / MG.time); MG.bar.scale.x = Math.max(0.001, f); MG.bar.position.x = -MG.barW / 2 * (1 - f); MG.bar.material.color.setHex(f > 0.35 ? 0xffd166 : 0xe0453a); }
     hero.position.z = 5.2 - (MG.idx / MG.total) * 6;
-    if (MG.left <= 0) miniEnd(false, `Time ran out after ${MG.idx} of ${MG.total} pieces. Read the verse again, then race once more!`);
+    if (MG.left <= 0 && !MG.q.arcade) miniEnd(false, `Time ran out after ${MG.idx} of ${MG.total} pieces. Read the verse again, then race once more!`);
   }
   function raceTap(g) {
     if (MG.lock) return;
-    if (g.userData.pick.ok) { MG.hits++; MG.idx++; MG.built.push(g.userData.pick.val); KG.app.sfx('good'); glow(g); MG.lock = true; setTimeout(raceChoices, 350); }
-    else { KG.app.sfx('bad'); shatter(g); MG.left -= 2.5; S.shake = 0.2; }
+    if (g.userData.pick.ok) { MG.hits++; hit(); MG.idx++; MG.built.push(g.userData.pick.val); KG.app.sfx('good'); glow(g); MG.lock = true; setTimeout(raceChoices, 350); }
+    else { KG.app.sfx('bad'); shatter(g); MG.left -= 2.5; S.shake = 0.2; miss(); }
   }
 
   S.debugMini = () => MG; // used by the browser tests
+  // power-ups
+  S.hint = idx => {
+    for (const p of S.picks) {
+      const pk = p.userData.pick;
+      if (!pk || pk.type !== 'opt' || !idx.includes(pk.i)) continue;
+      pk.gone = true;
+      // the wrong tablet crumbles away
+      particles(worldPos(p), 0x9ad0ff, 24, 3);
+      tween(0.45, t => { p.scale.setScalar(Math.max(0.01, 1 - ease(t))); p.rotation.z = t * 0.6; }, () => { p.visible = false; });
+    }
+  };
+  S.shield = on => {
+    if (!on && S.shielded) particles(shieldBubble.position.clone(), 0x7fd0ff, 50, 6);
+    S.shielded = !!on;
+  };
+  S.slow = sec => { S.slowT = sec; particles(heroHand(), 0x9ad0ff, 50, 6); };
   S.orderLine = () => (S.order ? S.order.line.map(c => c.t) : []);
   S.lock = () => { S.locked = true; };
   // outcome animation for a multiple-choice answer (chosen may be -1 for timeouts)
@@ -740,7 +736,7 @@ export function createStage(ctx) {
     clearUI();
     if (win) {
       for (let i = 0; i < 4; i++) setTimeout(() => particles(new THREE.Vector3((Math.random() - 0.5) * 10, 4 + Math.random() * 3, -2 + Math.random() * 4), U.pick([0xffd166, 0x7fd0ff, 0xff8fab, 0x7ed58f]), 60, 8), i * 220);
-      if (opp && ['guardian', 'shade', 'dummy', 'imp', 'rival'].includes(S.oppKind)) tween(1.2, t => { opp.rotation.x = -t * 0.5; opp.position.y = oppPos.y - t * 2; opp.scale.setScalar((S.oppKind === 'shade' ? 2.6 : S.oppKind === 'guardian' ? 1.25 : 1) * (1 - t * 0.5)); });
+      if (opp && FOES.includes(S.oppKind)) tween(1.2, t => { opp.rotation.x = -t * 0.5; opp.position.y = oppPos.y - t * 2; opp.scale.setScalar((S.oppKind === 'shade' ? 2.6 : S.oppKind === 'guardian' ? 1.25 : 1) * (1 - t * 0.5)); });
       else if (opp && opp.userData.body) nod();
       tween(0.8, t => { hero.position.y = Math.sin(t * Math.PI) * 1.2; hero.rotation.y = Math.PI + t * Math.PI * 2; });
     } else {
@@ -768,20 +764,25 @@ export function createStage(ctx) {
     camera.updateMatrixWorld();
     uiRoot.position.copy(camera.position); uiRoot.quaternion.copy(camera.quaternion);
     for (const f of S.flames) { const s = 1 + Math.sin(t * 13 + f.position.x) * 0.12; f.scale.set(s, 1 + Math.sin(t * 9) * 0.18, s); f.userData.light.intensity = 5 + Math.sin(t * 17) * 1.2; }
-    for (const c of clouds) { c.position.x += dt * 1.2; if (c.position.x > 90) c.position.x = -90; }
+    if (SET) for (const fn of SET.tick) fn(dt, t);
     if (opp) {
       if (opp.userData.float) opp.position.y = oppPos.y + 1.2 + Math.sin(t * 2) * 0.3;
       if (opp.userData.spin) opp.userData.spin.rotation.y += dt * 1.2;
       if (opp.userData.legs) ctx.animatePerson(opp, 0, dt);
       if (opp.userData.flap) { opp.userData.book.position.y = 2.6 + Math.sin(t * 3) * 0.35; opp.userData.flap.forEach(h => { h.rotation.z = h.userData.sd * (0.35 + Math.sin(t * 9) * 0.45); }); }
       if (opp.userData.wobble && opp.userData.body) opp.userData.body.rotation.z = Math.sin(t * 2) * 0.03;
+      if (opp.userData.tick) opp.userData.tick(dt, t);
     }
     ctx.animatePerson(hero, 0, dt);
     if (pet) { if (pet.userData.fly) pet.position.y = 2.6 + Math.sin(t * 2.5) * 0.25; else pet.position.y = Math.abs(Math.sin(t * 3)) * 0.05; ctx.animatePet(pet, t, dt); }
     aura.scale.setScalar(1 + Math.sin(t * 4) * 0.08 + (S.comboN || 0) * 0.02); aura.rotation.z += dt;
     if (S.big) S.big.position.y = S.big.userData.base.y + Math.sin(t * 2) * 0.06;
     for (const p of S.picks) if (p.visible && p.userData.base && !(S.sel === p)) p.rotation.y = Math.sin(t * 1.3 + p.userData.base.x) * 0.04;
-    if (MG && !MG.over) { MG.t += dt; ({ rain: rainUpdate, defense: defenseUpdate, race: raceUpdate }[MG.q.game] || (() => {}))(dt); }
+    // Slow Time: the mini-game runs at half speed while it lasts
+    if (S.slowT > 0) S.slowT -= dt;
+    const mdt = S.slowT > 0 ? dt * 0.45 : dt;
+    shieldBubble.visible = !!S.shielded; if (S.shielded) { shieldBubble.rotation.y += dt; shieldBubble.material.opacity = 0.5 + Math.sin(t * 4) * 0.15; }
+    if (MG && !MG.over) { MG.t += mdt; ({ rain: rainUpdate, defense: defenseUpdate, race: raceUpdate }[MG.q.game] || (() => {}))(mdt); }
     else if (!MG) hero.position.z += (5.2 - hero.position.z) * Math.min(1, dt * 4);
     S.anims = S.anims.filter(fn => fn(dt) !== false);
   };

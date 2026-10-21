@@ -14,7 +14,7 @@ const ctx = { console, localStorage: { getItem: k => store[k] ?? null, setItem: 
 ctx.window = ctx;
 vm.createContext(ctx);
 ctx.fetch = async url => { const t = readFileSync(path.join(root, url), 'utf8'); return { ok: true, json: async () => JSON.parse(t) }; };
-for (const f of ['js/data/alphabet.js', 'js/data/vocab.js', 'js/data/grammar.js', 'js/data/readings.js', 'js/data/curriculum.js', 'js/data/passages.js', 'js/data/teach.js', 'js/data/wardrobe.js', 'js/engine.js']) {
+for (const f of ['js/data/alphabet.js', 'js/data/vocab.js', 'js/data/grammar.js', 'js/data/readings.js', 'js/data/curriculum.js', 'js/data/passages.js', 'js/data/teach.js', 'js/data/story.js', 'js/data/wardrobe.js', 'js/engine.js']) {
   vm.runInContext(readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f });
 }
 const { KG } = ctx, E = KG.engine;
@@ -199,4 +199,36 @@ test('lesson plans: teach → guided → trial for every node, first play and re
       });
     }
   }
+});
+
+test('story: every world has an arrival, a master, a creature and a guardian line', () => {
+  for (const k of ['arrive', 'mentor', 'beasts', 'guardian']) assert.equal(KG.story[k].length, KG.units.length, `story.${k}`);
+  KG.story.beasts.forEach((b, i) => assert.ok(b[0] && b[1], `beast ${i}`));
+});
+
+test('worlds: nine separate places, each with its own road and landmarks', async () => {
+  const { DEFS, R } = await import('../js/worlds.js');
+  assert.equal(DEFS.length, KG.units.length);
+  DEFS.forEach((d, i) => {
+    assert.ok(d.pts.length >= 2 && typeof d.build === 'function' && typeof d.relief === 'function', `world ${i}`);
+    for (const [x, z] of d.pts) assert.ok(Math.abs(x) < R - 8 && Math.abs(z) < R - 8, `world ${i}: road stays inside`);
+  });
+  assert.equal(new Set(DEFS.map(d => JSON.stringify(d.pts))).size, DEFS.length, 'every world has its own road');
+});
+
+test('arcade: endless 3D mini-games and power-ups', () => {
+  E.reset();
+  for (const g of ['rain', 'defense', 'forge', 'race']) for (let i = 0; i < 20; i++) {
+    const q = E.arcadeMini(g);
+    assert.equal(q.game, g);
+    if (g === 'rain') assert.ok(q.targets.length >= 8 && q.pool.length >= 12);
+    if (g === 'defense') assert.ok(q.stones.length >= 8 && q.stones.every(s => s.cases.length));
+    if (g === 'forge') q.items.forEach(it => it.reads.forEach(r => assert.ok(q.tenses.includes(r.tense))));
+    if (g === 'race') assert.ok(q.chunks.length >= 3 && KG.readings[q.reading]);
+  }
+  const p = E.powers();
+  assert.ok(p.hint > 0 && p.shield > 0 && p.slow > 0, 'starter power-ups');
+  const h = p.hint; assert.ok(E.usePower('hint')); assert.equal(E.powers().hint, h - 1);
+  E.grantPower('slow', 1); assert.equal(E.powers().slow, 2);
+  E.state.powers.shield = 0; assert.equal(E.usePower('shield'), false);
 });

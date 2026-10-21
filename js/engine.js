@@ -106,6 +106,9 @@ window.KG = window.KG || {};
       S.lastDay = t;
       S.bestStreak = Math.max(S.bestStreak, S.streak);
       emit('streak', S.streak);
+      // keeping a day streak earns power-ups
+      if (S.streak % 7 === 0) E.grantPower('slow', 1, 'streak');
+      else if (S.streak % 3 === 0) E.grantPower('shield', 1, 'streak');
     }
     const lvBefore = E.levelInfo().level, goalBefore = E.todayXP() >= S.dailyGoal;
     S.xp += n; S.coins += coins;
@@ -254,6 +257,12 @@ window.KG = window.KG || {};
     }
     return S.daily;
   };
+  // ── power-ups: earned through streaks and quests, spent in lessons and games ──
+  // hint: remove two wrong answers · shield: block one lost heart · slow: slow time in timed games
+  E.POWERS = { hint: ['💡', 'Hint', 'Removes two wrong answers'], shield: ['🛡', 'Shield', 'Blocks one lost heart'], slow: ['⏳', 'Slow Time', 'Slows the clock in timed games'] };
+  E.powers = () => (E.state.powers = E.state.powers || { hint: 3, shield: 1, slow: 1 });
+  E.usePower = k => { const p = E.powers(); if (!p[k]) return false; p[k]--; E.save(); emit('power', { k, used: true }); return true; };
+  E.grantPower = (k, n = 1, why = '') => { const p = E.powers(); p[k] = Math.min(9, (p[k] || 0) + n); E.save(); emit('power', { k, n, why }); };
   E.questProgress = (id, amount = 1, absolute = false) => {
     const d = E.daily();
     for (const q of d.quests) {
@@ -264,6 +273,7 @@ window.KG = window.KG || {};
         E.state.coins += 15; E.state.stats.quests = (E.state.stats.quests || 0) + 1;
         emit('quest', q);
         E.gainXP(25);
+        E.grantPower(['hint', 'shield', 'slow'][d.quests.indexOf(q) % 3], 1, 'quest');
       }
     }
     E.save();
@@ -446,6 +456,7 @@ window.KG = window.KG || {};
   // question each (a miss just retries, no penalty), then a short trial
   // against a challenger. Replays go straight to a slightly longer trial.
   const FOES = [
+    ['beast'],
     ['dummy', 'The Training Dummy', 'Knock the stuffing out of it with right answers!'],
     ['imp', 'A Living Book', 'A spellbook has come alive and flaps at you!'],
     ['rival', 'Kleon, the Rival Apprentice', '"You call that Greek?" Prove him wrong!'],
@@ -453,8 +464,12 @@ window.KG = window.KG || {};
   ];
   const teach = o => Object.assign({ type: 'teach' }, o);
   const guided = q => Object.assign(q, { guided: true, noLog: true });
+  // each world has its own creature; it takes every other trial, the rest rotate
+  const ROTA = ['beast', 'rival', 'beast', 'imp', 'beast', 'shade'];
   function trial(node, kindHint) {
-    const f = kindHint ? FOES.find(x => x[0] === kindHint) : FOES[node.index % FOES.length];
+    const k = kindHint || ROTA[node.index % ROTA.length];
+    if (k === 'beast') { const B = (KG.story && KG.story.beasts) || [['The Training Dummy', 'Knock the stuffing out of it with right answers!']], b = B[node.unit] || B[0]; return { type: 'trial', foe: 'beast', title: b[0], say: b[1] }; }
+    const f = FOES.find(x => x[0] === k);
     return { type: 'trial', foe: f[0], title: f[1], say: f[2] };
   }
   const chunks = (a, sizes) => { const out = []; let i = 0; for (const n of sizes) { if (i < a.length) out.push(a.slice(i, i + n)); i += n; } if (i < a.length) out.push(a.slice(i)); return out; };
@@ -517,6 +532,28 @@ window.KG = window.KG || {};
     return null;
   }
   E.miniFor = miniFor;
+
+  // Endless versions of the mini-games for the Arcade, drawn from what the learner has unlocked
+  const doneLessons = list => list.filter(k => { const n = E.nodes.find(x => x.lesson === k); return n && E.stars(n.id) > 0; });
+  E.arcadeMini = game => {
+    if (game === 'rain') {
+      let pool = Object.keys(E.state.vocab).map(g => E.vocabByGreek[g]).filter(Boolean);
+      if (pool.length < 12) pool = KG.vocab.slice(0, 40);
+      return { type: 'mini', game, title: 'Word Rain', targets: sample(pool, 12).map(w => ({ g: w.g, en: w.en })), pool: pool.map(w => w.g) };
+    }
+    if (game === 'defense') {
+      const ls = doneLessons(NOUN_LESSONS);
+      return { type: 'mini', game, title: 'Declension Defense', stones: U.shuffle(sample(E.caseForms(ls.length ? ls : ['article', 'n2m']), 16)) };
+    }
+    if (game === 'forge') {
+      const ls = doneLessons(VERB_LESSONS), use = ls.length >= 2 ? ls : VERB_LESSONS.slice(0, 4);
+      const all = E.verbForms(use);
+      return { type: 'mini', game, title: 'Parsing Forge', items: sample(all, 10), tenses: TENSES.map(t => t[0].toUpperCase() + t.slice(1)).filter(t => all.some(f => f.reads.some(r => r.tense === t))) };
+    }
+    const reads = E.nodes.filter(n => n.type === 'reading' && KG.readings[n.reading].chunks && KG.readings[n.reading].chunks.length >= 3);
+    const mine = reads.filter(n => E.stars(n.id) > 0), n = U.pick(mine.length ? mine : reads.slice(0, 2)), R = KG.readings[n.reading];
+    return { type: 'mini', game: 'race', title: 'Verse Race', reading: n.reading, chunks: R.chunks, extras: R.extras || [] };
+  };
 
   E.planFor = node => {
     const first = !E.stars(node.id);
@@ -630,7 +667,9 @@ window.KG = window.KG || {};
   // ── wardrobe & loot ────────────────────────────────────────
   E.look = () => {
     const S = E.state;
-    if (!S.look) S.look = { owned: ['robe:forest', 'hat:hood', 'hat:none', 'staff:none', 'pet:none'], robe: 'forest', hat: 'hood', staff: 'none', pet: 'none' };
+    if (!S.look) S.look = { owned: [], robe: 'forest', hat: 'apprentice', staff: 'wand', pet: 'none' };
+    // every apprentice wizard owns the free items
+    for (const slot of Object.keys(KG.wardrobe)) for (const it of KG.wardrobe[slot]) if (!it.price && !S.look.owned.includes(slot + ':' + it.id)) S.look.owned.push(slot + ':' + it.id);
     return S.look;
   };
   E.ownItem = (slot, id) => E.look().owned.includes(slot + ':' + id);

@@ -483,3 +483,34 @@ body.in-stage .main > .s3 { pointer-events: none; }
 .wbt-box.elite .wbt-h { color: #c9302b; }
 .wvig { position: absolute; inset: 0; pointer-events: none; z-index: 1; background: radial-gradient(ellipse at center, transparent 55%, rgba(20, 10, 0, .28) 100%); }
 .world .whud { z-index: 2; }
+
+/* ── cutscenes, power-ups ── */
+.wpowers { position: absolute; top: calc(66px + env(safe-area-inset-top)); right: 10px; display: flex; flex-direction: column; gap: 4px; background: rgba(20, 28, 40, .55); padding: 6px 8px; border-radius: 12px; font-size: .85rem; font-weight: 800; backdrop-filter: blur(4px); }
+.wshield { margin-left: 4px; filter: drop-shadow(0 0 4px #7fd0ff); }
+.wcine { position: absolute; inset: 0; display: none; pointer-events: auto; cursor: pointer; }
+.wcine.on { display: block; }
+.world.cine .whud > :not(.wcine) { opacity: 0; pointer-events: none; transition: opacity .3s; }
+.wcine::before, .wcine::after { content: ''; position: absolute; left: 0; right: 0; height: 9vh; background: #000; animation: bars .5s ease-out; }
+.wcine::before { top: 0; } .wcine::after { bottom: 0; }
+@keyframes bars { from { height: 0; } }
+.wc-skip { position: absolute; z-index: 2; top: calc(9vh + 10px); right: 12px; background: rgba(0,0,0,.5); color: #fff; border-radius: 10px; padding: 6px 12px; font-weight: 800; font-size: .85rem; }
+.wc-box { position: absolute; z-index: 2; left: 50%; bottom: calc(9vh + 14px + env(safe-area-inset-bottom)); transform: translateX(-50%); width: min(94vw, 620px); background: rgba(250, 244, 228, .96); color: var(--ink); border: 3px solid #8a6a3a; border-radius: 16px; padding: 12px 16px 14px; box-shadow: 0 8px 30px rgba(0,0,0,.4); animation: drop .3s; }
+.wc-who { font-weight: 900; color: var(--brand); font-size: .95rem; margin-bottom: 4px; }
+.wc-text { font-size: 1rem; line-height: 1.45; }
+.wc-tap { position: absolute; right: 12px; bottom: 6px; color: var(--muted); animation: pulse2 1s infinite; }
+.wbt-pw { display: flex; gap: 8px; margin-top: 10px; }
+.pw { flex: 1; border-radius: 10px; border: 2px solid var(--line); background: var(--bg2); padding: 6px 8px; font-weight: 800; font-size: .85rem; color: var(--ink); }
+.pw b { color: var(--brand); }
+.pw:disabled { opacity: .45; }
+.pw.on { border-color: #3fa0ff; box-shadow: 0 0 0 2px rgba(63,160,255,.35); }
+.wbt-opt.gone, .opt.gone { opacity: .25; pointer-events: none; text-decoration: line-through; }
+.pwbar { display: flex; gap: 6px; justify-content: center; margin: 4px auto 0; max-width: 560px; padding: 0 10px; }
+.pwbar:empty { display: none; }
+.pwbar .pw { flex: 0 1 auto; padding: 4px 10px; font-size: .8rem; background: var(--card); }
+.s3 .pwbar { pointer-events: auto; position: relative; z-index: 2; }
+.s3 .pwbar .pw { background: rgba(250, 244, 228, .92); }
+.atimer.slow { box-shadow: 0 0 0 3px #7fd0ff; }
+.pwcards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-bottom: 6px; }
+.pwcards div { display: flex; flex-direction: column; background: var(--bg2); border-radius: 10px; padding: 8px 10px; }
+.s3 .pwbar { position: absolute; bottom: calc(40px + env(safe-area-inset-bottom)); right: 10px; margin: 0; padding: 0; }
+.s3 .pwbar .pw { padding: 4px 8px; font-size: .78rem; }

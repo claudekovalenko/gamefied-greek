@@ -14,7 +14,7 @@ const ctx = { console, localStorage: { getItem: k => store[k] ?? null, setItem: 
 ctx.window = ctx;
 vm.createContext(ctx);
 ctx.fetch = async url => { const t = readFileSync(path.join(root, url), 'utf8'); return { ok: true, json: async () => JSON.parse(t) }; };
-for (const f of ['js/data/alphabet.js', 'js/data/vocab.js', 'js/data/grammar.js', 'js/data/readings.js', 'js/data/curriculum.js', 'js/data/passages.js', 'js/engine.js']) {
+for (const f of ['js/data/alphabet.js', 'js/data/vocab.js', 'js/data/grammar.js', 'js/data/readings.js', 'js/data/curriculum.js', 'js/data/passages.js', 'js/data/teach.js', 'js/engine.js']) {
   vm.runInContext(readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f });
 }
 const { KG } = ctx, E = KG.engine;
@@ -167,4 +167,28 @@ test('Reading Room: references and parsing codes decode sensibly', async () => {
   }
   const glossed = NT.lex.filter(l => l[1]).reduce((n, l) => n + l[2], 0), all = NT.lex.reduce((n, l) => n + l[2], 0);
   assert.ok(glossed / all > 0.99, `only ${(glossed / all * 100).toFixed(1)}% of NT words have a gloss`);
+});
+
+test('lesson plans: teach → guided → trial for every node, first play and replay', () => {
+  for (const k of Object.keys(KG.grammar)) assert.ok(KG.teach[k] && KG.teach[k].beats.length >= 2 && KG.teach[k].spell, `teaching beats for ${k}`);
+  for (const k of Object.keys(KG.teach)) for (const b of KG.teach[k].beats) {
+    assert.ok(!b.check.w.includes(b.check.a), `${k}: answer repeated among wrong options`);
+    assert.ok((b.demo.match(/\[/g) || []).length === (b.demo.match(/\]/g) || []).length, `${k}: unbalanced brackets in demo`);
+  }
+  for (const replay of [false, true]) {
+    E.reset();
+    if (replay) for (const n of E.nodes) E.state.lessons[n.id] = { stars: 1, best: 1, plays: 1 };
+    for (const n of E.nodes) for (let i = 0; i < 30; i++) {
+      const plan = E.planFor(n);
+      assert.ok(plan.length >= 5, `${n.id}: plan too short`);
+      if (n.type !== 'boss') assert.equal(plan.filter(x => x.type === 'trial').length, 1, `${n.id}: one trial`);
+      if (!replay && n.type !== 'boss') assert.ok(plan.some(x => x.type === 'teach'), `${n.id}: first play teaches`);
+      if (replay) assert.ok(!plan.some(x => x.type === 'teach'), `${n.id}: replay skips teaching`);
+      plan.forEach((q, j) => {
+        if (q.type === 'teach') assert.ok(q.say || q.words || q.letters || q.items || q.reading, `${n.id}#${j}: empty teach`);
+        else if (q.type === 'trial') assert.ok(q.foe && q.title, `${n.id}#${j}: trial`);
+        else checkQuestion(q, `${n.id}#${j}`);
+      });
+    }
+  }
 });

@@ -943,6 +943,7 @@ W.stage = {
   get ok() { return !!stage; },
   enter(kind, unit) { if (mode === 'world' && worldShown) savePos(); closeDialog(); mode = 'stage'; root.classList.add('on', 'staging'); resize(); stage.enter(kind, unit); startLoop(); },
   ask: (q, h) => stage.ask(q, h), reveal: (ok, c, r) => stage.reveal(ok, c, r), result: ok => stage.result(ok),
+  teach: item => stage.teach(item), trial: foe => stage.trial(foe),
   hp: f => stage.hp(f), combo: n => stage.combo(n), celebrate: w => stage.celebrate(w), orderLine: () => stage.orderLine(), lock: () => stage.lock(),
   get active() { return mode === 'stage'; },
 };

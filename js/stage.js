@@ -125,15 +125,40 @@ export function createStage(ctx) {
       const col = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.8, 1.6, 10), M(0xe8dfcc))); col.position.y = 0.8; opp.add(col);
       const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 2, 14), new THREE.MeshStandardMaterial({ color: 0xf5e6c0, emissive: 0x8a6a20, emissiveIntensity: 0.5 }));
       roll.rotation.z = Math.PI / 2; roll.position.y = 2.6; opp.add(roll); opp.userData.spin = roll;
+    } else if (kind === 'dummy') {
+      opp = new THREE.Group();
+      const body = new THREE.Group(); opp.add(body);
+      const post = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.15, 3, 8), M(0x6a4a2a))); post.position.y = 1.5; opp.add(post);
+      const torso = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.65, 1.4, 10), M(0xd8b878))); torso.position.y = 2.1; body.add(torso);
+      const head = shadowed(new THREE.Mesh(new THREE.SphereGeometry(0.42, 12, 10), M(0xc8a868))); head.position.y = 3.15; body.add(head);
+      const bar = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 2.4, 6), M(0x6a4a2a))); bar.rotation.z = Math.PI / 2; bar.position.y = 2.5; body.add(bar);
+      for (const [r, c] of [[0.42, 0xc9452b], [0.28, 0xffffff], [0.14, 0xc9452b]]) { const t = new THREE.Mesh(new THREE.CircleGeometry(r, 20), M(c)); t.position.set(0, 2.15, 0.66 + (0.42 - r) * 0.02); body.add(t); }
+      opp.userData.body = body; opp.userData.wobble = true;
+    } else if (kind === 'imp') {
+      opp = new THREE.Group();
+      const book = new THREE.Group(); book.position.y = 2.6; opp.add(book);
+      const pages = shadowed(new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.25, 1.2), M(0xf5ecd0))); book.add(pages);
+      const covers = [];
+      for (const sd of [-1, 1]) {
+        const hinge = new THREE.Group(); hinge.position.x = 0; book.add(hinge);
+        const cv = shadowed(new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.08, 1.3), M(0x7a2f3a))); cv.position.x = sd * 0.85; hinge.add(cv);
+        hinge.userData.sd = sd; covers.push(hinge);
+      }
+      for (const sd of [-1, 1]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffd166 })); e.position.set(sd * 0.3, 0.2, 0.62); book.add(e); }
+      const rune = new THREE.Mesh(new THREE.CircleGeometry(0.3, 16), new THREE.MeshBasicMaterial({ color: 0xffd166 })); rune.rotation.x = -Math.PI / 2; rune.position.y = 0.14; book.add(rune);
+      opp.userData.flap = covers; opp.userData.book = book;
+    } else if (kind === 'rival') {
+      opp = person({ robe: 0x5a2a7a, hair: 0x1a1a1a, staff: true, skin: 0xe8c098, scale: 1.05 });
     } else {
       opp = person({ robe: Z.robe, hair: 0xdddddd, beard: unit % 3 === 0, staff: true, hood: unit % 2 === 1, skin: [0xf0c8a0, 0xd8a878, 0xb07850][unit % 3], scale: 1.15 });
     }
+    S.oppKind = kind;
     opp.position.copy(oppPos); opp.rotation.y = 0;
     scene.add(opp);
     hpBar = null;
-    if (kind === 'guardian' || kind === 'shade') {
+    if (['guardian', 'shade', 'dummy', 'imp', 'rival'].includes(kind)) {
       hpBar = new THREE.Sprite(new THREE.SpriteMaterial({ map: hpSprite(1), depthWrite: false }));
-      hpBar.scale.set(4, 0.56, 1); hpBar.position.set(0, kind === 'guardian' ? 6 : 5.4, 0); hpBar.position.add(oppPos);
+      hpBar.scale.set(4, 0.56, 1); hpBar.position.set(0, kind === 'guardian' ? 6 : kind === 'shade' ? 5.4 : 4.4, 0); hpBar.position.add(oppPos);
       scene.add(hpBar); S.hpObj = hpBar;
     } else if (S.hpObj) { scene.remove(S.hpObj); S.hpObj = null; }
   }
@@ -263,7 +288,7 @@ export function createStage(ctx) {
     } else {
       // opponent strikes back
       tween(0.25, t => { opp.position.z = oppPos.z + Math.sin(t * Math.PI) * 1.2; }, () => {
-        orb(worldPos(opp).add(new THREE.Vector3(0, 2.5, 0)), worldPos(hero).add(new THREE.Vector3(0, 1.2, 0)), S.kind === 'mentor' || S.kind === 'scroll' ? 0xff9f6a : 0x8a3aff, () => {
+        orb(worldPos(opp).add(new THREE.Vector3(0, 2.5, 0)), worldPos(hero).add(new THREE.Vector3(0, 1.2, 0)), S.oppKind === 'mentor' || S.oppKind === 'scroll' ? 0xff9f6a : 0x8a3aff, () => {
           S.shake = 0.35; heroFlinch();
         }, 0.4);
       });
@@ -439,6 +464,57 @@ export function createStage(ctx) {
     else if (q.type === 'order') askOrder(q, KG.readings[q.reading]);
     else if (q.type === 'free') askFree(KG.readings[q.reading]);
   };
+  // glowing demonstration text: [bracketed] parts shine gold
+  function demoTexture(demo, W, H) {
+    const c = document.createElement('canvas'); c.width = W; c.height = H; const x = c.getContext('2d');
+    const parts = []; demo.replace(/\[(.+?)\]|([^\[]+)/g, (m, hi, lo) => { parts.push([hi || lo, !!hi]); return m; });
+    let size = Math.round(H * 0.42), lines;
+    const layout = () => {
+      x.font = `400 ${size}px ${GK}`;
+      lines = [[]]; let w = 0;
+      for (const [t, hi] of parts) for (const tok of t.split(/(\s+)/)) {
+        if (!tok) continue;
+        const tw = x.measureText(tok).width;
+        if (w + tw > W - 40 && w > 0 && tok.trim()) { lines.push([]); w = 0; }
+        if (!tok.trim() && w === 0) continue;
+        lines[lines.length - 1].push([tok, hi, tw]); w += tw;
+      }
+    };
+    for (; size > 18; size -= 3) { layout(); if (lines.length * size * 1.25 <= H - 20) break; }
+    x.textBaseline = 'middle';
+    const lh = size * 1.25, y0 = H / 2 - (lines.length - 1) * lh / 2;
+    lines.forEach((ln, i) => {
+      const total = ln.reduce((n, t) => n + t[2], 0); let cx = (W - total) / 2;
+      for (const [tok, hi, tw] of ln) {
+        x.shadowColor = hi ? 'rgba(255,200,60,.95)' : 'rgba(0,0,0,.55)'; x.shadowBlur = hi ? 24 : 8;
+        x.fillStyle = hi ? '#ffd166' : '#fff8e8'; x.fillText(tok, cx, y0 + i * lh); cx += tw;
+      }
+    });
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+  }
+  S.teach = item => {
+    clearUI(); S.q = null; S.answered = true;
+    const want = item.reading ? 'scroll' : 'mentor';
+    if (S.oppKind !== want) { setOpponent(want, S.unit); poof(); }
+    // the master raises a staff and the lesson glows in the air
+    if (opp && opp.userData.arms) { const arm = opp.userData.arms[1]; tween(0.6, t => { arm.rotation.x = -Math.sin(t * Math.PI / 2) * 2.4; }); }
+    const text = item.demo || (item.words ? item.words.map(w => w.g).join('   ') : item.letters ? item.letters.map(L => L.U + L.l).join('   ') : item.items ? item.items.slice(0, 6).map(i => i.big).join('  ') : item.reading ? KG.readings[item.reading].words.map(w => w.w + w.p).join(' ') : '');
+    if (!text) return;
+    const { hh, hw, portrait } = frame();
+    const w = Math.min(hw * 1.95, 14), h = portrait ? hh * 0.42 : hh * 0.5;
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: demoTexture(item.demo ? text : `[${text}]`, 1024, Math.round(1024 * h / w)), transparent: true, depthWrite: false }));
+    const g = new THREE.Group(); g.add(plane); g.userData = { base: new THREE.Vector3() };
+    place(g, 0, hh - h / 2 - hh * 0.1); introAnim(g, 0.1);
+    S.big = g;
+    particles(worldPos(opp || hero).add(new THREE.Vector3(0, 3.5, 0)), 0xffd166, 50, 6);
+  };
+  function poof() { particles(oppPos.clone().add(new THREE.Vector3(0, 1.5, 0)), 0xffffff, 60, 7); }
+  S.trial = foe => {
+    clearUI(); S.q = null;
+    setOpponent(foe, S.unit); poof();
+    if (opp) { const y0 = opp.position.y; tween(0.6, t => { opp.position.y = y0 + (1 - ease(t)) * 8; }); }
+    S.shake = 0.25;
+  };
   S.orderLine = () => (S.order ? S.order.line.map(c => c.t) : []);
   S.lock = () => { S.locked = true; };
   // outcome animation for a multiple-choice answer (chosen may be -1 for timeouts)
@@ -447,7 +523,7 @@ export function createStage(ctx) {
     const pick = S.picks.find(p => p.userData.pick && p.userData.pick.i === chosen && p.userData.pick.type === 'opt');
     heroCast();
     if (pick) orb(heroHand(), worldPos(pick), ok ? 0xffd166 : 0xc0c0ff, () => {
-      if (ok) { glow(pick); if (opp) orb(worldPos(pick), worldPos(opp).add(new THREE.Vector3(0, 2.4, 0)), 0xffd166, () => { oppReact(true); if (S.kind === 'mentor') nod(); }); }
+      if (ok) { glow(pick); if (opp) orb(worldPos(pick), worldPos(opp).add(new THREE.Vector3(0, 2.4, 0)), 0xffd166, () => { oppReact(true); if (S.oppKind === 'mentor') nod(); }); }
       else { shatter(pick); if (right) setTimeout(() => glow(right), 250); oppReact(false); }
     });
     for (const p of S.picks) if (p !== pick && p !== right && p.visible) tween(0.4, t => p.children[0].material.forEach && p.children[0].material.forEach(m => { m.transparent = true; m.opacity = 1 - t * 0.65; }));
@@ -463,7 +539,7 @@ export function createStage(ctx) {
     clearUI();
     if (win) {
       for (let i = 0; i < 4; i++) setTimeout(() => particles(new THREE.Vector3((Math.random() - 0.5) * 10, 4 + Math.random() * 3, -2 + Math.random() * 4), U.pick([0xffd166, 0x7fd0ff, 0xff8fab, 0x7ed58f]), 60, 8), i * 220);
-      if (opp && (S.kind === 'guardian' || S.kind === 'shade')) tween(1.2, t => { opp.rotation.x = -t * 0.5; opp.position.y = -t * 2; opp.scale.setScalar((S.kind === 'shade' ? 2.6 : 1.25) * (1 - t * 0.5)); });
+      if (opp && ['guardian', 'shade', 'dummy', 'imp', 'rival'].includes(S.oppKind)) tween(1.2, t => { opp.rotation.x = -t * 0.5; opp.position.y = -t * 2; opp.scale.setScalar((S.oppKind === 'shade' ? 2.6 : S.oppKind === 'guardian' ? 1.25 : 1) * (1 - t * 0.5)); });
       else if (opp && opp.userData.body) nod();
       tween(0.8, t => { hero.position.y = Math.sin(t * Math.PI) * 1.2; hero.rotation.y = Math.PI + t * Math.PI * 2; });
     } else {
@@ -495,6 +571,8 @@ export function createStage(ctx) {
       if (opp.userData.float) opp.position.y = 1.2 + Math.sin(t * 2) * 0.3;
       if (opp.userData.spin) opp.userData.spin.rotation.y += dt * 1.2;
       if (opp.userData.legs) ctx.animatePerson(opp, 0, dt);
+      if (opp.userData.flap) { opp.userData.book.position.y = 2.6 + Math.sin(t * 3) * 0.35; opp.userData.flap.forEach(h => { h.rotation.z = h.userData.sd * (0.35 + Math.sin(t * 9) * 0.45); }); }
+      if (opp.userData.wobble && opp.userData.body) opp.userData.body.rotation.z = Math.sin(t * 2) * 0.03;
     }
     ctx.animatePerson(hero, 0, dt);
     aura.scale.setScalar(1 + Math.sin(t * 4) * 0.08 + (S.comboN || 0) * 0.02); aura.rotation.z += dt;

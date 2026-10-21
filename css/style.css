@@ -429,3 +429,27 @@ body.in-stage .main > .s3 { pointer-events: none; }
 .rd-word { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(12px + env(safe-area-inset-bottom)); width: min(94vw, 520px); z-index: 30; background: var(--card); color: var(--ink); border: 3px solid #b8935a; border-radius: 18px; padding: 12px 14px; box-shadow: 0 10px 40px rgba(0,0,0,.35); animation: drop .2s; }
 .rd-word[hidden] { display: none; }
 .rdw-x { position: absolute; right: 8px; top: 6px; color: var(--muted); padding: 6px; }
+
+/* ── teaching beats, spells and trials ── */
+.glow { color: #c98a00; text-shadow: 0 0 12px rgba(255, 200, 60, .55); }
+.t-say { font-size: 1.15rem; line-height: 1.5; margin: 6px 0 12px; }
+.t-demo { font-size: 1.5rem; line-height: 1.6; background: var(--bg2); border-radius: 14px; padding: 12px 14px; text-align: center; margin-bottom: 12px; }
+.spellnew { display: flex; gap: 12px; align-items: center; background: linear-gradient(135deg, #2a1f4a, #4a2f7a); color: #fff; border-radius: 16px; padding: 10px 14px; margin: 4px 0 12px; box-shadow: 0 0 0 2px #ffd166 inset; text-align: left; }
+.spellnew.big { margin: 14px 0; }
+.sp-ic { font-size: 2rem; width: 46px; height: 46px; display: grid; place-items: center; background: rgba(255,255,255,.12); border-radius: 12px; flex: none; }
+.sp-k { font-size: .7rem; text-transform: uppercase; letter-spacing: .1em; color: #ffd166; font-weight: 900; }
+.s3teach { pointer-events: auto; align-self: center; width: min(94vw, 560px); max-height: 56vh; overflow: auto; margin: 0 auto calc(12px + env(safe-area-inset-bottom)); background: color-mix(in srgb, #f5ead0 95%, transparent); color: #2a1d0c; border: 3px solid #b8935a; border-radius: 20px; padding: 14px; box-shadow: 0 12px 40px rgba(0,0,0,.35); animation: drop .3s; }
+.s3teach .t-demo { background: rgba(255,255,255,.55); }
+.s3t-k { font-weight: 900; color: #7a4a10; text-transform: uppercase; letter-spacing: .08em; font-size: .75rem; }
+.s3teach .letter, .s3teach .vcard { background: rgba(255,255,255,.65); }
+@media (prefers-color-scheme: dark) { .s3teach { background: color-mix(in srgb, #2a2418 95%, transparent); color: var(--ink); } .s3t-k { color: var(--gold); } }
+.s3center { flex: 1; display: grid; place-items: center; pointer-events: none; }
+.trialcard { pointer-events: auto; width: min(90vw, 420px); text-align: center; background: linear-gradient(160deg, #3a1a1a, #6a2a2a); color: #fff; border: 3px solid #ffd166; border-radius: 20px; padding: 18px; box-shadow: 0 16px 50px rgba(0,0,0,.45); animation: pop .4s; }
+.trialcard h2 { margin: 4px 0; } .trialcard p { opacity: .9; }
+.tr-k { color: #ffd166; font-weight: 900; letter-spacing: .14em; text-transform: uppercase; font-size: .8rem; }
+.player .trialcard { margin: 30px auto; }
+.spellbook { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.spellcard { display: flex; flex-direction: column; gap: 3px; text-align: left; padding: 10px 12px; border-radius: 14px; background: linear-gradient(160deg, #2a1f4a, #3d2a6a); color: #fff; box-shadow: var(--shadow); }
+.spellcard .sp-ic { width: 38px; height: 38px; font-size: 1.4rem; }
+.spellcard span:last-child { font-size: .76rem; opacity: .85; }
+.spellcard.locked { background: var(--bg2); color: var(--muted); box-shadow: none; border: 2px dashed var(--line); }

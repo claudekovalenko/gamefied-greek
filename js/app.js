@@ -251,14 +251,11 @@
 
   // ── lesson player ───────────────────────────────────────────
   let P = null; // current session
-  let learnSeen = null; // first play of a lesson shows its Learn screen first
   function startNode(id) {
     const n = E.node(id);
     if (!E.unlocked(n)) return openNode(id);
-    const rec = S().lessons[id];
-    if (!rec && n.type !== 'boss' && learnSeen !== id) { learnSeen = id; return showLearn(id, true); }
     closeSheet();
-    begin({ node: n, qs: E.questionsFor(n), mode: n.type === 'boss' ? 'boss' : 'lesson' });
+    begin({ node: n, qs: E.planFor(n), mode: n.type === 'boss' ? 'boss' : 'lesson' });
   }
   function begin(opts) {
     if (!opts.qs.length) { toast('Nothing to practice here yet!'); return go(view); }
@@ -279,6 +276,38 @@
       <div class="prog"><i style="width:${pct}%"></i></div>
       ${P.mode === 'boss' ? `<div class="hearts">${'❤'.repeat(P.hearts)}<span class="lost">${'❤'.repeat(3 - P.hearts)}</span></div>` : ''}
       <div class="combo ${P.combo >= 3 ? 'hot' : ''}">${P.combo >= 2 ? `🔥${P.combo}` : ''}</div></div>`;
+  }
+  // [bracketed] parts of a demo glow
+  const demoHTML = d => esc(d).replace(/\[(.+?)\]/g, '<b class="glow">$1</b>');
+  function teachHTML(q) {
+    let h = q.spell ? `<div class="spellnew"><span class="sp-ic">${q.spell.icon}</span><div><div class="sp-k">✨ New spell</div><b>${esc(q.spell.name)}</b><div class="small">${esc(q.spell.desc)}</div></div></div>` : '';
+    if (q.say) h += `<div class="t-say">${q.say}</div>`;
+    if (q.demo) h += `<div class="t-demo gk">${demoHTML(q.demo)}</div>`;
+    if (q.words) h += `<div class="cards">${q.words.map(w => `<div class="vcard" data-act="say" data-arg="${esc(w.g)}"><div class="gk big">${esc(w.g)}</div><div class="gk muted">${esc(w.lex)}</div><div class="en">${esc(w.en)}</div><div class="freq">≈${w.f}× in NT · 🔊</div></div>`).join('')}</div>`;
+    if (q.letters) h += `<div class="letters">${q.letters.map(L => `<div class="letter"><div class="gk big">${L.U} ${L.l}</div><b>${L.name}</b><div class="muted">${esc(L.say)}</div></div>`).join('')}</div>`;
+    if (q.items) h += `<div class="letters">${q.items.map(L => `<div class="letter" data-act="say" data-arg="${esc(L.big)}"><div class="gk big">${esc(L.big)}</div><b>${esc(L.name)}</b><div class="muted">${esc(L.say)}</div></div>`).join('')}</div>`;
+    if (q.reading) { const R = KG.readings[q.reading]; readerReading = R; h += `${verseHTML(R, 'big')}<div id="wordinfo" class="wordinfo muted">Tap a word…</div><p class="tip">💡 ${esc(R.note)}</p>`; }
+    return h;
+  }
+  function renderTeach(q) {
+    P.answered = true;
+    const lead = q.words ? 'New words' : q.letters ? 'New letters' : q.reading ? 'Read it first' : 'Your master teaches';
+    if (P.is3D) {
+      main.innerHTML = `<div class="s3">${header()}<div class="s3teach"><div class="s3t-k">🧙 ${lead}</div>${teachHTML(q)}<button class="btn primary wide" data-act="next" id="nextbtn">Got it ▶</button></div></div>`;
+      ST().teach(q);
+    } else {
+      main.innerHTML = `<div class="player">${header()}<div class="qbody"><div class="prompt">🧙 ${lead}</div>${teachHTML(q)}</div><div class="foot" id="foot"><button class="btn primary wide" data-act="next" id="nextbtn">Got it ▶</button></div></div>`;
+    }
+    if (q.words && q.words[0]) speak(q.words[0].g);
+  }
+  function renderTrial(q) {
+    P.answered = true; P.trial = { start: P.i + 1, correct: 0 };
+    const html = `<div class="trialcard"><div class="tr-k">⚔ Trial</div><h2>${esc(q.title)}</h2><p>${esc(q.say)}</p><button class="btn primary wide autonext counting" data-act="next" id="nextbtn" style="--auto:2200ms">Fight ▶</button></div>`;
+    main.innerHTML = P.is3D ? `<div class="s3">${header()}<div class="s3center">${html}</div></div>` : `<div class="player">${header()}<div class="qbody">${html}</div></div>`;
+    if (P.is3D) ST().trial(q.foe);
+    sfx('combo');
+    const at = P.i; clearTimeout(P.autoT);
+    P.autoT = setTimeout(() => { if (P && P.i === at) next(); }, 2200);
   }
   function renderQ3D(q) {
     const R = q.reading ? KG.readings[q.reading] : null;
@@ -301,6 +330,8 @@
   }
   function renderQ() {
     const q = P.qs[P.i]; P.answered = false; P.q = q;
+    if (q.type === 'teach') return renderTeach(q);
+    if (q.type === 'trial') return renderTrial(q);
     if (P.is3D) return renderQ3D(q);
     let body = '';
     if (q.type === 'mc') {
@@ -345,11 +376,19 @@
 
   function answer(ok, q) {
     P.answered = true;
-    const graded = !q.ungraded;
+    const graded = !q.ungraded && !(q.guided && !ok);
+    if (q.guided && !ok && (q.tries || 0) >= 2) { sfx('bad'); P.combo = 0; }
+    if (q.guided && !ok && (q.tries || 0) < 2) {
+      sfx('bad'); P.combo = 0;
+      const again = Object.assign({}, P.qs[P.i], { tries: (q.tries || 0) + 1 });
+      if (again.type === 'mc') { again.options = shuffle(again.options); again.answer = again.options.indexOf(q.options[q.answer]); }
+      P.qs.splice(P.i + 1, 0, again);
+    }
     if (graded) {
       E.recordAnswer(q, ok, P.mode === 'review' || P.mode === 'mistakes');
       if (ok) {
         P.correct++; P.combo++; P.maxCombo = Math.max(P.maxCombo, P.combo);
+        if (P.trial && !q.guided) P.trial.correct++;
         const base = P.mode === 'review' || P.mode === 'mistakes' ? 5 : 10;
         const bonus = P.combo >= 10 ? 10 : P.combo >= 5 ? 5 : 0;
         P.xp += base + bonus;
@@ -370,9 +409,10 @@
     if (P.is3D) {
       ST().combo(P.combo);
       if (P.mode === 'boss' || P.mode === 'review' || P.mode === 'mistakes') ST().hp(1 - P.correct / Math.max(1, P.qs.filter(x => !x.retry).length));
+      else if (P.trial) ST().hp(1 - P.trial.correct / Math.max(1, P.qs.slice(P.trial.start).filter(x => !x.retry && x.type !== 'teach').length));
       if (q.type === 'match' || q.type === 'order') ST().result(ok);
     }
-    const head = ok ? U.pick(['Excellent!', 'Correct!', 'Well done!', 'Καλῶς!', 'Nice!', 'Great!']) : (q.type === 'mc' ? 'Not quite' : 'Keep practicing');
+    const head = ok ? U.pick(['Excellent!', 'Correct!', 'Well done!', 'Καλῶς!', 'Nice!', 'Great!']) : q.guided ? 'Not yet. Read this, then try again' : (q.type === 'mc' ? 'Not quite' : 'Keep practicing');
     let detail = q.explain || '';
     if (!ok && q.type === 'mc') detail = `Answer: <b class="${q.greekOpts ? 'gk' : ''}">${q.greekOpts ? esc(q.options[q.answer]) : q.options[q.answer]}</b>${detail ? '<br>' + detail : ''}`;
     const foot = $('#foot');
@@ -415,6 +455,7 @@
       else title = r.passed ? (r.perfect ? '💎 Flawless!' : 'Lesson complete!') : 'Almost there!';
       if (!r.passed) extra = `<p>${P.mode === 'boss' ? 'Review the unit\'s lessons and try again.' : 'Score 70% or more to earn a star and unlock the next lesson.'}</p>`;
       if (r.passed && r.firstClear) { const nx = E.nodes[P.node.index + 1]; if (nx) extra = `<p>🔓 Unlocked: <b>${esc(nx.title)}</b></p>`; }
+      if (r.spell) extra = `<div class="spellnew big"><span class="sp-ic">${r.spell.icon}</span><div><div class="sp-k">✨ Spell added to your spellbook</div><b>${esc(r.spell.name)}</b><div class="small">${esc(r.spell.desc)}</div></div></div>` + extra;
     } else {
       const xp = res.xp; E.state.stats.bestCombo = Math.max(E.state.stats.bestCombo, res.maxCombo);
       E.gainXP(xp, Math.floor(res.correct / 4));
@@ -579,7 +620,13 @@
         return `<button class="vtile ${have ? '' : 'locked'}" data-act="${have ? 'readVerse' : 'open'}" data-arg="${have ? n.reading : n.id}">
           <b>${esc(R.ref)}</b><span class="gk">${have ? esc(R.words.slice(0, 6).map(w => w.w).join(' ')) + '…' : '? ? ?'}</span></button>`;
       }).join('')}</div>
-      <h2>Grammar reference</h2><div class="refs">${E.nodes.filter(n => n.type === 'grammar').map(n => `<button class="reftile ${E.unlocked(n) ? '' : 'locked'}" data-act="${E.unlocked(n) ? 'learn' : 'open'}" data-arg="${n.id}">${KG.grammar[n.lesson].icon} ${esc(n.title)}</button>`).join('')}</div>
+      <h2>📕 Spellbook <span class="muted small">${Object.keys(S().spells || {}).length}/${Object.keys(KG.teach).length} spells learned</span></h2>
+      <p class="muted small">Every grammar lesson you finish adds a spell: its rules and charts, ready to study any time (outside of trials).</p>
+      <div class="spellbook">${E.nodes.filter(n => n.type === 'grammar').map(n => {
+        const T = KG.teach[n.lesson], have = (S().spells || {})[n.lesson];
+        return have ? `<button class="spellcard" data-act="learn" data-arg="${n.id}"><span class="sp-ic">${T.spell.icon}</span><b>${esc(T.spell.name)}</b><span>${esc(T.spell.desc)}</span></button>`
+          : `<button class="spellcard locked" data-act="open" data-arg="${n.id}"><span class="sp-ic">🔒</span><b>Unknown spell</b><span>Learn it in “${esc(n.title)}”</span></button>`;
+      }).join('')}</div>
       <details class="lexbox" ${lexFilter ? 'open' : ''}><summary>Lexicon <span class="muted small">${Object.keys(S().vocab).length}/${KG.vocab.length} studied</span></summary>
       <input id="lexq" class="search" placeholder="Search Greek or English…" value="${esc(lexFilter)}">
       <div id="lex" class="lex"></div></details>`;

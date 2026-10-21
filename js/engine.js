@@ -401,6 +401,81 @@ window.KG = window.KG || {};
     return [];
   };
 
+  // ── lesson plans: teach → guided try → trial ────────────────
+  // First play of a lesson interleaves short teaching beats with a guided
+  // question each (a miss just retries, no penalty), then a short trial
+  // against a challenger. Replays go straight to a slightly longer trial.
+  const FOES = [
+    ['dummy', 'The Training Dummy', 'Knock the stuffing out of it with right answers!'],
+    ['imp', 'A Living Book', 'A spellbook has come alive and flaps at you!'],
+    ['rival', 'Kleon, the Rival Apprentice', '"You call that Greek?" Prove him wrong!'],
+    ['shade', 'A Shade of Forgetting', 'It feeds on forgotten words. Remember them!'],
+  ];
+  const teach = o => Object.assign({ type: 'teach' }, o);
+  const guided = q => Object.assign(q, { guided: true, noLog: true });
+  function trial(node, kindHint) {
+    const f = kindHint ? FOES.find(x => x[0] === kindHint) : FOES[node.index % FOES.length];
+    return { type: 'trial', foe: f[0], title: f[1], say: f[2] };
+  }
+  const chunks = (a, sizes) => { const out = []; let i = 0; for (const n of sizes) { if (i < a.length) out.push(a.slice(i, i + n)); i += n; } if (i < a.length) out.push(a.slice(i)); return out; };
+  E.planFor = node => {
+    const first = !E.stars(node.id);
+    const plan = [];
+    if (node.type === 'grammar') {
+      const T = KG.teach[node.lesson];
+      if (first && T) T.beats.forEach((b, i) => {
+        plan.push(teach({ say: b.say, demo: b.demo, spell: i === 0 ? T.spell : null }));
+        plan.push(guided(mc(b.check.q, b.check.a, b.check.w, { explain: b.check.ex || '' })));
+      });
+      plan.push(trial(node));
+      return plan.concat(grammarQuestions(node.lesson, first ? 8 : 10));
+    }
+    if (node.type === 'vocab') {
+      const words = E.vocabSet(node.set), pool = KG.vocab.slice(Math.max(0, node.set * 10 - 30), node.set * 10 + 20);
+      if (!first) return [trial(node)].concat(vocabLessonQuestions(node.set));
+      for (const c of chunks(U.shuffle(words), [3, 3, 4])) {
+        plan.push(teach({ words: c.map(w => ({ g: w.g, lex: w.lex, en: w.en, f: w.f })) }));
+        for (const w of c) plan.push(guided(vocabQ(w, pool, 'g2e')));
+      }
+      plan.push(trial(node));
+      plan.push({ type: 'match', prompt: 'Match the pairs', pairs: sample(words, 5).map(w => [w.g, w.en]), greekLeft: true });
+      for (const w of sample(words, 5)) plan.push(vocabQ(w, pool, 'e2g'));
+      if (node.set > 0) for (const w of sample(KG.vocab.slice(0, node.set * 10), 2)) plan.push(vocabQ(w, pool, 'g2e'));
+      return plan;
+    }
+    if (node.type === 'alpha') {
+      const A = KG.alphabet, [a, b] = KG.alphaGroups[node.group].range, cur = A.slice(a, b), pool = A.slice(0, b);
+      if (!first) return [trial(node)].concat(alphaQuestions(node.group));
+      for (const c of chunks(cur, [3, 3, 2])) {
+        plan.push(teach({ letters: c.map(L => ({ U: L.U, l: L.l, name: L.name, say: L.say })) }));
+        for (const L of c) plan.push(guided(mc('What is this letter called?', L.name, sample(pool.filter(x => x !== L), 3).map(x => x.name), { big: L.l, explain: `${L.U} ${L.l} is <b>${L.name}</b>: ${L.say}.` })));
+      }
+      plan.push(trial(node, 'dummy'));
+      return plan.concat(sample(letterQs(cur, pool), 6), [{ type: 'match', prompt: 'Match each letter to its name', pairs: sample(cur, 5).map(L => [L.l, L.name]), greekLeft: true }]);
+    }
+    if (node.type === 'marks') {
+      if (first) {
+        plan.push(teach({ items: KG.diphthongs.map(d => ({ big: d.g, name: d.tr, say: d.say })), say: 'Two vowels, one sound: these are <b>diphthongs</b>.' }));
+        for (const d of sample(KG.diphthongs, 2)) plan.push(guided(mc('How is this diphthong pronounced?', d.say, KG.diphthongs.filter(x => x !== d).slice(0, 3).map(x => x.say), { big: d.g })));
+        plan.push(teach({ items: KG.marks.map(m => ({ big: m.g, name: m.name, say: m.say })), say: 'Small marks with big jobs: breathings, accents and punctuation.' }));
+        for (const m of sample(KG.marks, 2)) plan.push(guided(mc('What is this mark called?', m.name, KG.marks.filter(x => x !== m).slice(0, 3).map(x => x.name), { big: m.g, explain: m.say })));
+      }
+      plan.push(trial(node));
+      return plan.concat(marksQuestions().slice(0, first ? 6 : 10));
+    }
+    if (node.type === 'readwords') {
+      if (first) plan.push(teach({ say: 'Put the letters together and sound each word out. Many of them gave us English words!', items: KG.readWords.slice(0, 6).map(w => ({ big: w[0], name: w[1], say: w[2] })) }));
+      plan.push(trial(node));
+      return plan.concat(readWordQuestions().slice(0, first ? 8 : 12));
+    }
+    if (node.type === 'reading') {
+      if (first) plan.push(teach({ reading: node.reading, say: 'Read the verse aloud first. Tap any word you don\'t know.' }));
+      plan.push(trial(node, 'imp'));
+      return plan.concat(readingQuestions(node.reading));
+    }
+    return E.questionsFor(node);
+  };
+
   // Questions drawn from everything the learner has unlocked (arcade "Parse Rush")
   E.unlockedCells = () => {
     const keys = E.nodes.filter(n => n.type === 'grammar' && E.stars(n.id) > 0).map(n => n.lesson);
@@ -423,6 +498,11 @@ window.KG = window.KG || {};
     if (node.type === 'boss' && passed) { bonus += 50; if (firstClear) S.stats.bosses++; }
     if (node.type === 'reading' && firstClear) S.stats.verses++;
     if (node.type === 'vocab') for (const w of E.vocabSet(node.set)) if (!S.vocab[w.g]) E.srsAnswer(w.g, true);
+    let spell = null;
+    if (node.type === 'grammar' && passed && KG.teach && KG.teach[node.lesson]) {
+      S.spells = S.spells || {};
+      if (!S.spells[node.lesson]) { S.spells[node.lesson] = U.day(); spell = KG.teach[node.lesson].spell; }
+    }
     let xp = res.xp + bonus;
     const boosted = S.boost > 0;
     if (boosted) { xp *= 2; S.boost--; }
@@ -430,7 +510,7 @@ window.KG = window.KG || {};
     S.stats.lessons++;
     S.stats.bestCombo = Math.max(S.stats.bestCombo, res.maxCombo);
     E.gainXP(xp, coins);
-    return { xp, coins, acc, perfect, passed, stars: rec.stars, firstClear, boosted };
+    return { xp, coins, acc, perfect, passed, stars: rec.stars, firstClear, boosted, spell };
   };
 
   E.recordAnswer = (q, correct, isReview) => {

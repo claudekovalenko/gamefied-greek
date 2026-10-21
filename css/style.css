@@ -355,3 +355,34 @@ body.in-world { overflow: hidden; }
 .wbt-opt.wrong { background: var(--bad-bg); border-color: var(--bad); }
 .wbt-fb { margin: 10px 0; font-weight: 700; }
 .wbt-fb.ok { color: var(--good); } .wbt-fb.no { color: var(--bad); }
+
+/* ── 3D stage overlay (lessons, bosses, review, arcade) ── */
+.world.staging .whud { display: none; }
+body.in-stage .main { position: fixed; inset: 0; z-index: 10; max-width: none; margin: 0; padding: 0; pointer-events: none; background: transparent; }
+body.in-stage .main > * { pointer-events: auto; }
+body.in-stage .main > .s3 { pointer-events: none; }
+.s3 { position: absolute; inset: 0; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; }
+.s3 > * { pointer-events: auto; }
+.s3 .ph { padding: calc(10px + env(safe-area-inset-top)) 14px 6px; background: linear-gradient(rgba(10,16,28,.55), transparent); }
+.s3 .ph .x { color: #fff; }
+.s3 .prog { background: rgba(255,255,255,.25); }
+.s3 .combo { color: #ffd166; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
+.s3 .hearts { text-shadow: 0 1px 3px rgba(0,0,0,.5); }
+.s3 .hearts .lost { color: rgba(255,255,255,.3); }
+.s3 .atimer { color: #1d1405; } .s3 .ascore { color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
+.s3tools { position: absolute; top: calc(58px + env(safe-area-inset-top)); left: 12px; display: flex; gap: 8px; align-items: center; }
+.s3tools:empty { display: none; }
+.s3tool { width: 42px; height: 42px; border-radius: 50%; background: rgba(20,28,40,.6); color: #fff; font-size: 1.2rem; }
+.s3ref { color: #fff; font-weight: 800; text-shadow: 0 1px 3px rgba(0,0,0,.7); }
+.s3foot { margin: 0; border-top: 0; background: transparent; padding: 10px 14px calc(12px + env(safe-area-inset-bottom)); pointer-events: none; }
+.s3foot > * { pointer-events: auto; }
+.s3foot .s3help { color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.8); pointer-events: none; }
+.s3foot.ok, .s3foot.no { background: var(--card); border-radius: 18px 18px 0 0; box-shadow: 0 -8px 30px rgba(0,0,0,.3); border-top: 4px solid; animation: drop .25s; }
+.s3foot.ok { border-color: var(--good); background: color-mix(in srgb, var(--good-bg) 92%, transparent); }
+.s3foot.no { border-color: var(--bad); background: color-mix(in srgb, var(--bad-bg) 92%, transparent); }
+.s3free { background: var(--card); border-radius: 16px; padding: 12px; box-shadow: 0 -6px 24px rgba(0,0,0,.25); display: grid; gap: 8px; }
+.s3q { font-weight: 800; }
+.results.s3card { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(92vw, 480px); max-height: 90vh; overflow: auto; background: color-mix(in srgb, var(--card) 94%, transparent); border-radius: 22px; padding: 22px 18px; box-shadow: 0 20px 60px rgba(0,0,0,.35); border: 3px solid #b8935a; }
+.learn.parchment { position: absolute; inset: calc(10px + env(safe-area-inset-top)) 10px 0; max-width: 680px; margin: 0 auto; overflow: auto; background: color-mix(in srgb, #f5ead0 96%, transparent); color: #2a1d0c; border-radius: 20px 20px 0 0; padding: 16px 16px 0; box-shadow: 0 10px 50px rgba(0,0,0,.35); border: 3px solid #b8935a; border-bottom: 0; }
+.learn.parchment .learn-f { background: linear-gradient(transparent, #f5ead0 35%); }
+@media (prefers-color-scheme: dark) { .learn.parchment { background: color-mix(in srgb, #2a2418 96%, transparent); color: var(--ink); } .learn.parchment .learn-f { background: linear-gradient(transparent, #2a2418 35%); } }

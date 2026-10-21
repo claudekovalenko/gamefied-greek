@@ -3,6 +3,7 @@
 // block each gate until the unit's boss is beaten, and wandering Shades of
 // Forgetting are fought by answering vocabulary questions (spaced review).
 import * as THREE from './vendor/three.module.min.js';
+import { createStage } from './stage.js';
 
 const KG = window.KG, E = KG.engine, U = KG.util;
 const W = KG.world = { ok: false, show() {}, hide() {}, onLessonDone() {} };
@@ -673,6 +674,7 @@ function burst(pos, color) {
 const KEYMAP = { KeyW: 'f+', ArrowUp: 'f+', KeyS: 'f-', ArrowDown: 'f-', KeyA: 'r-', ArrowLeft: 'r-', KeyD: 'r+', ArrowRight: 'r+' };
 addEventListener('keydown', e => {
   if (!active) return;
+  if (mode === 'stage') { if (stage.key(e)) e.preventDefault(); return; }
   if (battle) { if (/^[1-4]$/.test(e.key)) { const b = document.querySelector(`[data-bo="${+e.key - 1}"]`); if (b) b.click(); } else if (e.key === 'Enter') { const g = $('wbtgo'); if (g) g.click(); } return; }
   if (dlgOpen) { if (e.key === 'Escape') closeDialog(); return; }
   input.keys[e.code] = true;
@@ -683,6 +685,7 @@ addEventListener('keydown', e => {
 addEventListener('keyup', e => { input.keys[e.code] = false; });
 const canvas = renderer.domElement;
 canvas.addEventListener('pointerdown', e => {
+  if (mode === 'stage') { stage.pointer(e); return; }
   canvas.setPointerCapture(e.pointerId);
   if (e.pointerType === 'touch' && e.clientX < innerWidth * 0.45 && !input.joy) {
     input.joy = { id: e.pointerId, x0: e.clientX, y0: e.clientY, dx: 0, dy: 0 };
@@ -866,31 +869,37 @@ function snapCamera() {
   camera.lookAt(pos.x, pos.y + 1.4, pos.z);
 }
 function savePos() { const w = ws(); w.x = +player.position.x.toFixed(2); w.z = +player.position.z.toFixed(2); w.yaw = +cam.yaw.toFixed(3); E.save(); }
+let mode = 'world', worldShown = false, stage;
 function loop() {
   if (!active) return;
   raf = requestAnimationFrame(loop);
   const dt = Math.min(0.05, clock.getDelta());
-  step(dt);
-  renderer.render(scene, camera);
+  if (mode === 'stage') { stage.update(dt, clock.elapsedTime); stage.render(renderer); }
+  else { step(dt); renderer.render(scene, camera); }
 }
+function startLoop() { if (!active) { active = true; clock.getDelta(); loop(); } }
 function resize() {
   const w = innerWidth, h = innerHeight;
   renderer.setSize(w, h); camera.aspect = w / h;
   // portrait phones get a wider view so the hero doesn't fill the screen
   camera.fov = w / h < 0.8 ? 74 : 60; cam.dist = Math.max(cam.dist, w / h < 0.8 ? 10 : 8.5);
   camera.updateProjectionMatrix();
+  if (stage) { stage.camera.aspect = w / h; stage.resize(); }
 }
 addEventListener('resize', resize);
 
 // ── public API ────────────────────────────────────────────────
 let pending = [];
 W.show = () => {
+  if (stage) stage.exit();
+  mode = 'world'; worldShown = true;
+  root.classList.remove('staging');
   root.classList.add('on');
   resize();
   refreshMarkers();
   snapCamera();
   for (const p of pending) p(); pending = [];
-  if (!active) { active = true; clock.getDelta(); loop(); }
+  startLoop();
   const w = ws();
   if (!w.intro) {
     w.intro = true; E.save();
@@ -900,7 +909,19 @@ W.show = () => {
       <p class="muted small">Start by collecting the glowing letters along the road, then speak to <b>Alphaeus</b>. Follow the golden light!</p>`, [{ label: 'Begin the journey', cls: 'primary' }]);
   }
 };
-W.hide = () => { if (active) savePos(); active = false; cancelAnimationFrame(raf); root.classList.remove('on'); closeDialog(); };
+W.hide = () => {
+  if (mode === 'world' && worldShown) savePos();
+  worldShown = false; mode = 'world'; if (stage) stage.exit();
+  active = false; cancelAnimationFrame(raf); root.classList.remove('on', 'staging'); closeDialog();
+};
+// The 3D trial stage used by every lesson, boss, review and arcade game.
+W.stage = {
+  get ok() { return !!stage; },
+  enter(kind, unit) { if (mode === 'world' && worldShown) savePos(); closeDialog(); mode = 'stage'; root.classList.add('on', 'staging'); resize(); stage.enter(kind, unit); startLoop(); },
+  ask: (q, h) => stage.ask(q, h), reveal: (ok, c, r) => stage.reveal(ok, c, r), result: ok => stage.result(ok),
+  hp: f => stage.hp(f), combo: n => stage.combo(n), celebrate: w => stage.celebrate(w), orderLine: () => stage.orderLine(), lock: () => stage.lock(),
+  get active() { return mode === 'stage'; },
+};
 W.onLessonDone = (node, r) => {
   if (node.type === 'boss' && r.passed) pending.push(() => {
     const e = ents.find(x => x.kind === 'guardian' && x.zone === node.unit);
@@ -927,6 +948,8 @@ W.debug = { player, cam, P, ents, wisps, questTarget, teleport: (x, z) => { play
   player.position.set(w.x, groundAt(w.x, w.z), w.z);
   if (typeof w.yaw === 'number') cam.yaw = w.yaw;
   camera.position.set(w.x, groundAt(w.x, w.z) + 5, w.z + 8);
+  stage = createStage({ renderer, person, golem, wispMesh, ZONES, KG, animatePerson });
+  W.debug.stage = stage;
   W.ok = true;
   document.dispatchEvent(new Event('world-ready'));
 })().catch(err => { console.error(err); document.dispatchEvent(new Event('world-failed')); });

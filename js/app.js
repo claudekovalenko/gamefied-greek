@@ -92,12 +92,27 @@
   let view = 'path';
   let home = 'path'; // where lessons return to: the 3D world or the path map
   const hasWorld = () => !!(KG.world && KG.world.ok);
+  // Every learning game is played on the 3D stage when the device supports it.
+  const use3D = () => hasWorld() && KG.world.stage && KG.world.stage.ok && S().settings.mode3d !== false;
+  const ST = () => KG.world.stage;
+  function stageKind(o) {
+    if (o.mode === 'boss') return 'guardian';
+    if (o.mode === 'review' || o.mode === 'mistakes') return 'shade';
+    if (o.node && o.node.type === 'reading') return 'scroll';
+    return 'mentor';
+  }
+  const stageUnit = o => (o.node ? o.node.unit : (E.nextNode() || { unit: 0 }).unit);
+  function enterStage(kind, unit) {
+    document.body.classList.remove('in-world');
+    document.body.classList.add('playing', 'in-stage');
+    ST().enter(kind, unit);
+  }
   function go(v) {
     if (v === 'world' && !hasWorld()) v = 'path';
     view = v; location.hash = v;
     if (v === 'world' || v === 'path') home = v;
     document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('on', b.dataset.arg === v));
-    document.body.classList.remove('playing');
+    document.body.classList.remove('playing', 'in-stage');
     document.body.classList.toggle('in-world', v === 'world');
     if (v === 'world') { closeSheet(); main.innerHTML = ''; KG.world.show(); renderTop(); return; }
     if (hasWorld()) KG.world.hide();
@@ -215,10 +230,13 @@
   function showLearn(id, thenStart) {
     const n = E.node(id); closeSheet();
     readerReading = n.type === 'reading' ? KG.readings[n.reading] : null;
-    if (hasWorld()) KG.world.hide();
-    document.body.classList.remove('in-world');
-    document.body.classList.add('playing');
-    main.innerHTML = `<div class="learn"><div class="learn-h"><button class="x" data-act="go" data-arg="${home}" aria-label="Close">✕</button><h2>${esc(n.title)}</h2></div>
+    if (use3D()) enterStage(stageKind({ node: n }), n.unit);
+    else {
+      if (hasWorld()) KG.world.hide();
+      document.body.classList.remove('in-world');
+      document.body.classList.add('playing');
+    }
+    main.innerHTML = `<div class="learn ${use3D() ? 'parchment' : ''}"><div class="learn-h"><button class="x" data-act="go" data-arg="${home}" aria-label="Close">✕</button><h2>${esc(n.title)}</h2></div>
       ${learnHTML(n)}<div class="learn-f"><button class="btn primary wide" data-act="start" data-arg="${id}">${thenStart ? 'Start practice ▶' : 'Practice now ▶'}</button></div></div>`;
     window.scrollTo(0, 0);
   }
@@ -246,9 +264,13 @@
     if (!opts.qs.length) { toast('Nothing to practice here yet!'); return go(view); }
     P = Object.assign({ i: 0, correct: 0, wrong: 0, combo: 0, maxCombo: 0, xp: 0, hearts: 3, answered: false }, opts);
     readerReading = null;
-    if (hasWorld()) KG.world.hide();
-    document.body.classList.remove('in-world');
-    document.body.classList.add('playing');
+    P.is3D = use3D();
+    if (P.is3D) enterStage(stageKind(P), stageUnit(P));
+    else {
+      if (hasWorld()) KG.world.hide();
+      document.body.classList.remove('in-world');
+      document.body.classList.add('playing');
+    }
     renderQ();
   }
   function header() {
@@ -258,8 +280,28 @@
       ${P.mode === 'boss' ? `<div class="hearts">${'❤'.repeat(P.hearts)}<span class="lost">${'❤'.repeat(3 - P.hearts)}</span></div>` : ''}
       <div class="combo ${P.combo >= 3 ? 'hot' : ''}">${P.combo >= 2 ? `🔥${P.combo}` : ''}</div></div>`;
   }
+  function renderQ3D(q) {
+    const R = q.reading ? KG.readings[q.reading] : null;
+    readerReading = R;
+    const tools = `${q.speak ? `<button class="s3tool" data-act="say" data-arg="${esc(q.speak)}" aria-label="Listen">🔊</button>` : ''}
+      ${R ? `<button class="s3tool" data-act="hint" data-arg="${q.reading}" aria-label="Word help">💡</button><span class="s3ref">${esc(R.ref)}</span>` : ''}`;
+    let foot = '';
+    if (q.type === 'order') foot = `<div class="muted center small s3help">Tap the word-stones in order to build the bridge. Tap a placed stone to take it back.</div><button class="btn primary wide" data-act="checkOrder" id="checkbtn" disabled>Check</button>`;
+    else if (q.type === 'free') foot = `<div class="s3free"><div class="s3q">${q.prompt}</div><textarea id="freetr" rows="3" placeholder="Type your translation…"></textarea><button class="btn primary wide" data-act="compare">Compare with a model translation</button></div>`;
+    else if (q.type === 'match') foot = `<div class="muted center s3help">Tap a stone, then its partner</div>`;
+    else foot = `<div class="muted center s3help">Tap a tablet${matchMedia('(pointer: fine)').matches ? ' or press 1–4' : ''}</div>`;
+    main.innerHTML = `<div class="s3">${header()}<div class="s3tools">${tools}</div><div class="foot s3foot" id="foot">${foot}</div></div>`;
+    ST().combo(P.combo);
+    ST().ask(q, {
+      pick: i => { if (P.answered) return; const ok = i === q.answer; ST().reveal(ok, i, q.answer); answer(ok, q); },
+      matchDone: miss => answer(miss === 0, Object.assign({}, q, { explain: miss ? `${miss} mismatch${miss > 1 ? 'es' : ''}. Keep at it!` : 'All pairs matched perfectly!' })),
+      orderChange: line => { const b = $('#checkbtn'); if (b) b.disabled = !line.length; },
+    });
+    if (q.type === 'mc' && q.speak && q.big && S().settings.speech) speak(q.speak);
+  }
   function renderQ() {
     const q = P.qs[P.i]; P.answered = false; P.q = q;
+    if (P.is3D) return renderQ3D(q);
     let body = '';
     if (q.type === 'mc') {
       body = `<div class="prompt">${q.prompt}</div>
@@ -325,6 +367,11 @@
         }
       }
     }
+    if (P.is3D) {
+      ST().combo(P.combo);
+      if (P.mode === 'boss' || P.mode === 'review' || P.mode === 'mistakes') ST().hp(1 - P.correct / Math.max(1, P.qs.filter(x => !x.retry).length));
+      if (q.type === 'match' || q.type === 'order') ST().result(ok);
+    }
     const head = ok ? U.pick(['Excellent!', 'Correct!', 'Well done!', 'Καλῶς!', 'Nice!', 'Great!']) : (q.type === 'mc' ? 'Not quite' : 'Keep practicing');
     let detail = q.explain || '';
     if (!ok && q.type === 'mc') detail = `Answer: <b class="${q.greekOpts ? 'gk' : ''}">${q.greekOpts ? esc(q.options[q.answer]) : q.options[q.answer]}</b>${detail ? '<br>' + detail : ''}`;
@@ -332,6 +379,7 @@
     foot.className = 'foot ' + (ok ? 'ok' : 'no');
     foot.innerHTML = `<div class="fb"><div class="fb-h">${ok ? '✔' : '✘'} ${head}</div>${detail ? `<div class="fb-d">${detail}</div>` : ''}</div>
       <button class="btn ${ok ? 'good' : 'bad'} wide" data-act="next" id="nextbtn">Continue</button>`;
+    if (P.is3D) foot.classList.add('s3foot');
     $('.prog i').style.width = ((P.i + 1) / P.qs.length) * 100 + '%';
     const c = $('.combo'); if (c) { c.textContent = P.combo >= 2 ? `🔥${P.combo}` : ''; c.classList.toggle('hot', P.combo >= 3); }
     const h = $('.hearts'); if (h) h.innerHTML = `${'❤'.repeat(Math.max(0, P.hearts))}<span class="lost">${'❤'.repeat(3 - Math.max(0, P.hearts))}</span>`;
@@ -361,7 +409,8 @@
     }
     if (r.passed) { sfx('win'); confetti(r.perfect ? 200 : 110); }
     const node = P.node;
-    main.innerHTML = `<div class="results">
+    if (P.is3D) ST().celebrate(r.passed);
+    main.innerHTML = `<div class="results ${P.is3D ? 's3card' : ''}">
       <h1>${title}</h1>
       ${node && r.passed ? `<div class="bigstars">${starStr(r.stars)}</div>` : ''}
       <div class="rstats">
@@ -436,8 +485,8 @@
   }
   let A = null;
   function startArcade(kind) {
-    A = { kind, score: 0, end: Date.now() + 60000, timer: null };
-    document.body.classList.add('playing');
+    A = { kind, score: 0, end: Date.now() + 60000, timer: null, is3D: use3D() };
+    if (A.is3D) enterStage('arcade', 0); else document.body.classList.add('playing');
     A.timer = setInterval(tickArcade, 200);
     arcadeNext();
   }
@@ -450,6 +499,13 @@
   function arcadeNext() {
     A.q = arcadeQ(A.kind);
     const q = A.q;
+    if (A.is3D) {
+      main.innerHTML = `<div class="s3"><div class="ph"><button class="x" data-act="quitArcade" aria-label="Quit">✕</button>
+        <div class="atimer"><span id="atime">60</span>s</div><div class="ascore">⭐ ${A.score}</div></div></div>`;
+      A.lock = false;
+      ST().ask(q, { pick: i => arcadePick(i) });
+      return tickArcade();
+    }
     main.innerHTML = `<div class="player arcade"><div class="ph"><button class="x" data-act="quitArcade" aria-label="Quit">✕</button>
       <div class="atimer"><span id="atime">60</span>s</div><div class="ascore">⭐ ${A.score}</div></div>
       <div class="qbody"><div class="prompt">${q.prompt}</div><div class="bigword"><span class="gk">${esc(q.big)}</span></div>
@@ -460,22 +516,26 @@
     if (!A || A.lock) return;
     const ok = +i === A.q.answer;
     A.lock = true;
-    el.classList.add(ok ? 'right' : 'wrong');
-    if (!ok) { document.querySelectorAll('.opt')[A.q.answer].classList.add('right'); A.end -= 3000; sfx('bad'); }
-    else { A.score++; sfx('good'); }
-    setTimeout(() => { if (A) { A.lock = false; arcadeNext(); } }, ok ? 250 : 700);
+    if (A.is3D) ST().reveal(ok, +i, A.q.answer);
+    else {
+      el.classList.add(ok ? 'right' : 'wrong');
+      if (!ok) document.querySelectorAll('.opt')[A.q.answer].classList.add('right');
+    }
+    if (!ok) { A.end -= 3000; sfx('bad'); } else { A.score++; sfx('good'); }
+    setTimeout(() => { if (A) { A.lock = false; arcadeNext(); } }, A.is3D ? (ok ? 700 : 1100) : (ok ? 250 : 700));
   }
   function endArcade() {
     if (!A) return;
     clearInterval(A.timer);
-    const { kind, score } = A; A = null;
+    const { kind, score, is3D } = A; A = null;
+    if (is3D) ST().celebrate(score > 0);
     const best = S().arcade[kind] || 0, record = score > best;
     if (record) S().arcade[kind] = score;
     const xp = score * 3, coins = Math.floor(score / 4);
     if (xp) E.gainXP(xp, coins); else E.save();
     E.checkAchievements();
     if (record && score) { sfx('win'); confetti(); }
-    main.innerHTML = `<div class="results"><h1>${record && score ? '🏅 New high score!' : '⏱ Time!'}</h1>
+    main.innerHTML = `<div class="results ${is3D ? 's3card' : ''}"><h1>${record && score ? '🏅 New high score!' : '⏱ Time!'}</h1>
       <div class="rstats"><div><b>${score}</b><span>score</span></div><div><b>${Math.max(best, score)}</b><span>best</span></div><div><b>+${xp}</b><span>XP</span></div><div><b>+${coins}</b><span>🪙</span></div></div>
       <div class="col-btns"><button class="btn primary wide" data-act="arcade" data-arg="${kind}">Play again</button><button class="btn ghost wide" data-act="go" data-arg="arcade">Back</button></div></div>`;
     renderTop();
@@ -549,6 +609,7 @@
         <label>Daily goal <select id="goalsel">${[20, 50, 100, 200].map(g => `<option value="${g}" ${g === s.dailyGoal ? 'selected' : ''}>${g} XP · ${{ 20: 'Casual', 50: 'Regular', 100: 'Serious', 200: 'Intense' }[g]}</option>`).join('')}</select></label>
         <label class="tg"><input type="checkbox" id="setsound" ${s.settings.sound ? 'checked' : ''}><span>Sound effects</span></label>
         <label class="tg"><input type="checkbox" id="setspeech" ${s.settings.speech ? 'checked' : ''}><span>Read Greek aloud <span class="muted small">(uses your device's Greek voice, modern pronunciation)</span></span></label>
+        <label class="tg"><input type="checkbox" id="set3d" ${s.settings.mode3d !== false ? 'checked' : ''}><span>Play lessons in 3D <span class="muted small">(turn off for simple 2D cards on older devices)</span></span></label>
         <label class="tg"><input type="checkbox" id="setunlock" ${s.settings.unlockAll ? 'checked' : ''}><span>Unlock all lessons <span class="muted small">(if you already know some Greek)</span></span></label>
         <div class="row"><button class="btn ghost" data-act="export">⬇ Export progress</button><button class="btn ghost" data-act="import">⬆ Import</button><button class="btn danger" data-act="reset">Reset</button></div>
         <input type="file" id="importfile" accept="application/json" hidden></div>
@@ -556,6 +617,7 @@
     $('#goalsel').onchange = e => { s.dailyGoal = +e.target.value; E.save(); renderTop(); };
     $('#setsound').onchange = e => { s.settings.sound = e.target.checked; E.save(); };
     $('#setspeech').onchange = e => { s.settings.speech = e.target.checked; E.save(); if (e.target.checked) speak('Ἐν ἀρχῇ ἦν ὁ λόγος'); };
+    $('#set3d').onchange = e => { s.settings.mode3d = e.target.checked; E.save(); };
     $('#setunlock').onchange = e => { s.settings.unlockAll = e.target.checked; E.save(); };
     $('#importfile').onchange = e => {
       const f = e.target.files[0]; if (!f) return;
@@ -599,7 +661,9 @@
     checkOrder() {
       if (P.answered) return;
       const norm = s => s.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
-      const got = norm(P.order.line.map(c => c.t).join(' ')), want = norm(P.q.chunks.join(' '));
+      const line = P.is3D ? ST().orderLine() : P.order.line.map(c => c.t);
+      const got = norm(line.join(' ')), want = norm(P.q.chunks.join(' '));
+      if (P.is3D) ST().lock();
       const R = KG.readings[P.q.reading];
       answer(got === want, Object.assign({}, P.q, { explain: `${got === want ? '' : 'Correct order: '}<i>${esc(R.tr)}</i>` }));
       document.querySelectorAll('.tile').forEach(t => t.disabled = true);
@@ -619,6 +683,7 @@
     arcade: k => startArcade(k), apick: (i, el) => arcadePick(i, el),
     quitArcade: () => { if (A) clearInterval(A.timer); A = null; go('arcade'); },
     readVerse,
+    hint: id => { const R = KG.readings[id]; readerReading = R; sheet(`<div class="sheet-k">Word help</div><h2>${esc(R.ref)}</h2>${verseHTML(R, 'big')}<div id="wordinfo" class="wordinfo muted">Tap any word for its meaning and parsing.</div>`); },
     buy(item) {
       if (E.buy(item)) { sfx('win'); toast(item === 'freeze' ? '🧊 Streak freeze equipped!' : '🚀 XP boost active for 3 lessons!'); renderProfile(); renderTop(); }
       else toast(item === 'freeze' && S().freezes >= 2 ? 'You can hold at most 2 freezes.' : 'Not enough 🪙 yet. Keep learning!');

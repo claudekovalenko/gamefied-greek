@@ -167,7 +167,8 @@ export function createStage(ctx) {
   const stoneMat = M(0xd8ccb0, { flatShading: false, roughness: 0.9 });
   function slab(text, w, h, { greek = false, num = null, face = '#f3e7c8', color = '#2a1d0c' } = {}) {
     const g = new THREE.Group();
-    const ratio = w / h, W = 512, H = Math.max(96, Math.round(512 / ratio));
+    // the canvas keeps the slab's shape, so wide slabs don't stretch their text
+    const ratio = w / h, H = Math.max(96, Math.round(512 / ratio)), W = Math.min(2048, Math.max(512, Math.round(H * ratio)));
     const tex = textCanvas(text, { W, H, greek, color, bg: face, maxSize: Math.round(H * (greek ? 0.62 : 0.42)), minSize: 16, border: '#b8935a', pad: Math.min(26, Math.round(H * 0.13)) });
     const front = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.8, emissive: 0x000000 });
     const box = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.28), [stoneMat, stoneMat, stoneMat, stoneMat, front, stoneMat]);
@@ -687,7 +688,7 @@ export function createStage(ctx) {
     MG.total = MG.q.chunks.length; MG.idx = 0; MG.time = 5 + MG.q.chunks.length * 3.5; MG.left = MG.time; MG.built = [];
     const { hh, hw, portrait } = frame();
     const b = banner(R.words.map(w => w.w + w.p).join(' '), Math.min(hw * 1.94, 14), portrait ? hh * 0.36 : hh * 0.3, true);
-    place(b, 0, hh * 0.76); introAnim(b, 0);
+    place(b, 0, hh * (portrait ? 0.62 : 0.72)); introAnim(b, 0);
     if (!MG.q.arcade) { // the arcade has its own clock
       const bar = new THREE.Mesh(new THREE.BoxGeometry(hw * 1.9, hh * 0.035, 0.1), new THREE.MeshBasicMaterial({ color: 0xffd166 }));
       place(bar, 0, hh * 0.5); MG.bar = bar; MG.barW = hw * 1.9;

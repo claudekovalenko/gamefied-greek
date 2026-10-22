@@ -305,6 +305,7 @@ function grass() {
     if (Math.abs(x) > R - 6 || Math.abs(z) > R - 6) continue;
     const y = groundAt(x, z); if (y < wy + 0.3) continue;
     if (wheat && colliders.some(cl => Math.abs(cl.x - x) < cl.r + 1 && Math.abs(cl.z - z) < cl.r + 1)) continue;
+    if (keepOut.some(c => Math.hypot(c.x - x, c.z - z) < c.r - 0.5)) continue;
     const s = 0.6 + rand() * 0.9;
     q.setFromAxisAngle(up, rand() * 6.28);
     m.compose(p.set(x, y - 0.02, z), q, sc.set(s, s * (0.7 + rand() * 0.8), s));
@@ -714,7 +715,7 @@ function findSpot(ts, offs, r) {
 }
 function buildSideQuests() {
   const add = e => { addEnt(e); keepOut.push({ x: e.x, z: e.z, r: e.sq === 'runes' ? 7.5 : 2.5 }); };
-  const rc = findSpot([0.45, 0.55, 0.35, 0.65, 0.25, 0.75], [13, 16, 10, 19], 5.8);
+  const rc = findSpot([0.45, 0.55, 0.35, 0.65, 0.25, 0.75, 0.15, 0.85], [13, 16, 10, 19, 22, 8], 5.8) || findSpot([0.4, 0.6, 0.3, 0.7], [12, 15, 18], 5);
   if (rc) add(SQ.runes({ x: rc.x, z: rc.z }));
   const cp = findSpot([0.2, 0.7, 0.3, 0.8, 0.6], [7, 9, 11], 1.6);
   if (cp) add(SQ.courier({ x: cp.x, z: cp.z, name: COURIERS[WI], look: { robe: [0x8a6a4a, 0x4a6a3a, 0xa08a4a, 0x3a5a7a, 0x6a5a4a, 0x8a5a3a, 0x3a6a6a, 0x6a6a5a, 0x7a3a3a][WI], hair: 0x5a4030, beard: WI % 2 === 0 } }));

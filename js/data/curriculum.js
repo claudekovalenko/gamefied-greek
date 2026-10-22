@@ -170,4 +170,7 @@ KG.achievements = [
   { id: 'scroll10', icon: '🏺', name: 'Keeper of Scrolls', desc: 'Translate 10 passages', test: s => (s.stats.passages || 0) >= 10 },
   { id: 'freeread', icon: '🧭', name: 'Free Reader', desc: 'Translate a passage you chose yourself', test: s => ((s.reading || {}).free || 0) >= 1 },
   { id: 'goal', icon: '🎯', name: 'Goal Getter', desc: 'Hit your daily goal', test: s => s.stats.goals >= 1 },
+  { id: 'angler', icon: '🎣', name: 'Fisher of Words', desc: 'Catch 20 word-fish', test: s => (s.stats.fish || 0) >= 20 },
+  { id: 'runereader', icon: '🪨', name: 'Rune Reader', desc: 'Spell 15 words in a Rune Circle', test: s => (s.stats.runes || 0) >= 15 },
+  { id: 'courier', icon: '📦', name: 'Swift Courier', desc: 'Run 10 word errands', test: s => (s.stats.courier || 0) >= 10 },
 ];

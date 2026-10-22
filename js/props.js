@@ -41,6 +41,7 @@ export function makeProps(ctx) {
     const g = G();
     const p = cyl(0.08, 0.1, 2.4, 0x3a3a3a, 6); p.position.y = 1.2; g.add(p);
     const l = mesh(new THREE.SphereGeometry(0.22, 8, 8), 0xffe9a8, { emissive: 0xffc04a, emissiveIntensity: 1.2 }); l.position.y = 2.5; g.add(l);
+    if (ctx.glow) { const h = ctx.glow(0xffc870, 1.8); h.position.y = 2.5; g.add(h); }
     put(g, x, z); col(x, z, 0.25);
   };
   a.sign = (p, text) => {
@@ -241,6 +242,7 @@ export function makeProps(ctx) {
   a.crystal = (x, z, rand) => {
     const c = new THREE.Mesh(new THREE.OctahedronGeometry(0.8 + rand() * 0.8, 0), new THREE.MeshStandardMaterial({ color: 0xbfe8ff, emissive: 0x3a8ac0, emissiveIntensity: 0.5, transparent: true, opacity: 0.8, roughness: 0.1, flatShading: true }));
     c.scale.y = 1.8; c.rotation.set(rand() * 0.4, rand() * 6, rand() * 0.4); put(c, x, z, 0.8); col(x, z, 0.8);
+    if (ctx.glow) { const h = ctx.glow(0x7fd0ff, 3.4); h.scale.y /= 1.8; c.add(h); }
   };
   a.flags = p => {
     const g = G();

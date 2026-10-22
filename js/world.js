@@ -613,6 +613,8 @@ function teachingSpot(p, sd, k, title) {
   const nx = Math.cos(p.a) * sd, nz = -Math.sin(p.a) * sd, x = p.x + nx * 2.4, z = p.z + nz * 2.4;
   const rug = new THREE.Mesh(new THREE.CircleGeometry(2.6, 20), mat([0x9a2a2a, 0x2a5a8a, 0x6a2a7a][k]));
   rug.rotation.x = -Math.PI / 2; rug.position.set(p.x + nx * 0.6, groundAt(p.x + nx * 0.6, p.z + nz * 0.6) + 0.04, p.z + nz * 0.6); WG.add(rug);
+  const trim = new THREE.Mesh(new THREE.RingGeometry(2.25, 2.45, 32), mat(0xe0b040)); trim.rotation.x = -Math.PI / 2; trim.position.copy(rug.position).y += 0.01; WG.add(trim);
+  const inner = new THREE.Mesh(new THREE.RingGeometry(1.2, 1.32, 24), mat(0xf0d8a0)); inner.rotation.x = -Math.PI / 2; inner.position.copy(rug.position).y += 0.01; WG.add(inner);
   const g = new THREE.Group();
   for (const s of [-1, 1]) { const post = mesh(new THREE.CylinderGeometry(0.07, 0.07, 2, 6), 0x6a4a2a); post.position.set(s * 1.1, 1, 0); g.add(post); }
   const slate = mesh(new THREE.BoxGeometry(2.5, 1.3, 0.1), 0x2a3a2a); slate.position.y = 1.6; g.add(slate);
@@ -812,7 +814,7 @@ function buildWorld(i) {
   setAtmosphere(i);
   buildTerrain(); buildWater();
   const col = (x, z, r) => colliders.push({ x, z, r });
-  const pctx = { THREE, mesh, put, add: o => WG.add(o), col, ground: groundAt, textSprite, glyphSprite, anim: fn => anims.push(fn), waterMat, GREEK: GREEK_FONT, waterY: D.water ? D.water.y : 0, bridgeTop: BR ? BR.top : 0 };
+  const pctx = { glow: (c, sz) => FX.glow(c, sz, ATMOS[WI].stars ? 0.85 : 0.5), THREE, mesh, put, add: o => WG.add(o), col, ground: groundAt, textSprite, glyphSprite, anim: fn => anims.push(fn), waterMat, GREEK: GREEK_FONT, waterY: D.water ? D.water.y : 0, bridgeTop: BR ? BR.top : 0 };
   const api = Object.assign(makeProps(pctx), { THREE, mesh, put, col, along, textSprite, rand: rng(i * 101 + 9), GREEK: GREEK_FONT, faceAngle: (x, z, tx, tz) => Math.atan2(tx - x, tz - z) });
   D.build(api);
   W.libraryDoor = pctx.libraryDoor || null;
@@ -938,7 +940,7 @@ const SQ = makeSideQuests({
     if (!w.nosrs) { E.srsAnswer(w.g, ok); st.reviews++; E.questProgress('reviews'); }
     E.save(); updateHUD();
   },
-  reward: (xp, coins, q) => { E.gainXP(xp, coins); E.questProgress(q); updateHUD(); },
+  reward: (xp, coins, q) => { const st = E.state.stats; st[q] = (st[q] || 0) + 1; E.gainXP(xp, coins); E.questProgress(q); E.checkAchievements(); updateHUD(); },
   sfx: k => KG.app.sfx(k), speak: g => KG.app.speak(g), toast: (h, c) => KG.app.toast(h, c),
   dialog: (n, h, b) => dialog(n, h, b), free: (x, z) => openGround(x, z, 1.2),
   face: (x, z, tx, tz) => { player.position.set(x, groundAt(x, z), z); player.rotation.y = Math.atan2(tx - x, tz - z); cam.yaw = player.rotation.y + Math.PI; cam.pitch = 0.32; },
@@ -1014,7 +1016,7 @@ function placeAt(where) {
   if (where === 'gate') { p = along(0.92); face = p.a + Math.PI; }
   else if (where === 'mentor') { const m = (questTarget().ent && questTarget().ent.kind === 'mentor' ? questTarget().ent : ents.find(e => e.kind === 'mentor')), r = m.obj.rotation.y; p = { x: m.x + Math.sin(r) * 4 + Math.cos(r) * 1.6, z: m.z + Math.cos(r) * 4 - Math.sin(r) * 1.6 }; face = Math.atan2(m.x - p.x, m.z - p.z); }
   else if (where && where.x !== undefined) { p = where; face = where.yaw !== undefined ? where.yaw - Math.PI : 0; }
-  else { p = along(0.05); face = p.a; }
+  else { p = along(0.1); face = p.a; } // far enough from the arrival portal that the camera stays clear of it
   player.position.set(p.x, groundAt(p.x, p.z), p.z);
   player.rotation.y = face; cam.yaw = face + Math.PI;
   P.vel.set(0, 0, 0);

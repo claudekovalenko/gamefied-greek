@@ -529,3 +529,46 @@ body.in-stage .main > .s3 { pointer-events: none; }
 .s3 .acombo { color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.6); } .s3 .acombo.hot { color: #ffb040; }
 .amedal { text-align: center; font-weight: 800; margin: 6px 0 10px; } .amedal .big { font-size: 2.4rem; vertical-align: middle; }
 .s3 .abar { position: absolute; top: calc(54px + env(safe-area-inset-top)); left: 0; right: 0; }
+/* a pickup flying to its counter */
+.flyhud { position: fixed; z-index: 60; pointer-events: none; font-size: 26px; font-weight: 900; color: #ffd166; text-shadow: 0 2px 6px rgba(0,0,0,.5); transform: translate(-50%, -50%); }
+/* side quests: fishing, rune circle, courier */
+.sq-panel { position: absolute; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); transform: translate(-50%, 30px); width: min(440px, calc(100% - 24px)); z-index: 6; pointer-events: auto;
+  background: linear-gradient(180deg, rgba(255,250,236,.97), rgba(246,234,206,.97)); color: #2a1d0c; border: 2px solid #b8935a; border-radius: 18px; padding: 12px 14px; box-shadow: 0 10px 30px rgba(0,0,0,.35);
+  opacity: 0; visibility: hidden; transition: opacity .25s, transform .25s, visibility .25s; }
+.sq-panel.on { opacity: 1; visibility: visible; transform: translate(-50%, 0); }
+.sq-h { font-weight: 900; font-size: 1.05rem; display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.sq-n { margin-left: auto; font-size: .85rem; color: #7a5a2a; font-weight: 800; }
+.sq-x { border: 0; background: rgba(0,0,0,.08); border-radius: 50%; width: 28px; height: 28px; font-weight: 900; cursor: pointer; color: inherit; }
+.sq-tip { font-size: .95rem; margin: 4px 0; }
+.sq-tip.small { font-size: .82rem; color: #6a5a40; }
+.sq-big { margin-top: 6px; font-size: 1.1rem; }
+.sq-wait { text-align: center; font-style: italic; color: #6a5a40; padding: 10px 0; animation: sqpulse 1.2s infinite; }
+@keyframes sqpulse { 50% { opacity: .45; } }
+.sq-word { text-align: center; font-size: 2.2rem; margin: 2px 0 6px; color: #1f3b5c; }
+.sq-timer { height: 8px; border-radius: 4px; background: rgba(0,0,0,.12); overflow: hidden; margin-bottom: 8px; }
+.sq-timer i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #e0453a, #ffd166 40%, #3fb07a); transition: width .1s linear; }
+.sq-opts { display: grid; gap: 6px; }
+.sq-opt { text-align: left; border: 2px solid #c8ab78; background: #fffaf0; border-radius: 12px; padding: 9px 12px; font: inherit; font-weight: 800; cursor: pointer; color: inherit; }
+.sq-opt .k { display: inline-block; width: 22px; height: 22px; line-height: 22px; text-align: center; border-radius: 50%; background: #1f3b5c; color: #fff; font-size: .75rem; margin-right: 8px; }
+.sq-opt.right { background: #d8f5df; border-color: #3fb07a; }
+.sq-opt.wrong { background: #fbdcd8; border-color: #e0453a; }
+.sq-fb { margin-top: 8px; font-weight: 800; }
+.sq-fb.ok { color: #1f7a4a; } .sq-fb.no { color: #a8321f; }
+.sq-slots { display: flex; justify-content: center; gap: 6px; font-size: 1.8rem; margin: 6px 0; }
+.sq-slots span { min-width: 1.1em; text-align: center; border-bottom: 3px solid #b8935a; color: #b8935a; }
+.sq-slots span.on { color: #1f3b5c; border-color: #ffb020; animation: sqpop .3s; }
+@keyframes sqpop { 0% { transform: scale(1.6); } 100% { transform: scale(1); } }
+.sq-sum { font-size: 2rem; text-align: center; margin: 6px 0; letter-spacing: 4px; }
+.sq-row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+.sq-link { border: 0; background: none; color: #2f5f8f; font: inherit; font-weight: 800; text-decoration: underline; cursor: pointer; padding: 0; }
+.whud:has(.sq-panel.on) .whelp, .whud:has(.sq-panel.on) .wprompt { display: none; }
+.wbattle { align-items: flex-end; background: linear-gradient(180deg, transparent 40%, rgba(40, 10, 70, .35)); }
+.wbt-hp { display: flex; gap: 6px; margin: 6px 0 2px; }
+.wbt-hp i { flex: 1; height: 8px; border-radius: 4px; background: rgba(0,0,0,.12); }
+.wbt-hp i.on { background: linear-gradient(90deg, #e0453a, #ff8a5a); box-shadow: 0 0 8px rgba(224,69,58,.6); }
+.spellcard .sp-pow { font-style: normal; font-size: .75rem; color: #b8862a; }
+.spellcard.fading { opacity: .72; filter: saturate(.5); border-style: dashed; }
+.spellcard.fading .sp-pow { color: #7a5aa8; font-weight: 800; }
+.countdown { position: fixed; inset: 0; display: grid; place-items: center; z-index: 70; pointer-events: none; font: 900 min(28vw, 180px)/1 var(--ui, Nunito, sans-serif); color: #ffd166; text-shadow: 0 6px 0 #8a5a10, 0 12px 30px rgba(0,0,0,.5); }
+.countdown.pop { animation: cdpop .6s ease-out forwards; }
+@keyframes cdpop { 0% { transform: scale(2.2); opacity: 0; } 25% { transform: scale(1); opacity: 1; } 80% { opacity: 1; } 100% { transform: scale(.8); opacity: 0; } }

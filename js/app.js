@@ -18,6 +18,14 @@
     o.connect(g).connect(actx.destination);
     o.start(actx.currentTime + start); o.stop(actx.currentTime + start + dur + 0.05);
   }
+  // a short burst of filtered noise: splashes and whooshes
+  function noise(dur, vol, freq) {
+    const n = actx.sampleRate * dur, buf = actx.createBuffer(1, n, actx.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    const src = actx.createBufferSource(), f = actx.createBiquadFilter(), g = actx.createGain();
+    src.buffer = buf; f.type = 'bandpass'; f.frequency.value = freq; g.gain.value = vol;
+    src.connect(f).connect(g).connect(actx.destination); src.start();
+  }
   function sfx(kind) {
     if (!S().settings.sound) return;
     try {
@@ -27,6 +35,12 @@
       else if (kind === 'combo') { tone(880, 0, 0.1); tone(1175, 0.07, 0.1); tone(1568, 0.14, 0.2); }
       else if (kind === 'win') [523, 659, 784, 1047].forEach((f, i) => tone(f, i * 0.11, 0.3, 'triangle'));
       else if (kind === 'tap') tone(440, 0, 0.05, 'triangle', 0.05);
+      else if (kind === 'coin') { tone(1319, 0, 0.07, 'square', 0.035); tone(1760, 0.06, 0.16, 'square', 0.03); }
+      else if (kind === 'hit') { tone(220, 0, 0.08, 'square', 0.06); tone(110, 0.02, 0.18, 'sawtooth', 0.05); }
+      else if (kind === 'splash') { noise(0.35, 0.08, 1800); tone(520, 0, 0.12, 'sine', 0.05); }
+      else if (kind === 'reel') [660, 740, 830, 990].forEach((f, i) => tone(f, i * 0.05, 0.08, 'triangle', 0.06));
+      else if (kind === 'whoosh') noise(0.25, 0.06, 900);
+      else if (kind === 'step') tone(300 + Math.random() * 80, 0, 0.05, 'triangle', 0.04);
       else if (kind === 'level') [392, 523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, i * 0.09, 0.35, 'triangle'));
     } catch (e) { /* audio unavailable */ }
   }
@@ -359,6 +373,7 @@
     let streak = 0;
     q.onHit = () => { if (!P || P.q !== q) return; streak++; floatXP(streak >= 3 ? `🔥${streak} +3 XP` : '+3 XP', $('.prog')); };
     q.onMiss = () => { streak = 0; };
+    q.onWord = (g, ok) => { if (S().vocab[g]) E.srsAnswer(g, ok); };
     ST().mini(q, res => {
       if (!P || P.q !== q) return;
       P.xp += res.hits * 3;
@@ -462,11 +477,13 @@
           if (P.shield) { P.shield = false; if (P.is3D) ST().shield(false); toast('🛡 <b>Your shield took the blow!</b> No heart lost.'); }
           else P.hearts--;
         }
-        // Ask a missed question once more at the end of the lesson (retrieval after a delay).
-        if (P.mode !== 'boss' && !q.retry) {
-          const again = Object.assign({}, P.qs[P.i], { retry: true });
-          if (again.type === 'mc') { again.options = shuffle(again.options); again.answer = again.options.indexOf(q.options[q.answer]); }
-          P.qs.push(again);
+        // Spaced retries: a missed question comes back a few questions later, and if
+        // it's missed again, once more at the end (retrieval after a growing gap).
+        if (P.mode !== 'boss' && (q.retry || 0) < 2 && q.type !== 'mini') {
+          const again = Object.assign({}, P.qs[P.i], { retry: (q.retry || 0) + 1 });
+          if (again.type === 'mc') { again.options = shuffle(again.options); again.answer = again.options.indexOf(q.options[q.answer]); again.hinted = false; }
+          if (again.retry === 1) P.qs.splice(Math.min(P.qs.length, P.i + 3 + Math.floor(Math.random() * 2)), 0, again);
+          else P.qs.push(again);
         }
       }
     }
@@ -557,14 +574,14 @@
 
   // ── review ──────────────────────────────────────────────────
   function renderReview() {
-    const due = E.dueWords(), M = S().mistakes, studied = Object.keys(S().vocab).length;
+    const due = E.dueWords(), M = S().mistakes, studied = Object.keys(S().vocab).length, fading = E.dueSpells();
     const boxes = [1, 2, 3, 4, 5, 6, 7].map(b => Object.values(S().vocab).filter(r => r.box === b).length);
     const maxB = Math.max(1, ...boxes);
     main.innerHTML = `${questsCard()}<h1 class="vh">Review</h1>
       <p class="muted">Spaced repetition shows you each word just before you would forget it. A few minutes a day keeps every word alive.</p>
       <div class="card big-cta ${due.length ? 'hot' : ''}">
-        <div><h3>🔁 Daily review</h3><p>${due.length ? `<b>${due.length}</b> word${due.length > 1 ? 's' : ''} ready for review` : studied ? 'All caught up! Come back tomorrow.' : 'Finish a vocabulary lesson to start your deck.'}</p></div>
-        <button class="btn primary" data-act="review" ${due.length ? '' : 'disabled'}>Start</button></div>
+        <div><h3>🔁 Daily review</h3><p>${due.length ? `<b>${due.length}</b> word${due.length > 1 ? 's' : ''} ready for review` : studied ? 'All words caught up!' : 'Finish a vocabulary lesson to start your deck.'}${fading.length ? `<br>📕 <b>${fading.length}</b> spell${fading.length > 1 ? 's are' : ' is'} fading: ${fading.slice(0, 3).map(k => esc(KG.teach[k] ? KG.teach[k].spell.name : KG.grammar[k].title)).join(', ')}${fading.length > 3 ? '…' : ''}` : ''}</p></div>
+        <button class="btn primary" data-act="review" ${due.length || fading.length ? '' : 'disabled'}>Start</button></div>
       <div class="card big-cta"><div><h3>📝 Mistake notebook</h3><p>${M.length ? `<b>${M.length}</b> question${M.length > 1 ? 's' : ''} you missed recently` : 'No mistakes saved. Nice!'}</p></div>
         <button class="btn primary" data-act="mistakes" ${M.length ? '' : 'disabled'}>Fix</button></div>
       <div class="card big-cta"><div><h3>🎯 Weakest words</h3><p>Extra practice on the words you miss most.</p></div>
@@ -584,9 +601,11 @@
       qs = S().mistakes.slice(0, 15).map(m => Object.assign({ type: 'mc' }, m, { options: m.options.slice() }));
       return begin({ qs: shuffle(qs), mode: 'mistakes' });
     }
-    words = kind === 'review' ? sample(E.dueWords(), 15) : E.weakWords(10);
+    words = kind === 'review' ? E.reviewOrder(E.dueWords()).slice(0, 15) : E.weakWords(10);
     const studied = Object.keys(S().vocab).map(g => E.vocabByGreek[g]).filter(Boolean);
     qs = words.map(w => E.vocabQuestions([w], studied.length > 8 ? studied : KG.vocab, 1)[0]);
+    // fading spells: two questions each, woven in among the words
+    if (kind === 'review') for (const k of E.dueSpells().slice(0, 4)) for (const q of E.spellQuestions(k, 2)) qs.splice(Math.floor(Math.random() * (qs.length + 1)), 0, q);
     begin({ qs, mode: 'review' });
   }
 
@@ -621,8 +640,9 @@
     if (kind === 'lightning') {
       let pool = Object.keys(S().vocab).map(g => E.vocabByGreek[g]).filter(Boolean);
       if (pool.length < 8) pool = KG.vocab.slice(0, 20);
-      const w = U.pick(pool);
-      return E.mc('Meaning?', w.en, sample(pool.filter(x => x !== w), 3).map(x => x.en), { big: w.g });
+      // due words come up first; every answer goes back into review
+      const order = E.reviewOrder(pool), w = Math.random() < 0.7 ? order[Math.floor(Math.random() * Math.min(6, order.length))] : U.pick(pool);
+      return E.mc('Meaning?', w.en, sample(pool.filter(x => x !== w && x.en !== w.en), 3).map(x => x.en), { big: w.g, vkey: S().vocab[w.g] ? w.g : '' });
     }
     const all = E.unlockedCells(), c = U.pick(all);
     return E.parseQ(c, all);
@@ -634,8 +654,16 @@
     if (mini && !use3D()) return toast('This game needs 3D. Turn on “Play lessons in 3D” in Profile → Settings.');
     A = { kind, mini, score: 0, combo: 0, best: S().arcade[kind] || 0, left: 60000, last: performance.now(), slowUntil: 0, timer: null, is3D: use3D() };
     if (A.is3D) enterStage('arcade', 0); else document.body.classList.add('playing');
-    A.timer = setInterval(tickArcade, 100);
-    if (mini) arcadeMini(); else arcadeNext();
+    main.innerHTML = `<div class="s3">${arcadeHead()}</div>`;
+    // 3, 2, 1, go! The game and its clock start after the countdown.
+    A.ready = false;
+    const cd = document.createElement('div'); cd.className = 'countdown'; document.body.appendChild(cd);
+    const me = A;
+    ['3', '2', '1', 'GO!'].forEach((n, k) => setTimeout(() => {
+      if (A !== me) return cd.remove();
+      cd.textContent = n; cd.classList.remove('pop'); void cd.offsetWidth; cd.classList.add('pop'); sfx(k < 3 ? 'tap' : 'combo');
+      if (k === 3) { A.ready = true; A.last = performance.now(); A.timer = setInterval(tickArcade, 100); if (mini) arcadeMini(); else arcadeNext(); setTimeout(() => cd.remove(), 600); }
+    }, k * 650));
   }
   function arcadeHead() {
     return `<div class="ph"><button class="x" data-act="quitArcade" aria-label="Quit">✕</button>
@@ -647,9 +675,9 @@
   const comboText = () => A.combo >= 3 ? `🔥 ${A.combo} in a row · ×${mult()}` : A.best ? `Best ${A.best}` : '';
   const barMax = () => Math.max(A.best, GAMES[A.kind].medals[2]) * 1.05;
   const bestPct = () => Math.min(100, A.score / barMax() * 100);
-  function arcadeHit() {
+  function arcadeHit(times = 1) {
     const before = mult(); A.combo++;
-    const pts = mult(); A.score += pts;
+    const pts = mult() * times; A.score += pts;
     if (mult() > before) { sfx('combo'); toast(`🔥 <b>×${mult()} multiplier!</b>`); }
     const before2 = medalOf(A.kind, A.score - pts), now = medalOf(A.kind, A.score);
     if (now > before2) { sfx('win'); toast(`${MEDALS[now - 1]} <b>${['Bronze', 'Silver', 'Gold'][now - 1]} medal score!</b>`, 'gold'); }
@@ -675,7 +703,8 @@
   };
   function arcadeMini() {
     const q = E.arcadeMini(A.kind);
-    Object.assign(q, { arcade: true, onHit: () => { if (A && A.q === q) arcadeHit(); }, onMiss: () => { if (A && A.q === q) arcadeMiss(2); } });
+    Object.assign(q, { arcade: true, onHit: n => { if (A && A.q === q) arcadeHit(n); }, onMiss: () => { if (A && A.q === q) arcadeMiss(2); },
+      onWord: (g, ok) => { if (S().vocab[g]) { E.srsAnswer(g, ok); S().stats.reviews++; E.questProgress('reviews'); } } });
     A.q = q;
     main.innerHTML = `<div class="s3">${arcadeHead()}<div class="s3center"><div class="minititle">🎮 ${esc(GAMES[A.kind].name)}</div></div><div class="foot s3foot"><div class="muted center s3help">${MINI_HELP[A.kind]}</div></div></div>`;
     ST().mini(q, () => { if (A && A.q === q) arcadeMini(); });
@@ -705,6 +734,7 @@
       if (!ok) document.querySelectorAll('.opt')[A.q.answer].classList.add('right');
     }
     if (!ok) { arcadeMiss(3); sfx('bad'); } else { arcadeHit(); sfx('good'); }
+    if (A.q.vkey) E.srsAnswer(A.q.vkey, ok);
     setTimeout(() => { if (A) { A.lock = false; arcadeNext(); } }, A.is3D ? (ok ? 700 : 1100) : (ok ? 250 : 700));
   }
   function endArcade() {
@@ -754,7 +784,8 @@
       <p class="muted small">Every grammar lesson you finish adds a spell: its rules and charts, ready to study any time (outside of trials).</p>
       <div class="spellbook">${E.nodes.filter(n => n.type === 'grammar').map(n => {
         const T = KG.teach[n.lesson], have = (S().spells || {})[n.lesson];
-        return have ? `<button class="spellcard" data-act="learn" data-arg="${n.id}"><span class="sp-ic">${T.spell.icon}</span><b>${esc(T.spell.name)}</b><span>${esc(T.spell.desc)}</span></button>`
+        const fade = have && E.dueSpells().includes(n.lesson), M = (S().spellSRS || {})[n.lesson];
+        return have ? `<button class="spellcard ${fade ? 'fading' : ''}" data-act="learn" data-arg="${n.id}"><span class="sp-ic">${T.spell.icon}</span><b>${esc(T.spell.name)}</b><span>${esc(T.spell.desc)}</span><em class="sp-pow">${fade ? '🌫 Fading: review it today' : M ? '✨'.repeat(Math.min(5, M.box)) : ''}</em></button>`
           : `<button class="spellcard locked" data-act="open" data-arg="${n.id}"><span class="sp-ic">🔒</span><b>Unknown spell</b><span>Learn it in “${esc(n.title)}”</span></button>`;
       }).join('')}</div>
       <details class="lexbox" ${lexFilter ? 'open' : ''}><summary>Lexicon <span class="muted small">${Object.keys(S().vocab).length}/${KG.vocab.length} studied</span></summary>

@@ -7,6 +7,8 @@ import * as THREE from './vendor/three.module.min.js';
 import { createStage } from './stage.js';
 import { DEFS, R, fbm, vnoise, smooth, hash, rng } from './worlds.js';
 import { makeProps } from './props.js';
+import { makeFX } from './fx.js';
+import { makeSideQuests } from './sidequests.js';
 
 const KG = window.KG, E = KG.engine, U = KG.util;
 const W = KG.world = { ok: false, show() {}, hide() {}, onLessonDone() {} };
@@ -68,33 +70,29 @@ scene.fog = new THREE.Fog(0xa9d4f0, 60, 230);
 camera = new THREE.PerspectiveCamera(60, 1, 0.1, 600);
 clock = new THREE.Clock();
 
-// sky dome with a vertical gradient, repainted for each world
-const skyGeo = new THREE.SphereGeometry(500, 24, 12);
-skyGeo.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(skyGeo.attributes.position.count * 3), 3));
-const sky = new THREE.Mesh(skyGeo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false }));
+// painted sky with sun, clouds and stars (js/fx.js), set for each world
+const FX = makeFX(THREE, { LOW });
+const sky = FX.sky(500);
 scene.add(sky);
+// sparkles and dust
+const SPK = FX.sparks(scene), DUST = FX.sparks(scene, LOW ? 80 : 200, { additive: false });
 const hemi = new THREE.HemisphereLight(0xdff0ff, 0x5a6a3a, 1.1);
 scene.add(hemi);
 const ATMOS = [
-  { top: 0x4a88c8, mid: 0xa9d4f0, bot: 0xe8e0c8, sun: 0xfff1d6, sunI: 2.2, hemi: 1.1, fog: [60, 200] },   // Alphabet Hollow: bright morning
-  { top: 0x2f5a4a, mid: 0x8fbfa4, bot: 0xd8e8d0, sun: 0xe8ffd8, sunI: 1.5, hemi: 1.0, fog: [18, 110] },   // Wordwood: green mist
-  { top: 0x5a7ab8, mid: 0xf0d8a0, bot: 0xf8e8c0, sun: 0xffd890, sunI: 2.4, hemi: 1.1, fog: [60, 220] },   // Fields: golden hour
-  { top: 0x2a78d8, mid: 0x9ad0f8, bot: 0xe0f0f8, sun: 0xffffff, sunI: 2.4, hemi: 1.2, fog: [70, 230] },   // Verb River: clear blue
-  { top: 0x6a7888, mid: 0xc0c8d0, bot: 0xe0e0e0, sun: 0xf0f0f0, sunI: 1.6, hemi: 1.2, fog: [40, 170] },   // Builders' Ridge: overcast
-  { top: 0x3a2a6a, mid: 0xf0a070, bot: 0xf8d0a0, sun: 0xffa060, sunI: 2.0, hemi: 0.9, fog: [45, 190] },   // Ruins of Time: dusk
-  { top: 0x1a2a5a, mid: 0x6a80b8, bot: 0xb0c0e0, sun: 0xc0d0ff, sunI: 1.3, hemi: 0.85, fog: [40, 190] },  // Mirror Lake: twilight
-  { top: 0x8aa0c0, mid: 0xe0e8f0, bot: 0xffffff, sun: 0xffffff, sunI: 2.0, hemi: 1.3, fog: [30, 170] },   // Peaks: cold white
-  { top: 0x4a3a8a, mid: 0xf8c070, bot: 0xfff0c8, sun: 0xffc860, sunI: 2.3, hemi: 1.1, fog: [60, 220] },   // Great Library: golden sunset
+  { top: 0x3f7fd0, mid: 0xaad8f4, bot: 0xe8e0c8, sun: 0xfff1d6, sunI: 2.2, hemi: 1.1, fog: [60, 200], clouds: 0.45, water: [0x1f6a9a, 0x5ac0e0] },   // Alphabet Hollow: bright morning
+  { top: 0x2f5a4a, mid: 0x8fbfa4, bot: 0xd8e8d0, sun: 0xe8ffd8, sunI: 1.5, hemi: 1.0, fog: [18, 110], clouds: 0.7 },   // Wordwood: green mist
+  { top: 0x5a7ab8, mid: 0xf0d8a0, bot: 0xf8e8c0, sun: 0xffd890, sunI: 2.4, hemi: 1.1, fog: [60, 220], clouds: 0.4, sunDir: [0.5, 0.18, -0.85] },   // Fields: golden hour
+  { top: 0x2a78d8, mid: 0x9ad0f8, bot: 0xe0f0f8, sun: 0xffffff, sunI: 2.4, hemi: 1.2, fog: [70, 230], clouds: 0.35, water: [0x14648f, 0x4ac8d8] },   // Verb River: clear blue
+  { top: 0x6a7888, mid: 0xc0c8d0, bot: 0xe0e0e0, sun: 0xf0f0f0, sunI: 1.6, hemi: 1.2, fog: [40, 170], clouds: 0.85 },   // Builders' Ridge: overcast
+  { top: 0x3a2a6a, mid: 0xf0a070, bot: 0xf8d0a0, sun: 0xffa060, sunI: 2.0, hemi: 0.9, fog: [45, 190], clouds: 0.45, stars: 0.4, sunDir: [-0.3, 0.08, -0.95] },   // Ruins of Time: dusk
+  { top: 0x101a46, mid: 0x5a70b0, bot: 0xb0c0e0, sun: 0xc0d0ff, sunI: 1.3, hemi: 0.85, fog: [40, 190], clouds: 0.3, stars: 1, sunDir: [0.2, 0.3, -0.9], water: [0x18285a, 0x4a6aa8] },  // Mirror Lake: twilight, moonlit
+  { top: 0x7a98c8, mid: 0xe0e8f0, bot: 0xffffff, sun: 0xffffff, sunI: 2.0, hemi: 1.3, fog: [30, 170], clouds: 0.6 },   // Peaks: cold white
+  { top: 0x4a3a8a, mid: 0xf8c070, bot: 0xfff0c8, sun: 0xffc860, sunI: 2.3, hemi: 1.1, fog: [60, 220], clouds: 0.4, stars: 0.15, sunDir: [0.1, 0.12, -0.99] },   // Great Library: golden sunset
 ];
 function setAtmosphere(i) {
-  const A = ATMOS[i], top = new THREE.Color(A.top), mid = new THREE.Color(A.mid), bot = new THREE.Color(A.bot), c = new THREE.Color();
-  const p = skyGeo.attributes.position, col = skyGeo.attributes.color;
-  for (let k = 0; k < p.count; k++) {
-    const y = p.getY(k) / 500;
-    if (y > 0) c.copy(mid).lerp(top, Math.min(1, y * 1.6)); else c.copy(mid).lerp(bot, Math.min(1, -y * 4));
-    col.setXYZ(k, c.r, c.g, c.b);
-  }
-  col.needsUpdate = true;
+  const A = ATMOS[i], mid = new THREE.Color(A.mid);
+  sky.userData.set(A);
+  waterMat.userData.setColors(...(A.water || [0x1f6a9a, 0x5ac0e0]), A.mid);
   scene.fog.color.copy(mid); scene.fog.near = A.fog[0]; scene.fog.far = A.fog[1];
   sun.color.setHex(A.sun); sun.intensity = A.sunI; hemi.intensity = A.hemi;
   root.style.background = '#' + mid.getHexString();
@@ -149,7 +147,7 @@ function glyphSprite(ch, color = '#ffd166') {
 
 // ── the current world's layout ───────────────────────────────
 let WI = -1, D = null, LY = null, HG = null, BR = null; // index, definition, road, height grid, bridge
-const colliders = [], anims = [];
+const colliders = [], anims = [], keepOut = []; // keepOut: open ground saved for side quests (no trees)
 let waters = [];
 function makeRoad(def) {
   const segs = []; let len = 0;
@@ -204,7 +202,7 @@ function groundAt(x, z) {
 function buildTerrain() {
   const { cell, n, h } = HG, pos = new Float32Array(n * n * 3), cols = new Float32Array(n * n * 3), idx = [];
   const grass = new THREE.Color(ZONES[WI].grass), dirt = new THREE.Color(WI === 8 ? 0xd8ccb0 : WI === 5 ? 0xc8a878 : WI === 7 ? 0xa89a88 : 0xb8925a);
-  const rock = new THREE.Color(WI === 5 ? 0xb09070 : 0x8a8378), snow = new THREE.Color(0xf2f4f6), sand = new THREE.Color(0xd8c48a), c = new THREE.Color();
+  const rock = new THREE.Color(WI === 5 ? 0xb09070 : 0x8a8378), snow = new THREE.Color(0xf2f4f6), sand = new THREE.Color(0xd8c48a), c = new THREE.Color(), ring = new THREE.Color(D.ring), ringC = new THREE.Color();
   const wy = D.water ? D.water.y : -99;
   for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
     const k = i * n + j, x = -R + j * cell, z = -R + i * cell, y = h[k];
@@ -216,8 +214,14 @@ function buildTerrain() {
     c.lerp(rock, Math.min(1, smooth(0.55, 1.1, slope) + (D.rock || 0) * smooth(0.3, 0.7, slope)));
     if (D.snowLine !== undefined) c.lerp(snow, smooth(D.snowLine, D.snowLine + 8, y) * (slope < 1.2 ? 0.95 : 0.2));
     else if (y > 16) c.lerp(snow, smooth(16, 26, y) * 0.5);
+    // the valley walls wear the colour of the hills beyond, so they read as distant slopes, not bare cliffs
+    const wl = smooth(R - 20, R - 4, Math.max(Math.abs(x), Math.abs(z)));
+    if (wl > 0) c.lerp(ringC.copy(ring).offsetHSL(0, 0, (fbm(x * 4, z * 4) - 0.8) * 0.12), wl * (D.snowLine !== undefined ? 0.4 : 0.85));
     c.lerp(dirt, (1 - smooth(1.7, 3.2 + vnoise(x, z) * 0.8, d)) * 0.88);
     if (y < wy + 0.6) c.lerp(sand, 0.6);
+    // soft shading: hollows a little darker, crests a little lighter
+    const lap = (h[i * n + Math.min(n - 1, j + 1)] + h[i * n + Math.max(0, j - 1)] + h[Math.min(n - 1, i + 1) * n + j] + h[Math.max(0, i - 1) * n + j]) / 4 - y;
+    c.multiplyScalar(1 - Math.max(-0.07, Math.min(0.16, lap * 0.35)));
     cols.set([c.r, c.g, c.b], k * 3);
     if (i < n - 1 && j < n - 1) { const a = k, b = k + 1, d2 = k + n, e = k + n + 1; idx.push(a, d2, b, b, d2, e); }
   }
@@ -230,11 +234,10 @@ function buildTerrain() {
 }
 
 // water: pond, river or lake
-const waterMat = new THREE.MeshStandardMaterial({ color: 0x3a9ad0, transparent: true, opacity: 0.84, roughness: 0.12, metalness: 0.25, flatShading: true });
+const waterMat = FX.water();
 function buildWater() {
   waters = [];
   const Wd = D.water; if (!Wd) return;
-  waterMat.color.setHex(WI === 6 ? 0x4a6aa8 : 0x3a9ad0); waterMat.metalness = WI === 6 ? 0.55 : 0.25; waterMat.roughness = WI === 6 ? 0.05 : 0.12;
   let g;
   if (Wd.kind === 'river') {
     g = new THREE.PlaneGeometry(2 * R + 10, Wd.w * 2, LOW ? 40 : 80, 4); g.rotateX(-Math.PI / 2);
@@ -250,8 +253,8 @@ function scatterTrees() {
   const T = D.trees, N = Math.round(T.n * (LOW ? 0.45 : mobile ? 0.7 : 1)), rand = rng(WI * 977 + 13), sc0 = T.scale || 1;
   const parts = {
     trunk: new THREE.InstancedMesh(new THREE.CylinderGeometry(0.18, 0.28, 1.6, 6), mat(0x6a4a2a), N),
-    round: new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1.3, 0), new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.9 }), N * 2),
-    cone: new THREE.InstancedMesh(new THREE.ConeGeometry(1.2, 3.2, 7), new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.9 }), N * 2),
+    round: new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1.3, 0), FX.windify(new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.9 }), { amp: 0.06, base: -1.3 }), N * 2),
+    cone: new THREE.InstancedMesh(new THREE.ConeGeometry(1.2, 3.2, 7), FX.windify(new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.9 }), { amp: 0.035, base: -1.6, freq: 1.1 }), N * 2),
     snowcap: new THREE.InstancedMesh(new THREE.ConeGeometry(0.62, 1.1, 7), mat(0xf4f8fb), T.snowy ? N : 1),
   };
   const cnt = { trunk: 0, round: 0, cone: 0, snowcap: 0 };
@@ -261,7 +264,7 @@ function scatterTrees() {
   for (let i = 0; i < N * 4 && cnt.trunk < N; i++) {
     const x = (rand() * 2 - 1) * (R - 3), z = (rand() * 2 - 1) * (R - 3), { d } = roadInfo(x, z);
     if (d < T.near || (T.avoid && T.avoid(x, z))) continue;
-    if (colliders.some(c => Math.hypot(c.x - x, c.z - z) < c.r + 1.6)) continue;
+    if (colliders.some(c => Math.hypot(c.x - x, c.z - z) < c.r + 1.6) || keepOut.some(c => Math.hypot(c.x - x, c.z - z) < c.r)) continue;
     const y = groundAt(x, z); if (y < wy + 0.4) continue;
     let r = rand(), kind = kinds[0][0]; for (const [k, w] of kinds) { if ((r -= w) <= 0) { kind = k; break; } }
     const s = (0.7 + rand() * 0.9) * sc0;
@@ -282,7 +285,6 @@ function scatterTrees() {
 }
 
 // wind-blown grass (or wheat) near the road, drawn in one call with a swaying shader
-const windUniform = { value: 0 };
 function grass() {
   if (LOW) return;
   const wheat = !!D.wheat, N = Math.round((wheat ? 16000 : 9000) * (mobile ? 0.55 : 1)), rand = rng(WI * 31 + 5);
@@ -291,12 +293,7 @@ function grass() {
   blade.setAttribute('normal', new THREE.Float32BufferAttribute([0, 0, 1, 0, 0, 1, 0, 0, 1], 3));
   blade.setAttribute('color', new THREE.Float32BufferAttribute([0.62, 0.62, 0.62, 0.62, 0.62, 0.62, 1.1, 1.1, 1.0], 3));
   const gm = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, vertexColors: true });
-  gm.onBeforeCompile = sh => {
-    sh.uniforms.uTime = windUniform;
-    sh.vertexShader = 'uniform float uTime;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
-      float sway = sin(uTime * 1.8 + instanceMatrix[3].x * 0.35 + instanceMatrix[3].z * 0.25) * 0.18 * position.y;
-      transformed.x += sway; transformed.z += sway * 0.6;`);
-  };
+  FX.windify(gm, { amp: 0.24, freq: 1.8 });
   const im = new THREE.InstancedMesh(blade, gm, N);
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3(), c = new THREE.Color(), up = new THREE.Vector3(0, 1, 0);
   const wy = D.water ? D.water.y : -99, base = wheat ? 0xe0c060 : ZONES[WI].grass;
@@ -339,26 +336,6 @@ function horizon() {
     if (WI === 7 || h > 48) { const c = new THREE.Mesh(new THREE.ConeGeometry(w * 0.3, h * 0.3, 7), snowM); c.position.set(m.position.x, h - 6 - h * 0.15 + 0.5, m.position.z); WG.add(c); }
   }
 }
-// clouds and a glowing sun
-const clouds = [];
-function skyDecor() {
-  clouds.length = 0;
-  const cm = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true, transparent: true, opacity: 0.92 });
-  const rand = rng(WI + 99);
-  for (let i = 0; i < (LOW ? 6 : 12); i++) {
-    const c = new THREE.Group();
-    for (let k = 0; k < 5; k++) { const b = new THREE.Mesh(new THREE.IcosahedronGeometry(3 + rand() * 3, 1), cm); b.position.set(k * 4 - 8, rand() * 2, rand() * 3); b.scale.y = 0.6; c.add(b); }
-    c.position.set((rand() - 0.5) * 180, 45 + rand() * 18, (rand() - 0.5) * 180);
-    WG.add(c); clouds.push(c);
-  }
-}
-{
-  const sc = document.createElement('canvas'); sc.width = sc.height = 128; const x = sc.getContext('2d');
-  const g = x.createRadialGradient(64, 64, 4, 64, 64, 64); g.addColorStop(0, 'rgba(255,250,230,1)'); g.addColorStop(0.25, 'rgba(255,230,160,.8)'); g.addColorStop(1, 'rgba(255,200,120,0)');
-  x.fillStyle = g; x.fillRect(0, 0, 128, 128);
-  W.sunSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(sc), fog: false, depthWrite: false, blending: THREE.AdditiveBlending }));
-  W.sunSprite.scale.set(70, 70, 1); scene.add(W.sunSprite);
-}
 // per-world ambience: pollen, leaves, embers, fireflies, snow…
 const AMB = [
   { color: 0xfff0a0, size: 0.12, vy: 0.15, drift: 0.4, n: 160 },   // Hollow: pollen
@@ -389,9 +366,6 @@ function setAmbience(zi) {
   scene.add(pts); amb = { pts, A, zi };
 }
 function updateAmbience(dt, t, pos) {
-  windUniform.value = t;
-  for (const c of clouds) { c.position.x += dt * 1.5; if (c.position.x > 100) c.position.x = -100; }
-  W.sunSprite.position.set(camera.position.x + 120, camera.position.y + 140, camera.position.z - 220);
   const A = amb.A, p = amb.pts.geometry.attributes.position;
   amb.pts.position.set(pos.x, groundAt(pos.x, pos.z), pos.z);
   for (let i = 0; i < p.count; i++) {
@@ -616,18 +590,8 @@ function addEnt(e) {
   ents.push(e); colliders.push({ x: e.x, z: e.z, r: e.r || 0.8 });
   return e;
 }
-let portalTex = null;
-function portalDisc(r) {
-  if (!portalTex) {
-    const pc = document.createElement('canvas'); pc.width = pc.height = 256; const px = pc.getContext('2d');
-    const grd = px.createRadialGradient(128, 128, 10, 128, 128, 128); grd.addColorStop(0, 'rgba(255,255,255,.95)'); grd.addColorStop(0.4, 'rgba(160,200,255,.7)'); grd.addColorStop(1, 'rgba(120,80,255,.15)');
-    px.fillStyle = grd; px.fillRect(0, 0, 256, 256);
-    px.strokeStyle = 'rgba(255,255,255,.6)'; px.lineWidth = 6;
-    for (let k = 0; k < 6; k++) { px.beginPath(); for (let a = 0; a < 9; a += 0.1) { const rr = 6 + a * 13; px.lineTo(128 + Math.cos(a + k * 1.05) * rr, 128 + Math.sin(a + k * 1.05) * rr); } px.stroke(); }
-    portalTex = new THREE.CanvasTexture(pc);
-  }
-  return new THREE.Mesh(new THREE.CircleGeometry(r, 40), new THREE.MeshBasicMaterial({ map: portalTex, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
-}
+const portalMat = FX.portalMaterial();
+function portalDisc(r) { return new THREE.Mesh(new THREE.CircleGeometry(r, 40), portalMat); }
 // the teachers of each world (js/data/story.js) and how they look
 const teacherOf = (i, k) => KG.story.teachers[i][k] || KG.story.teachers[i][0];
 const LONG_HAIR = ['Sophia', 'Rhoda', 'Dorcas', 'Joanna', 'Lydia', 'Phoebe', 'Lois', 'Eunice', 'Priscilla', 'Damaris', 'Junia'];
@@ -733,6 +697,49 @@ function buildEntities() {
   if (last) W.libraryPos = new THREE.Vector3(0, groundAt(0, -32), -32);
 }
 
+// ── side quests (js/sidequests.js): fishing, the rune circle and a courier ──
+const COURIERS = ['Old Demas', 'Woodcutter Jason', 'Farmer Clopas', 'Ferryman Alexander', 'Mason Erastus', 'Keeper Hermas', 'Boatwoman Chloe', 'Shepherd Carpus', 'Scribe Tertius'];
+// open, fairly flat ground of radius r that no prop or person stands on
+function openGround(x, z, r) {
+  if (Math.abs(x) > R - 10 - r * 0.5 || Math.abs(z) > R - 10 - r * 0.5) return false;
+  if (colliders.some(c => Math.hypot(c.x - x, c.z - z) < c.r + r) || keepOut.some(c => Math.hypot(c.x - x, c.z - z) < c.r + r)) return false;
+  const y = groundAt(x, z), wy = D.water ? D.water.y : -99;
+  for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2, h = groundAt(x + Math.cos(a) * r, z + Math.sin(a) * r); if (Math.abs(h - y) > 1.6 || h < wy + 0.4) return false; }
+  if (roadInfo(x, z).d < r * 0.6) return false;
+  return true;
+}
+function findSpot(ts, offs, r) {
+  for (const off of offs) for (const t of ts) for (const sd of [1, -1]) { const p = along(t, sd, off); if (openGround(p.x, p.z, r)) return p; }
+  return null;
+}
+function buildSideQuests() {
+  const add = e => { addEnt(e); keepOut.push({ x: e.x, z: e.z, r: e.sq === 'runes' ? 7.5 : 2.5 }); };
+  const rc = findSpot([0.45, 0.55, 0.35, 0.65, 0.25, 0.75], [13, 16, 10, 19], 5.8);
+  if (rc) add(SQ.runes({ x: rc.x, z: rc.z }));
+  const cp = findSpot([0.2, 0.7, 0.3, 0.8, 0.6], [7, 9, 11], 1.6);
+  if (cp) add(SQ.courier({ x: cp.x, z: cp.z, name: COURIERS[WI], look: { robe: [0x8a6a4a, 0x4a6a3a, 0xa08a4a, 0x3a5a7a, 0x6a5a4a, 0x8a5a3a, 0x3a6a6a, 0x6a6a5a, 0x7a3a3a][WI], hair: 0x5a4030, beard: WI % 2 === 0 } }));
+  const Wd = D.water; if (!Wd) return;
+  const wy = Wd.y;
+  for (let k = 0; k < 24; k++) {
+    let x, z, wx, wz;
+    if (Wd.kind === 'river') { x = (k % 2 ? 1 : -1) * (14 + k * 2.5); const sd = k % 4 < 2 ? 1 : -1; z = Wd.f(x) + sd * 7.5; wx = x; wz = Wd.f(x) - sd; }
+    else { const a = k / 24 * Math.PI * 2 + 0.4, r = Wd.r + 1.8; x = Wd.x + Math.cos(a) * r; z = Wd.z + Math.sin(a) * r; wx = Wd.x + Math.cos(a) * Wd.r * 0.3; wz = Wd.z + Math.sin(a) * Wd.r * 0.3; }
+    if (Math.abs(x) > R - 12 || Math.abs(z) > R - 12 || groundAt(x, z) < wy + 0.3 || groundAt(x, z) > wy + 4) continue;
+    if (colliders.some(c => Math.hypot(c.x - x, c.z - z) < c.r + 2) || roadInfo(x, z).d < 2) continue;
+    if (BR && Math.abs(x - BR.x) < 10) continue;
+    add(SQ.fishing({ x, z, wx, wz, waterY: wy }));
+    break;
+  }
+}
+// the review queue, due words first: what the side quests and shades ask about
+function reviewPool(n) {
+  const t = U.day();
+  const studied = Object.entries(E.state.vocab).map(([g, r]) => ({ w: E.word(g), r })).filter(x => x.w && x.w.en);
+  if (studied.length < 4) return U.shuffle(KG.readWords).slice(0, n).map(w => ({ g: w[0], en: w[2], nosrs: true }));
+  const score = x => (x.r.due <= t ? 0 : 100 + U.diffDays(t, x.r.due) * 10) + x.r.box * 3 - x.r.miss + Math.random() * 6;
+  return studied.sort((a, b) => score(a) - score(b)).slice(0, n).map(x => ({ g: x.w.g, en: x.w.en, box: x.r.box }));
+}
+
 // ── collectibles ──────────────────────────────────────────────
 const letters = [], coins = [], scrolls = [];
 function buildCollectibles() {
@@ -786,10 +793,11 @@ function disposeWorld() {
   scene.remove(WG);
   WG.traverse(o => {
     if (o.geometry) o.geometry.dispose();
-    if (o.material) for (const m of [].concat(o.material)) { if (m.map && m.map !== portalTex && m.map !== dotTex) m.map.dispose(); if (!Object.values(mats).includes(m) && m !== waterMat && !Object.values(toonCache).includes(m) && m !== inkMat) m.dispose(); }
+    if (o.material) for (const m of [].concat(o.material)) { if (m.map && m.map !== dotTex) m.map.dispose(); if (!Object.values(mats).includes(m) && m !== waterMat && m !== portalMat && !Object.values(toonCache).includes(m) && m !== inkMat) m.dispose(); }
   });
   WG = new THREE.Group(); scene.add(WG);
-  colliders.length = 0; anims.length = 0; waters = []; beacon = null; BR = null;
+  SQ.clear();
+  colliders.length = 0; anims.length = 0; keepOut.length = 0; waters = []; beacon = null; BR = null;
 }
 function buildWorld(i) {
   if (WI >= 0) disposeWorld();
@@ -803,8 +811,8 @@ function buildWorld(i) {
   const api = Object.assign(makeProps(pctx), { THREE, mesh, put, col, along, textSprite, rand: rng(i * 101 + 9), GREEK: GREEK_FONT, faceAngle: (x, z, tx, tz) => Math.atan2(tx - x, tz - z) });
   D.build(api);
   W.libraryDoor = pctx.libraryDoor || null;
-  buildEntities();
-  scatterTrees(); grass(); flowers(); horizon(); skyDecor();
+  buildEntities(); buildSideQuests();
+  scatterTrees(); grass(); flowers(); horizon();
   buildCollectibles(); buildWisps(); buildCritters();
   setAmbience(i);
   P.zone = i;
@@ -891,7 +899,7 @@ function setPet() {
   if (pet) { pet.position.copy(player.position).add(new THREE.Vector3(1, 1, 1)); scene.add(pet); }
 }
 E.on(t => { if (t === 'look') { applyLook(player); setPet(); } });
-const P = { vel: new THREE.Vector3(), onGround: true, hearts: 5, maxHearts: 5, hurtT: 0, regen: 0, zone: -1 };
+const P = { turn: 0, vel: new THREE.Vector3(), onGround: true, hearts: 5, maxHearts: 5, hurtT: 0, regen: 0, zone: -1 };
 const cam = { yaw: Math.PI, pitch: 0.42, dist: 8.5, auto: 0 };
 const input = { f: 0, r: 0, run: false, jump: false, keys: {}, joy: null, drag: null };
 const stickRight = () => (E.state.settings.stick || 'right') === 'right';
@@ -915,13 +923,28 @@ hud.innerHTML = `
   <div class="wbattle" id="wbattle"></div>
   <div class="wcine" id="wcine"></div>`;
 const $ = id => document.getElementById(id);
+const SQ = makeSideQuests({
+  THREE, add: o => WG.add(o), groundAt: (x, z) => groundAt(x, z), mesh, textSprite, GREEK: GREEK_FONT, player,
+  person: look => person(look), animatePerson, SPK, DUST, hud,
+  pool: n => reviewPool(n),
+  others: (w, n) => U.sample(U.uniq(KG.vocab.map(v => v.en).concat(KG.readWords.map(r => r[2]))).filter(en => en !== w.en), n),
+  record: (w, ok) => {
+    const st = E.state.stats; st.answered++; if (ok) { st.correct++; E.questProgress('correct'); }
+    if (!w.nosrs) { E.srsAnswer(w.g, ok); st.reviews++; E.questProgress('reviews'); }
+    E.save(); updateHUD();
+  },
+  reward: (xp, coins, q) => { E.gainXP(xp, coins); E.questProgress(q); updateHUD(); },
+  sfx: k => KG.app.sfx(k), speak: g => KG.app.speak(g), toast: (h, c) => KG.app.toast(h, c),
+  dialog: (n, h, b) => dialog(n, h, b), free: (x, z) => openGround(x, z, 1.2),
+  face: (x, z, tx, tz) => { player.position.set(x, groundAt(x, z), z); player.rotation.y = Math.atan2(tx - x, tz - z); cam.yaw = player.rotation.y + Math.PI; cam.pitch = 0.32; },
+});
 
 function updateHUD() {
   const s = E.state, lv = E.levelInfo();
   $('whearts').innerHTML = '❤'.repeat(P.hearts) + `<span class="lost">${'❤'.repeat(P.maxHearts - P.hearts)}</span>` + (P.shield ? '<span class="wshield">🛡</span>' : '');
   $('wlv').textContent = lv.level; $('wxp').style.width = (lv.cur / lv.need) * 100 + '%';
   $('wcoins').textContent = s.coins;
-  const due = E.dueWords().length; $('wdue').textContent = due || ''; $('wdue').style.display = due ? '' : 'none';
+  const due = E.dueWords().length + E.dueSpells().length; $('wdue').textContent = due || ''; $('wdue').style.display = due ? '' : 'none';
   const pw = E.powers();
   $('wpowers').innerHTML = `<span title="Hints">💡${pw.hint}</span><span title="Shields">🛡${pw.shield}</span><span title="Slow Time">⏳${pw.slow}</span>`;
 }
@@ -984,7 +1007,7 @@ let traveling = false;
 function placeAt(where) {
   let p, face;
   if (where === 'gate') { p = along(0.92); face = p.a + Math.PI; }
-  else if (where === 'mentor') { const m = (questTarget().ent && questTarget().ent.kind === 'mentor' ? questTarget().ent : ents.find(e => e.kind === 'mentor')), r = m.obj.rotation.y; p = { x: m.x + Math.sin(r) * 2.6, z: m.z + Math.cos(r) * 2.6 }; face = r + Math.PI; }
+  else if (where === 'mentor') { const m = (questTarget().ent && questTarget().ent.kind === 'mentor' ? questTarget().ent : ents.find(e => e.kind === 'mentor')), r = m.obj.rotation.y; p = { x: m.x + Math.sin(r) * 4 + Math.cos(r) * 1.6, z: m.z + Math.cos(r) * 4 - Math.sin(r) * 1.6 }; face = Math.atan2(m.x - p.x, m.z - p.z); }
   else if (where && where.x !== undefined) { p = where; face = where.yaw !== undefined ? where.yaw - Math.PI : 0; }
   else { p = along(0.05); face = p.a; }
   player.position.set(p.x, groundAt(p.x, p.z), p.z);
@@ -1115,6 +1138,7 @@ function launch(id) { savePos(); closeDialog(); KG.app.startNode(id); }
 function talk(e) {
   const Z = ZONES[e.zone], app = KG.app;
   app.sfx('tap');
+  if (e.kind === 'side') return SQ.start(e);
   if (e.kind === 'mentor') {
     const t = questTarget(), T = e.T, mine = KG.units[e.zone].nodes.filter(n => e.nodes.includes(n.id));
     const greet = `<p><span class="gk">${esc(T[3])}</span> <i>(${esc(T[4])})</i></p>`;
@@ -1153,21 +1177,41 @@ function talk(e) {
   }
 }
 
-// battles against the Shades of Forgetting
+// battles against the Shades of Forgetting: spaced review out in the world.
+// A shade asks for a word from your review queue; an elite one hunts your weakest
+// words and takes three right answers in a row to banish. Each right answer is a
+// bolt of light from your wand.
 let battle = null;
-function startBattle(w) {
+function shadeQuestion(w, word) {
+  if (word.spell) return E.spellQuestions(word.spell, 1)[0];
   const studied = Object.keys(E.state.vocab).map(g => E.vocabByGreek[g]).filter(Boolean);
-  const due = E.dueWords();
   const pool = studied.length >= 4 ? studied : E.vocabSet(0).concat(E.vocabSet(1));
-  const weak = E.weakWords(6);
-  const word = w.elite && weak.length ? U.pick(weak) : due.length ? U.pick(due) : U.pick(pool);
   // well-known words come back the harder way round: English → Greek
   const rec = E.state.vocab[word.g], hard = w.elite || (rec && rec.box >= 3);
-  const q = E.vocabQ(word, pool.length > 8 ? pool : KG.vocab, hard ? 'e2g' : 'g2e');
-  battle = { w, q, done: false };
-  KG.app.sfx('bad');
+  return E.vocabQ(word, pool.length > 8 ? pool : KG.vocab, hard ? 'e2g' : 'g2e');
+}
+function shadeWords(w) {
+  const studied = Object.keys(E.state.vocab).map(g => E.vocabByGreek[g]).filter(Boolean);
+  const pool = studied.length >= 4 ? studied : E.vocabSet(0).concat(E.vocabSet(1));
+  if (w.elite) { const weak = E.weakWords(8); return U.sample(weak.length >= 3 ? weak : pool, 3); }
+  // a fading spell sometimes takes shape as a shade too
+  const spells = E.dueSpells();
+  if (spells.length && Math.random() < 0.4) return [{ spell: U.pick(spells) }];
+  const due = reviewPool(6).map(x => E.word(x.g)).filter(x => x && E.vocabByGreek[x.g]);
+  return [due.length ? U.pick(due.slice(0, 3)) : U.pick(pool)];
+}
+function startBattle(w) {
+  battle = { w, words: shadeWords(w), i: 0, hp: 0, done: false };
+  battle.hp = battle.words.length;
+  KG.app.sfx('bad'); S_SHAKE = 0.25;
+  battleQ();
+}
+function battleQ() {
+  const { w } = battle, word = battle.words[battle.i], q = battle.q = shadeQuestion(w, word);
+  battle.done = false; battle.hinted = false;
   const b = $('wbattle'), pw = E.powers();
-  b.innerHTML = `<div class="wbt-box ${w.elite ? 'elite' : ''}"><div class="wbt-h">${w.elite ? '🔥 An ELITE Shade attacks! It knows your weakest words…' : '👻 A Shade of Forgetting attacks!'}</div><div class="muted small">Banish it by remembering the word.</div>
+  const hp = battle.words.length > 1 ? `<div class="wbt-hp">${battle.words.map((_, k) => `<i class="${k < battle.hp ? 'on' : ''}"></i>`).join('')}</div>` : '';
+  b.innerHTML = `<div class="wbt-box ${w.elite ? 'elite' : ''}"><div class="wbt-h">${w.elite ? '🔥 An ELITE Shade! It feeds on your weakest words…' : '👻 A Shade of Forgetting!'}</div>${hp}<div class="muted small">${battle.words.length > 1 ? `Three right answers in a row banish it.` : word.spell ? `It is made of a fading spell: <b>${esc(KG.teach[word.spell].spell.name)}</b>. Recast it!` : 'Remember the word to banish it.'}</div>
     <div class="wbt-q">${q.prompt}</div><div class="wbt-big gk">${esc(q.big || '')}</div>
     <div class="wbt-opts">${q.options.map((o, i) => `<button class="wbt-opt ${q.greekOpts ? 'gk' : ''}" data-bo="${i}"><span class="k">${i + 1}</span>${q.greekOpts ? esc(o) : o}</button>`).join('')}</div>
     <div class="wbt-pw"><button class="pw" id="wbthint" ${pw.hint ? '' : 'disabled'}>💡 Hint <b>${pw.hint}</b></button><button class="pw" id="wbtshield" ${pw.shield && !P.shield ? '' : 'disabled'}>🛡 Shield <b>${pw.shield}</b></button></div><div id="wbtfb"></div></div>`;
@@ -1182,23 +1226,54 @@ function startBattle(w) {
   $('wbtshield').onclick = () => { if (battle.done || P.shield || !E.usePower('shield')) return; P.shield = true; $('wbtshield').disabled = true; KG.app.sfx('combo'); updateHUD(); };
   if (q.speak) KG.app.speak(q.speak);
 }
+// a bolt of light from the wand to a target
+function bolt(to, color, onHit) {
+  const from = player.userData.arms[1].localToWorld(new THREE.Vector3(0, -0.8, 0.4)), dest = to.clone();
+  const arm = player.userData.arms[1]; let k = 0;
+  anims.push(dt => {
+    k = Math.min(1, k + dt / 0.28);
+    arm.rotation.x = -Math.sin(Math.min(1, k * 1.5) * Math.PI) * 2;
+    const p = from.clone().lerp(dest, k); p.y += Math.sin(k * Math.PI) * 0.8;
+    SPK.emit(p, { color, n: 3, speed: 0.6, up: 0.2, gravity: 0, size: 0.45, life: 0.35 });
+    if (k >= 1) { SPK.emit(dest, { color, n: 40, speed: 6, up: 0.6, gravity: -2, size: 0.5 }); SPK.emit(dest, { color: 0xffffff, n: 12, speed: 2, size: 0.9, life: 0.4 }); if (onHit) onHit(); return false; }
+  });
+}
 function answerBattle(i, el) {
   if (!battle || battle.done) return;
-  const { q, w } = battle, ok = i === q.answer;
+  const { q, w } = battle, ok = i === q.answer, last = ok && battle.hp <= 1;
   battle.done = true;
   E.recordAnswer(q, ok, true);
   $('wbattle').querySelectorAll('.wbt-opt, .pw').forEach((b, k) => { b.disabled = true; if (k === q.answer) b.classList.add('right'); });
   if (!ok) el.classList.add('wrong');
   let blocked = false;
-  if (ok) { KG.app.sfx('good'); E.gainXP(w.elite ? 16 : 8, w.elite ? 3 : 1); ws().wisps++; E.checkAchievements(); w.dead = true; w.obj.visible = false; w.respawn = 40; E.questProgress('shades'); burst(w.obj.position, 0xb388ff); }
-  else {
+  const xp = w.elite ? 16 : 8;
+  if (ok) {
+    KG.app.sfx('good'); battle.hp--;
+    const core = w.obj.children[0];
+    bolt(w.obj.position, w.elite ? 0xffb040 : 0xffd166, () => {
+      KG.app.sfx('hit'); S_SHAKE = 0.2;
+      core.material.emissive.setHex(0xffffff);
+      let f = 0; anims.push(dt => { f += dt / 0.3; w.obj.scale.setScalar((w.elite ? 1.45 : 1) * (1 + Math.sin(Math.min(1, f) * Math.PI) * 0.3)); if (f >= 1) { core.material.emissive.setHex(w.elite ? 0xff3a3a : 0x7a3aff); return false; } });
+      if (last) {
+        // the shade bursts into motes of light that fly home to you
+        w.dead = true; w.obj.visible = false; w.respawn = 40; burst(w.obj.position, 0xb388ff, 60);
+        for (let k = 0; k < 14; k++) { const p = w.obj.position.clone(); setTimeout(() => SPK.emit(p.lerp(player.position.clone().setY(player.position.y + 1.4), 0.15), { color: 0xe0d0ff, n: 2, speed: 1, size: 0.5, life: 0.5 }), k * 40); }
+      }
+    });
+    if (last) { E.gainXP(xp, w.elite ? 3 : 1); ws().wisps++; E.checkAchievements(); E.questProgress('shades'); }
+    else battle.i++;
+  } else {
     KG.app.sfx('bad');
     if (P.shield) { P.shield = false; blocked = true; } else { P.hearts = Math.max(0, P.hearts - 1); P.hurtT = 1; }
+    S_SHAKE = 0.4;
     const away = player.position.clone().sub(w.obj.position).setY(0).normalize(); P.vel.addScaledVector(away, 9); w.cool = 4;
+    SPK.emit(player.position.clone().setY(player.position.y + 1.2), { color: 0x8a3aff, n: 30, speed: 4, size: 0.4 });
   }
-  $('wbtfb').innerHTML = `<div class="wbt-fb ${ok ? 'ok' : 'no'}">${ok ? `✨ The shade dissolves into light! +${w.elite ? 16 : 8} XP` : `${blocked ? '🛡 Your shield takes the blow!' : '💔 It strikes you!'} ${q.explain || ''}`}</div><button class="btn ${ok ? 'good' : 'bad'} wide" id="wbtgo">Continue</button>`;
+  const more = ok && !last;
+  $('wbtfb').innerHTML = `<div class="wbt-fb ${ok ? 'ok' : 'no'}">${more ? `⚡ A hit! ${battle.hp} more to banish it.` : ok ? `✨ The shade dissolves into light! +${xp} XP` : `${blocked ? '🛡 Your shield takes the blow!' : '💔 It strikes you!'} ${q.explain || ''}`}</div><button class="btn ${ok ? 'good' : 'bad'} wide" id="wbtgo">${more ? 'Next ⚡' : 'Continue'}</button>`;
   updateHUD();
-  $('wbtgo').onclick = endBattle; $('wbtgo').focus();
+  $('wbtgo').onclick = more ? battleQ : endBattle; $('wbtgo').focus();
+  if (more) { const at = battle.i; setTimeout(() => { if (battle && battle.i === at && battle.done) battleQ(); }, 1400); }
 }
 function endBattle() {
   $('wbattle').classList.remove('on'); $('wbattle').innerHTML = '';
@@ -1211,14 +1286,11 @@ function endBattle() {
     updateHUD();
   }
 }
-// particle burst
-const bursts = [];
-function burst(pos, color) {
-  const n = 30, g = new THREE.BufferGeometry(), p = new Float32Array(n * 3), v = [];
-  for (let i = 0; i < n; i++) { p.set([pos.x, pos.y, pos.z], i * 3); v.push(new THREE.Vector3((Math.random() - 0.5) * 6, Math.random() * 5, (Math.random() - 0.5) * 6)); }
-  g.setAttribute('position', new THREE.BufferAttribute(p, 3));
-  const pts = new THREE.Points(g, new THREE.PointsMaterial({ color, size: 0.25, transparent: true }));
-  scene.add(pts); bursts.push({ pts, v, t: 1 });
+let S_SHAKE = 0;
+// sparkles and dust (js/fx.js)
+function burst(pos, color, n = 36) {
+  SPK.emit(pos, { color, n, speed: 5, up: 0.8, gravity: -5, size: 0.42 });
+  SPK.emit(pos, { color: 0xffffff, n: Math.round(n / 3), speed: 2, up: 0.5, gravity: 0, size: 0.7, life: 0.5 });
 }
 
 // ── input ─────────────────────────────────────────────────────
@@ -1226,6 +1298,7 @@ addEventListener('keydown', e => {
   if (!active) return;
   if (mode === 'stage') { if (stage.key(e)) e.preventDefault(); return; }
   if (cine) { if (e.key === 'Escape') endCutscene(); else if (e.key === 'Enter' || e.code === 'Space') { if (cine.t > 0.4) nextShot(); e.preventDefault(); } return; }
+  if (SQ.active() && SQ.key(e)) { e.preventDefault(); return; }
   if (battle) { if (/^[1-4]$/.test(e.key)) { const b = document.querySelector(`[data-bo="${+e.key - 1}"]`); if (b) b.click(); } else if (e.key === 'Enter') { const g = $('wbtgo'); if (g) g.click(); } return; }
   if (dlgOpen) { if (e.key === 'Escape') closeDialog(); return; }
   input.keys[e.code] = true;
@@ -1273,10 +1346,10 @@ function tryTalk() { if (nearEnt && !dlgOpen && !battle && !cine) talk(nearEnt);
 
 // ── update loop ───────────────────────────────────────────────
 let active = false, raf = 0, saveT = 0;
-const tmp = new THREE.Vector3();
+const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
 function step(dt) {
   const t = clock.elapsedTime, pos = player.position;
-  const busy = dlgOpen || battle || cine || traveling;
+  const busy = dlgOpen || battle || cine || traveling || SQ.busy();
   // input → movement
   let f = 0, r = 0;
   if (!busy) {
@@ -1295,11 +1368,12 @@ function step(dt) {
     const want = Math.atan2(mx, mz);
     let dr = want - player.rotation.y; dr = Math.atan2(Math.sin(dr), Math.cos(dr));
     player.rotation.y += dr * Math.min(1, dt * 12);
-  }
+    P.turn += (Math.max(-1, Math.min(1, dr * 2)) - P.turn) * Math.min(1, dt * 8);
+  } else P.turn *= Math.max(0, 1 - dt * 8);
   P.vel.x += (mx * speed - P.vel.x) * Math.min(1, dt * 10);
   P.vel.z += (mz * speed - P.vel.z) * Math.min(1, dt * 10);
   if (mag <= 0.05) { P.vel.x *= Math.max(0, 1 - dt * 10); P.vel.z *= Math.max(0, 1 - dt * 10); }
-  if (input.jump && P.onGround && !busy) { P.vel.y = 7.5; P.onGround = false; }
+  if (input.jump && P.onGround && !busy) { P.vel.y = 7.5; P.onGround = false; DUST.emit(pos, { color: 0xd8c8a8, n: 6, speed: 1.5, up: 0.2, gravity: 0, size: 0.5, size1: 1.1, life: 0.5 }); }
   input.jump = false;
   P.vel.y -= 22 * dt;
   const ox = pos.x, oz = pos.z, g0 = groundAt(ox, oz);
@@ -1317,8 +1391,16 @@ function step(dt) {
   if (moved > 0 && g1 - g0 > moved * 1.3 + 0.02 && pos.y < g1 + 0.2) { pos.x = ox; pos.z = oz; }
   if (D.water && groundAt(pos.x, pos.z) < D.water.y - 0.5) { pos.x = ox; pos.z = oz; } // no swimming
   const gy = groundAt(pos.x, pos.z);
+  const wasAir = !P.onGround, fall = P.vel.y;
   if (pos.y <= gy) { pos.y = gy; P.vel.y = 0; P.onGround = true; }
-  animatePerson(player, P.onGround ? Math.hypot(P.vel.x, P.vel.z) : 0, dt);
+  const hs = Math.hypot(P.vel.x, P.vel.z);
+  // a puff of dust on landing and from running feet; sparkles trail from the wand
+  if (wasAir && P.onGround && fall < -4) { P.landT = 0.18; DUST.emit(pos, { color: 0xd8c8a8, n: 10, speed: 2.4, up: 0.15, gravity: 0, drag: 3, size: 0.5, size1: 1.3, life: 0.6 }); }
+  P.landT = Math.max(0, (P.landT || 0) - dt);
+  if (P.onGround && hs > 6.5 && (P.dustT = (P.dustT || 0) - dt) <= 0) { P.dustT = 0.11; DUST.emit(pos, { color: 0xcdbb98, n: 2, speed: 0.8, up: 0.3, gravity: 0.3, drag: 2, size: 0.35, size1: 0.9, life: 0.55 }); }
+  if (!LOW && hs > 2 && (P.wandT = (P.wandT || 0) - dt) <= 0) { P.wandT = 0.06; SPK.emit(player.userData.arms[1].localToWorld(tmp2.set(0, -0.8, 0.4)), { color: 0xffe08a, n: 1, speed: 0.3, up: 0.3, gravity: 0.4, size: 0.18, life: 0.6 }); }
+  animatePerson(player, P.onGround ? hs : 0, dt);
+  FX.heroPose(player, { speed: P.onGround ? hs : 0, onGround: P.onGround, vy: P.vel.y, landed: P.landT, t, turn: P.turn });
   if (pet) {
     const back = player.rotation.y + Math.PI * 0.75, tx = pos.x + Math.sin(back) * 1.4, tz = pos.z + Math.cos(back) * 1.4;
     pet.position.x += (tx - pet.position.x) * Math.min(1, dt * 3); pet.position.z += (tz - pet.position.z) * Math.min(1, dt * 3);
@@ -1327,7 +1409,6 @@ function step(dt) {
     pet.rotation.y = Math.atan2(pos.x - pet.position.x, pos.z - pet.position.z);
     animatePet(pet, t, dt);
   }
-  player.userData.body.rotation.x = P.onGround ? 0 : -0.15;
 
   // camera: a cutscene, or follow and gently swing behind the player while walking
   if (cine) updateCine(dt, t);
@@ -1347,8 +1428,18 @@ function step(dt) {
     const cy = Math.sin(cam.pitch) * cd, ch = Math.cos(cam.pitch) * cd;
     tmp.set(pos.x + Math.sin(cam.yaw) * ch, pos.y + 1.4 + cy, pos.z + Math.cos(cam.yaw) * ch);
     tmp.y = Math.max(tmp.y, groundAt(tmp.x, tmp.z) + 0.8);
-    camera.position.lerp(tmp, Math.min(1, dt * 8));
-    camera.lookAt(pos.x, pos.y + 1.4, pos.z);
+    // in a shade battle the camera looks over the hero's shoulder at the shade;
+    // while fishing it looks out towards the bobber
+    const foe = battle && battle.w.obj.position, focus = foe || SQ.focus();
+    if (foe) {
+      const dx = foe.x - pos.x, dz = foe.z - pos.z, dl = Math.hypot(dx, dz) || 1;
+      tmp.set(pos.x - dx / dl * 5 - dz / dl * 1.8, Math.max(pos.y, foe.y) + 3.4, pos.z - dz / dl * 5 + dx / dl * 1.8);
+      tmp.y = Math.max(tmp.y, groundAt(tmp.x, tmp.z) + 1);
+    }
+    camera.position.lerp(tmp, Math.min(1, dt * (foe ? 4 : 8)));
+    camLook.lerp(tmp2.set(pos.x, pos.y + 1.4, pos.z).lerp(focus || tmp2, focus ? 0.45 : 0), Math.min(1, dt * 6));
+    camera.lookAt(camLook);
+    if (S_SHAKE > 0) { S_SHAKE = Math.max(0, S_SHAKE - dt); camera.position.x += (Math.random() - 0.5) * S_SHAKE; camera.position.y += (Math.random() - 0.5) * S_SHAKE; }
   }
   sun.position.set(pos.x + 30, pos.y + 60, pos.z + 20); sun.target.position.set(pos.x, pos.y, pos.z);
   sky.position.copy(camera.position);
@@ -1370,13 +1461,14 @@ function step(dt) {
   for (const e of ents) {
     const d = Math.hypot(pos.x - e.x, pos.z - e.z);
     e.mark.position.y = (e.tagY || 2.7) + 0.9 + Math.sin(t * 3) * 0.12;
+    if (e.kind === 'side') { if (d < best) { best = d; nearEnt = e; } continue; }
     if (e.kind === 'pedestal') { e.spin.rotation.y += dt; e.spin.position.y = 1.7 + Math.sin(t * 2) * 0.1; }
     else if (d < 12 && !cine) { const want = Math.atan2(pos.x - e.x, pos.z - e.z); let dr = want - e.obj.rotation.y; dr = Math.atan2(Math.sin(dr), Math.cos(dr)); e.obj.rotation.y += dr * Math.min(1, dt * 3); }
     if (e.kind !== 'pedestal') animatePerson(e.obj, 0, dt);
     if (d < best) { best = d; nearEnt = e; }
   }
   const pr = $('wprompt');
-  if (nearEnt && !busy) { pr.innerHTML = `<b>E</b> / 💬 ${nearEnt.kind === 'pedestal' ? 'Examine' : nearEnt.kind === 'guardian' ? 'Confront' : 'Talk to'} ${esc(nearEnt.label)}`; pr.classList.add('on'); $('wtalk').classList.add('on'); }
+  if (nearEnt && !busy && !(SQ.active() && nearEnt.kind === 'side')) { pr.innerHTML = `<b>E</b> / 💬 ${nearEnt.kind === 'pedestal' ? 'Examine' : nearEnt.kind === 'guardian' ? 'Confront' : nearEnt.kind === 'side' ? (nearEnt.sq === 'courier' ? 'Help' : 'Play at') : 'Talk to'} ${esc(nearEnt.label)}`; pr.classList.add('on'); $('wtalk').classList.add('on'); }
   else { pr.classList.remove('on'); $('wtalk').classList.remove('on'); }
 
   // quest arrow
@@ -1412,7 +1504,9 @@ function step(dt) {
     if (!c.c.visible) continue;
     c.c.rotation.z += dt * 3;
     if (Math.hypot(pos.x - c.x, pos.z - c.z) < 1.1 && Math.abs(pos.y + 0.8 - c.c.position.y) < 1.6) {
-      c.c.visible = false; w.coins.got.push(c.i); E.state.coins++; KG.app.sfx('tap'); E.questProgress('coins'); updateHUD();
+      c.c.visible = false; w.coins.got.push(c.i); E.state.coins++; KG.app.sfx('coin'); E.questProgress('coins');
+      SPK.emit(c.c.position, { color: 0xffd166, n: 10, speed: 2.5, size: 0.3, life: 0.5 });
+      FX.flyToHUD(camera, renderer, c.c.position, $('wcoins'), '🪙'); setTimeout(updateHUD, 700);
     }
   }
 
@@ -1421,7 +1515,7 @@ function step(dt) {
     if (wi.dead) { if ((wi.respawn -= dt) <= 0) spawnWisp(wi); continue; }
     wi.t += dt; wi.cool = Math.max(0, (wi.cool || 0) - dt);
     const o = wi.obj.position, d = Math.hypot(pos.x - o.x, pos.z - o.z);
-    const safe = ents.some(e => e.kind === 'mentor' && Math.hypot(pos.x - e.x, pos.z - e.z) < 9) || (backPortal && Math.hypot(pos.x - backPortal.x, pos.z - backPortal.z) < 8);
+    const safe = SQ.active() || ents.some(e => (e.kind === 'mentor' || e.kind === 'side') && Math.hypot(pos.x - e.x, pos.z - e.z) < 9) || (backPortal && Math.hypot(pos.x - backPortal.x, pos.z - backPortal.z) < 8);
     let tx, tz, sp;
     if (d < 10 && !safe && !busy && wi.cool <= 0) { tx = pos.x; tz = pos.z; sp = 3.6; }
     else { if (!wi.target || Math.hypot(wi.target.x - o.x, wi.target.z - o.z) < 1) wi.target = { x: wi.home.x + (Math.random() - 0.5) * 16, z: wi.home.z + (Math.random() - 0.5) * 16 }; tx = wi.target.x; tz = wi.target.z; sp = 1.4; }
@@ -1430,6 +1524,7 @@ function step(dt) {
     o.y = groundAt(o.x, o.z) + 1.3 + Math.sin(wi.t * 3) * 0.25;
     wi.obj.rotation.y = Math.atan2(pos.x - o.x, pos.z - o.z);
     wi.obj.children[0].rotation.x += dt;
+    if (!LOW && (wi.trailT = (wi.trailT || 0) - dt) <= 0) { wi.trailT = 0.09; SPK.emit(o, { color: wi.elite ? 0xff5a5a : 0x9a6aff, n: 1, speed: 0.4, up: 0.6, gravity: 0.6, size: wi.elite ? 0.5 : 0.35, life: 0.9 }); }
     if (d < 1.3 && !busy && wi.cool <= 0 && P.hearts > 0) startBattle(wi);
   }
 
@@ -1449,20 +1544,10 @@ function step(dt) {
     ]);
   }
 
-  for (const b of bursts) {
-    b.t -= dt; const p = b.pts.geometry.attributes.position;
-    for (let i = 0; i < b.v.length; i++) { b.v[i].y -= 9 * dt; p.setXYZ(i, p.getX(i) + b.v[i].x * dt, p.getY(i) + b.v[i].y * dt, p.getZ(i) + b.v[i].z * dt); }
-    p.needsUpdate = true; b.pts.material.opacity = Math.max(0, b.t);
-    if (b.t <= 0) { scene.remove(b.pts); b.pts.geometry.dispose(); b.pts.material.dispose(); b.dead = true; }
-  }
-  for (let i = bursts.length - 1; i >= 0; i--) if (bursts[i].dead) bursts.splice(i, 1);
-  if (!LOW) for (const wa of waters) {
-    const g = wa.geometry.attributes.position;
-    for (let i = 0; i < g.count; i++) { const x = g.getX(i), z = g.getZ(i); g.setY(i, Math.sin(x * 0.5 + t * 1.6) * 0.06 + Math.cos(z * 0.7 + t * 1.2) * 0.05); }
-    g.needsUpdate = true;
-  }
+  SPK.update(dt); DUST.update(dt);
   for (let i = anims.length - 1; i >= 0; i--) if (anims[i](dt, t) === false) anims.splice(i, 1);
   updateCritters(dt, t, pos);
+  SQ.update(dt, t, pos, P.onGround);
   updateAmbience(dt, t, pos);
 
   if ((saveT += dt) > 5) { saveT = 0; savePos(); }
@@ -1470,7 +1555,7 @@ function step(dt) {
 function snapCamera() {
   const pos = player.position, cd = cam.dist, ch = Math.cos(cam.pitch) * cd;
   camera.position.set(pos.x + Math.sin(cam.yaw) * ch, pos.y + 1.4 + Math.sin(cam.pitch) * cd, pos.z + Math.cos(cam.yaw) * ch);
-  camera.lookAt(pos.x, pos.y + 1.4, pos.z);
+  camLook.set(pos.x, pos.y + 1.4, pos.z); camera.lookAt(camLook);
 }
 function savePos() { const w = ws(); w.zone = WI; w.x = +player.position.x.toFixed(2); w.z = +player.position.z.toFixed(2); w.yaw = +cam.yaw.toFixed(3); E.save(); }
 
@@ -1490,6 +1575,7 @@ function loop() {
   if (!active) return;
   raf = requestAnimationFrame(loop);
   const dt = Math.min(0.05, clock.getDelta());
+  FX.tick(clock.elapsedTime);
   if (mode === 'stage') { stage.update(dt, clock.elapsedTime); stage.render(renderer); }
   else { step(dt); renderer.render(scene, camera); }
   adaptQuality(dt);
@@ -1525,7 +1611,7 @@ W.show = () => {
 W.hide = () => {
   if (mode === 'world' && worldShown) savePos();
   if (cine) endCutscene();
-  worldShown = false; mode = 'world'; if (stage) stage.exit();
+  worldShown = false; mode = 'world'; if (stage) stage.exit(); SQ.stop();
   active = false; cancelAnimationFrame(raf); root.classList.remove('on', 'staging'); closeDialog();
 };
 // The 3D trial stage used by every lesson, boss, review and arcade game.
@@ -1549,7 +1635,7 @@ W.onLessonDone = (node, r) => {
   });
 };
 W.travel = (i, where) => travel(i, where);
-W.debug = { player, cam, P, ents, wisps, questTarget, get world() { return WI; }, groundAt: (x, z) => groundAt(x, z), along: (t, s, o) => along(t, s, o), travel, cutscene, endCutscene, get cine() { return cine; }, gate: () => gate,
+W.debug = { startBattle: w => startBattle(w), SQ, scene, camera, player, cam, P, ents, wisps, questTarget, get world() { return WI; }, groundAt: (x, z) => groundAt(x, z), along: (t, s, o) => along(t, s, o), travel, cutscene, endCutscene, get cine() { return cine; }, gate: () => gate,
   teleport: (x, z) => { player.position.set(x, groundAt(x, z), z); snapCamera(); } };
 
 // ── build ─────────────────────────────────────────────────────
@@ -1564,7 +1650,7 @@ W.debug = { player, cam, P, ents, wisps, questTarget, get world() { return WI; }
   if (backPortal && Math.hypot(player.position.x - backPortal.x, player.position.z - backPortal.z) > 5) backPortal.armed = true;
   snapCamera();
   setPet();
-  stage = createStage({ renderer, person, golem, wispMesh, ZONES, KG, animatePerson, applyLook, buildPet, animatePet, GOLEM_COL, teacherLook: (i, nodeId) => teacherLook(i, teacherIndex(i, nodeId)) });
+  stage = createStage({ FX, renderer, person, golem, wispMesh, ZONES, KG, animatePerson, applyLook, buildPet, animatePet, GOLEM_COL, teacherLook: (i, nodeId) => teacherLook(i, teacherIndex(i, nodeId)) });
   W.debug.stage = stage;
   W.ok = true;
   document.dispatchEvent(new Event('world-ready'));

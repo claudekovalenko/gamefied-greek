@@ -139,7 +139,9 @@ window.KG = window.KG || {};
 
   // ── spaced repetition (Leitner boxes) ───────────────────────
   // Box 1 → review tomorrow; each correct review moves the card up one box and
-  // roughly doubles the gap. A miss sends it back to box 1.
+  // roughly doubles the gap. A miss sends it back to box 1 and makes it due again
+  // today (the shades and side quests bring it back while it's fresh); getting it
+  // right after that only counts as relearned, so it returns tomorrow.
   const INTERVALS = [0, 1, 2, 4, 8, 16, 35, 75];
   E.vocabByGreek = Object.fromEntries(KG.vocab.map(w => [w.g, w]));
   // Words added from the Reading Room live in state.custom and join the same deck.
@@ -155,8 +157,32 @@ window.KG = window.KG || {};
     let r = V[g];
     if (!r) { V[g] = { box: 1, due: U.addDays(t, 1), seen: 1, miss: correct ? 0 : 1 }; return; }
     r.seen++;
+    if (!correct) { r.box = 1; r.due = t; r.lapse = 1; r.miss++; return; }
+    if (r.lapse) { r.lapse = 0; r.due = U.addDays(t, 1); return; }
+    if (r.due <= t) { r.box = Math.min(INTERVALS.length - 1, r.box + 1); r.due = U.addDays(t, INTERVALS[r.box]); }
+  };
+  // review order: due words first (lowest box, most missed), then the rest by how soon they fall due
+  E.reviewOrder = words => {
+    const t = U.day(), V = E.state.vocab;
+    const key = w => { const r = V[w.g]; if (!r) return 50; return (r.due <= t ? 0 : 20 + U.diffDays(t, r.due)) + r.box - Math.min(3, r.miss) * 0.5 + Math.random() * 2; };
+    return words.slice().sort((a, b) => key(a) - key(b));
+  };
+
+  // ── spells fade too: each grammar lesson is reviewed on the same Leitner schedule ──
+  E.spellSRS = () => (E.state.spellSRS = E.state.spellSRS || {});
+  E.spellAnswer = (key, correct) => {
+    const M = E.spellSRS(), t = U.day(), r = M[key];
+    if (!r) { if ((E.state.spells || {})[key]) M[key] = { box: 1, due: U.addDays(t, 1), miss: 0 }; return; }
     if (!correct) { r.box = 1; r.due = U.addDays(t, 1); r.miss++; return; }
     if (r.due <= t) { r.box = Math.min(INTERVALS.length - 1, r.box + 1); r.due = U.addDays(t, INTERVALS[r.box]); }
+  };
+  E.dueSpells = () => { const t = U.day(), M = E.spellSRS(); return Object.keys(M).filter(k => M[k].due <= t && KG.grammar[k]); };
+  // a few questions on a spell, for reviews and the shades
+  E.spellQuestions = (key, n = 2) => {
+    const L = KG.grammar[key], all = cells(L), qs = [];
+    for (const c of sample(L.concepts || [], n)) qs.push(mc(c.q, c.a, c.w, { explain: c.ex || '', skey: key }));
+    if (all.length) for (const c of sample(all, n)) qs.push(Object.assign(Math.random() < 0.5 ? E.parseQ(c, all) : E.produceQ(c, all), { skey: key }));
+    return sample(qs, n);
   };
   E.dueWords = () => {
     const t = U.day();
@@ -247,6 +273,9 @@ window.KG = window.KG || {};
     { id: 'combo', text: 'Reach a {n}× combo', n: [5, 8, 10] },
     { id: 'coins', text: 'Collect {n} coins in the world', n: [5, 8, 12] },
     { id: 'perfect', text: 'Finish a lesson without a mistake', n: [1, 1, 1] },
+    { id: 'fish', text: 'Catch {n} word-fish at a fishing jetty', n: [3, 5, 8] },
+    { id: 'runes', text: 'Spell {n} words in a Rune Circle', n: [2, 3, 5] },
+    { id: 'courier', text: 'Run {n} word errands for the villagers', n: [2, 3, 5] },
   ];
   E.daily = () => {
     const S = E.state, t = U.day();
@@ -405,6 +434,7 @@ window.KG = window.KG || {};
       const [g, en] = U.pick(phrases);
       qs.push(mc(`How do you say "<b>${U.esc(en)}</b>"?`, g, others(g, phrases.map(p => p[0])), { greekOpts: true, speak: g }));
     }
+    for (const q of qs) q.skey = key;
     return shuffle(qs).slice(0, n);
   }
 
@@ -539,7 +569,9 @@ window.KG = window.KG || {};
     if (game === 'rain') {
       let pool = Object.keys(E.state.vocab).map(g => E.vocabByGreek[g]).filter(Boolean);
       if (pool.length < 12) pool = KG.vocab.slice(0, 40);
-      return { type: 'mini', game, title: 'Word Rain', targets: sample(pool, 12).map(w => ({ g: w.g, en: w.en })), pool: pool.map(w => w.g) };
+      // due words fall first, so a round of Word Rain is a round of review
+      const order = E.reviewOrder(pool);
+      return { type: 'mini', game, title: 'Word Rain', targets: shuffle(order.slice(0, 8)).concat(sample(order.slice(8), 4)).map(w => ({ g: w.g, en: w.en })), pool: pool.map(w => w.g), srs: true };
     }
     if (game === 'defense') {
       const ls = doneLessons(NOUN_LESSONS);
@@ -642,6 +674,7 @@ window.KG = window.KG || {};
     if (node.type === 'grammar' && passed && KG.teach && KG.teach[node.lesson]) {
       S.spells = S.spells || {};
       if (!S.spells[node.lesson]) { S.spells[node.lesson] = U.day(); spell = KG.teach[node.lesson].spell; }
+      if (!E.spellSRS()[node.lesson]) E.spellSRS()[node.lesson] = { box: 1, due: U.addDays(U.day(), 1), miss: 0 };
     }
     let xp = res.xp + bonus;
     const boosted = S.boost > 0;
@@ -660,6 +693,7 @@ window.KG = window.KG || {};
     S.stats.answered++; if (correct) { S.stats.correct++; E.questProgress('correct'); }
     if (isReview) { S.stats.reviews++; E.questProgress('reviews'); }
     if (q.vkey) E.srsAnswer(q.vkey, correct);
+    if (q.skey) E.spellAnswer(q.skey, correct);
     if (!correct) E.logMistake(q); else if (isReview) E.clearMistake(q);
     E.save();
   };

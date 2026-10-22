@@ -23,8 +23,13 @@ master is a **spell**, and the goal is to read and translate the Greek New Testa
   it bows, speaks, and the portal blazes open.
 - **Three teachers in every world**, each at their own spot along the road with a slate, a bench and their own
   lessons, so walking on through a world means learning on. They give you lessons as quests. A golden light and the quest arrow always show where to go next.
-- **Shades of Forgetting** roam the road. Touch one and you must remember a word to banish it: this is
-  your spaced-repetition review. An **elite shade** in each world hunts your weakest words.
+- **Shades of Forgetting** roam the road. Touch one and you must remember a word (or recast a fading spell)
+  to banish it with a bolt from your wand: this is your spaced-repetition review. An **elite shade** in each
+  world hunts your weakest words and takes three right answers in a row.
+- **Side quests**, all fed by your review queue (due words first):
+  - 🎣 **Word Fishing** at the pond, river and lake: cast, wait for a bite, name the fish's word before it slips away. Words you know by heart come up as golden fish.
+  - 🔤 **Rune Circle** in every world: walk (and hop) across lettered stones to spell the Greek word.
+  - 📦 **Courier** errands: a villager needs a word; find the right glowing word nearby and carry it back.
 - **Collect** glowing letters, daily coins, and **lost scrolls**: NT passages to read and translate in the Reading Room.
 
 Controls: WASD/arrows to move, Shift to run, Space to jump, E to talk, drag to look around.
@@ -101,11 +106,15 @@ about **72% of all the words** in the Greek New Testament.
 - **Frequency first.** Vocabulary is ordered by how often it occurs in the NT, so every word you learn
   pays off as quickly as possible. The Codex shows the share of NT text your words cover.
 - **Spaced repetition.** Each word moves through memory boxes (1 → 2 → 4 → 8 → 16 → 35 → 75 days).
-  A correct review promotes it and a miss sends it back to box 1.
+  A correct review promotes it; a miss sends it back to box 1 and makes it due again the same day, and getting
+  it right then only counts as relearned (back tomorrow). Grammar spells follow the same schedule: a learned
+  spell fades when it falls due and comes back in Review and as a shade. The arcade, the side quests and the
+  shades all draw due words first and write every answer back into the schedule.
 - **Teach, then retrieve.** Each idea is taught in a few sentences and immediately tried, then practiced in a
   trial. You learn by answering, not rereading.
 - **Immediate, explained feedback.** Every answer shows *why*: the parsing, the rule, the gloss.
-- **Desirable difficulty.** A question you miss comes back once at the end of the lesson. Mastered lessons
+- **Desirable difficulty.** A question you miss comes back a few questions later, and once more at the end if
+  you miss it again. Mastered lessons
   replay with harder "produce the form" questions, well-known words come back English → Greek, and elite shades
   drill your weakest words.
 - **Interleaving.** Vocabulary lessons slip in earlier words, and bosses mix everything in a unit.
@@ -160,6 +169,8 @@ npm run make-icons   # re-render icons/*.png from the SVGs (needs Playwright)
 | `js/worlds.js`, `js/props.js` | the nine worlds' roads, ground shapes and landmarks |
 | `js/stage.js` | the 3D lesson stage: tablets, challengers, mini-games, power-ups |
 | `js/stagesets.js` | the trial places for each world and each world's creature |
+| `js/fx.js` | shared look: painted sky with sun, clouds and stars, water, wind, sparkles, the hero's body language |
+| `js/sidequests.js` | Word Fishing, the Rune Circle and Courier errands, driven by the review queue |
 | `js/reader.js` | the Reading Room |
 | `data/nt/` | the whole Greek NT, lexicon and English comparison, built by `scripts/build-nt.mjs` (see its README for sources and licenses) |
 | `sw.js`, `manifest.webmanifest`, `icons/` | PWA: offline cache and home-screen install |

@@ -232,3 +232,36 @@ test('arcade: endless 3D mini-games and power-ups', () => {
   E.grantPower('slow', 1); assert.equal(E.powers().slow, 2);
   E.state.powers.shield = 0; assert.equal(E.usePower('shield'), false);
 });
+
+test('spacing: a missed word is due again today, then relearned for tomorrow', () => {
+  E.reset();
+  const g = KG.vocab[0].g, today = KG.util.day();
+  E.srsAnswer(g, true);
+  assert.equal(E.state.vocab[g].due, KG.util.addDays(today, 1), 'new word: tomorrow');
+  E.srsAnswer(g, false);
+  assert.equal(E.state.vocab[g].due, today, 'missed: due again today');
+  assert.ok(E.dueWords().some(w => w.g === g));
+  E.srsAnswer(g, true);
+  assert.equal(E.state.vocab[g].box, 1, 'relearning does not promote');
+  assert.equal(E.state.vocab[g].due, KG.util.addDays(today, 1));
+  // review order puts due words first
+  const h = KG.vocab[1].g; E.srsAnswer(h, true); E.srsAnswer(h, false);
+  const order = E.reviewOrder([KG.vocab[0], KG.vocab[1]]).map(w => w.g);
+  assert.equal(order[0], h);
+});
+
+test('spacing: learned spells fade and come back as review questions', () => {
+  E.reset();
+  for (const k of Object.keys(KG.grammar)) {
+    const qs = E.spellQuestions(k, 2);
+    assert.ok(qs.length >= 1, `${k}: spell questions`);
+    for (const q of qs) { checkQuestion(q, `spell ${k}`); assert.equal(q.skey, k); }
+  }
+  const k = Object.keys(KG.grammar)[0];
+  E.state.spells = { [k]: KG.util.day() };
+  E.state.spellSRS = { [k]: { box: 1, due: KG.util.day(), miss: 0 } };
+  assert.equal(JSON.stringify(E.dueSpells()), JSON.stringify([k]));
+  E.recordAnswer(Object.assign(E.spellQuestions(k, 1)[0], {}), true, true);
+  assert.equal(E.state.spellSRS[k].box, 2);
+  assert.equal(E.dueSpells().length, 0);
+});

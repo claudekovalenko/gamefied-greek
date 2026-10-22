@@ -714,7 +714,11 @@ function findSpot(ts, offs, r) {
   return null;
 }
 function buildSideQuests() {
-  const add = e => { addEnt(e); keepOut.push({ x: e.x, z: e.z, r: e.sq === 'runes' ? 7.5 : 2.5 }); };
+  const add = e => {
+    addEnt(e); keepOut.push({ x: e.x, z: e.z, r: e.sq === 'runes' ? 7.5 : 2.5 });
+    // keep the jetty's view of the water clear too
+    if (e.water) keepOut.push({ x: (e.x + e.water.x) / 2, z: (e.z + e.water.z) / 2, r: 3.5 });
+  };
   const rc = findSpot([0.45, 0.55, 0.35, 0.65, 0.25, 0.75, 0.15, 0.85], [13, 16, 10, 19, 22, 8], 5.8) || findSpot([0.4, 0.6, 0.3, 0.7], [12, 15, 18], 5);
   if (rc) add(SQ.runes({ x: rc.x, z: rc.z }));
   const cp = findSpot([0.2, 0.7, 0.3, 0.8, 0.6], [7, 9, 11], 1.6);
@@ -1434,7 +1438,7 @@ function step(dt) {
     const foe = battle && battle.w.obj.position, focus = foe || SQ.focus();
     if (foe) {
       const dx = foe.x - pos.x, dz = foe.z - pos.z, dl = Math.hypot(dx, dz) || 1;
-      tmp.set(pos.x - dx / dl * 5 - dz / dl * 1.8, Math.max(pos.y, foe.y) + 3.4, pos.z - dz / dl * 5 + dx / dl * 1.8);
+      tmp.set(pos.x - dx / dl * 5.5 - dz / dl * 1.8, Math.max(pos.y, foe.y) + 5, pos.z - dz / dl * 5.5 + dx / dl * 1.8);
       tmp.y = Math.max(tmp.y, groundAt(tmp.x, tmp.z) + 1);
     }
     camera.position.lerp(tmp, Math.min(1, dt * (foe ? 4 : 8)));

@@ -50,7 +50,7 @@ export function makeFX(THREE, { LOW = false } = {}) {
     const mesh = new THREE.Mesh(new THREE.SphereGeometry(radius, 32, 16), m);
     mesh.frustumCulled = false; mesh.renderOrder = -10;
     mesh.userData.set = A => {
-      u.uTop.value.setHex(A.top); u.uMid.value.setHex(A.mid); u.uBot.value.setHex(A.bot); u.uSun.value.setHex(A.sun);
+      u.uTop.value.set(A.top); u.uMid.value.set(A.mid); u.uBot.value.set(A.bot); u.uSun.value.set(A.sun); // hex or THREE.Color
       u.uCloud.value = A.clouds ?? 0.5; u.uStars.value = A.stars || 0;
       if (A.sunDir) u.uSunDir.value.set(...A.sunDir).normalize();
     };
@@ -100,7 +100,7 @@ export function makeFX(THREE, { LOW = false } = {}) {
           #include <fog_fragment>
         }`,
     });
-    m.userData.setColors = (deep, shallow, skyc) => { u.uDeep.value.setHex(deep); u.uShallow.value.setHex(shallow); if (skyc !== undefined) u.uSkyCol.value.setHex(skyc); };
+    m.userData.setColors = (deep, shallow, skyc) => { u.uDeep.value.set(deep); u.uShallow.value.set(shallow); if (skyc !== undefined) u.uSkyCol.value.set(skyc); };
     return m;
   }
 

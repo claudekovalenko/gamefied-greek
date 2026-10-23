@@ -371,7 +371,7 @@ function grass() {
 }
 function flowers() {
   const N = Math.round((D.flowers || 0) * (LOW ? 0.4 : 1)); if (!N) return;
-  const rand = rng(WI * 7 + 1), fl = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.12, 0), new THREE.MeshStandardMaterial({ roughness: 1 }), N);
+  const rand = rng(WI * 7 + 1), fl = new THREE.InstancedMesh(FX.flowerGeo(), FX.windify(new THREE.MeshStandardMaterial({ roughness: 1, vertexColors: true }), { amp: 0.35, freq: 2 }), N);
   const m = new THREE.Matrix4(), c = new THREE.Color(), fcols = [0xffe066, 0xff8fab, 0xffffff, 0xb197fc, 0xff6b6b];
   const wy = D.water ? D.water.y : -99;
   let n = 0;
@@ -379,7 +379,7 @@ function flowers() {
     const a = along(rand(), rand() < 0.5 ? -1 : 1, 3 + rand() * 16), y = groundAt(a.x, a.z);
     if (keepOut.some(c => Math.hypot(c.x - a.x, c.z - a.z) < c.r)) continue;
     if (y < wy + 0.3) continue;
-    m.makeTranslation(a.x, y + 0.18, a.z); fl.setMatrixAt(n, m); fl.setColorAt(n++, c.setHex(U.pick(fcols)));
+    m.makeRotationY(rand() * 6.3).scale(new THREE.Vector3(1, 1, 1).multiplyScalar(1.2 + rand() * 1.2)).setPosition(a.x, y - 0.02, a.z); fl.setMatrixAt(n, m); fl.setColorAt(n++, c.setHex(U.pick(fcols)));
   }
   fl.count = n; WG.add(fl);
 }

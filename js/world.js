@@ -81,6 +81,7 @@ const SPK = FX.sparks(scene), DUST = FX.sparks(scene, LOW ? 80 : 200, { additive
 const CRIT = FX.critters(scene); // birds overhead, butterflies by the path
 const ARENA = FX.arena(scene); // the rune circle of a shade battle
 const BURSTS = FX.bursts(scene); // light pillars when a foe is banished
+const HILLS = FX.farHills(scene); // far mountain ranges on the horizon
 const STARS = FX.shootingStars(scene); // a shooting star now and then at night
 // at night the hero's wand gives a soft warm glow (always in the scene, so switching it on costs nothing)
 const heroLight = new THREE.PointLight(0xffcf8a, 0, 10, 1.6); scene.add(heroLight);
@@ -104,6 +105,7 @@ function setAtmosphere(i) {
   const A = moodAtmos(ATMOS[i], MOOD), mid = new THREE.Color(A.mid);
   sky.userData.set(A);
   FX.cloudShade.value = Math.min(1, 0.3 + (A.clouds || 0) * 1.2) * ((A.stars || 0) > 0.5 ? 0.3 : 1);
+  HILLS.setColors(A.mid, A.top, A.stars || 0);
   FX.setLight(A);
   try { VEN.setDaylight((A.stars || 0) > 0.5 ? 0.35 : Math.min(1, A.sunI / 2.2), (A.stars || 0) > 0.5 ? 0x8aa8ff : 0xffffff); } catch (e) { /* the venues aren't made yet */ }
   waterMat.userData.setColors(...(A.water || [0x1f6a9a, 0x5ac0e0]), A.mid);
@@ -1563,7 +1565,7 @@ function step(dt) {
     if (S_SHAKE > 0) { S_SHAKE = Math.max(0, S_SHAKE - dt); camera.position.x += (Math.random() - 0.5) * S_SHAKE; camera.position.y += (Math.random() - 0.5) * S_SHAKE; }
   }
   sun.position.set(pos.x + 30, pos.y + 60, pos.z + 20); sun.target.position.set(pos.x, pos.y, pos.z);
-  sky.position.copy(camera.position);
+  sky.position.copy(camera.position); HILLS.update(camera.position);
 
   // portals
   const gu = gate.userData;

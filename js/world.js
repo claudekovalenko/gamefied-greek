@@ -1798,7 +1798,7 @@ function step(dt) {
   FX.hero.value.copy(pos);
   GUST.update(dt, pos, INDOOR ? null : ZONES[WI].leaf.concat(ACCENT[WI] || []));
   SHAFTS.update(dt, pos, camera.position, groundAt, INDOOR ? 0 : SHAFT.k, SHAFT.dir);
-  CRIT.update(dt, t, pos, groundAt, INDOOR ? 0 : ((MOODS[MOOD] || ATMOS[WI]).stars || 0) < 0.5 ? 1 : 0);
+  CRIT.update(dt, t, pos, groundAt, INDOOR ? 0 : ((MOODS[MOOD] || ATMOS[WI]).stars || 0) < 0.5 ? 1 : 0, camera.position);
   for (let i = anims.length - 1; i >= 0; i--) if (anims[i](dt, t) === false) anims.splice(i, 1);
   updateCritters(dt, t, pos); updateWalkers(dt, t, pos);
   SQ.update(dt, t, pos, P.onGround);

@@ -79,6 +79,7 @@ scene.add(sky);
 // sparkles and dust
 const SPK = FX.sparks(scene), DUST = FX.sparks(scene, LOW ? 80 : 200, { additive: false });
 const CRIT = FX.critters(scene); // birds overhead, butterflies by the path
+const ARENA = FX.arena(scene); // the rune circle of a shade battle
 const hemi = new THREE.HemisphereLight(0xdff0ff, 0x5a6a3a, 1.1);
 scene.add(hemi);
 const ATMOS = [
@@ -1292,6 +1293,9 @@ function startBattle(w) {
   battle = { w, words: shadeWords(w), i: 0, hp: 0, done: false };
   battle.hp = battle.words.length;
   KG.app.sfx('bad'); S_SHAKE = 0.25;
+  // a rune circle glows on the ground around you and the foe
+  const fp = w.obj.position, pp = player.position;
+  ARENA.show({ x: (fp.x + pp.x) / 2, y: Math.min(fp.y, pp.y), z: (fp.z + pp.z) / 2 }, Math.max(3, Math.hypot(fp.x - pp.x, fp.z - pp.z) / 2 + 1.6), w.raider ? 0xff6a3a : w.elite ? 0xff4a5a : 0x9a6aff);
   battleQ();
 }
 function battleQ() {
@@ -1371,7 +1375,7 @@ function answerBattle(i, el) {
 }
 function endBattle() {
   $('wbattle').classList.remove('on'); $('wbattle').innerHTML = '';
-  battle = null;
+  battle = null; ARENA.hide();
   if (P.hearts <= 0) {
     const m = ents.filter(e => e.kind === 'mentor').sort((a, b) => Math.hypot(a.x - player.position.x, a.z - player.position.z) - Math.hypot(b.x - player.position.x, b.z - player.position.z))[0];
     dialog('😵 You fainted…', `<p>The shades overwhelmed you. You wake beside ${esc(m.T[1])}, who gives you some bread and water.</p><p class="muted small">Tip: review your words in 🔁 Review to make the shades easier.</p>`, [{ label: 'Get up', cls: 'primary' }]);
@@ -1658,7 +1662,7 @@ function step(dt) {
     ]);
   }
 
-  SPK.update(dt); DUST.update(dt);
+  SPK.update(dt); DUST.update(dt); ARENA.update(dt);
   CRIT.update(dt, t, pos, groundAt, INDOOR ? 0 : ((MOODS[MOOD] || ATMOS[WI]).stars || 0) < 0.5 ? 1 : 0);
   for (let i = anims.length - 1; i >= 0; i--) if (anims[i](dt, t) === false) anims.splice(i, 1);
   updateCritters(dt, t, pos);

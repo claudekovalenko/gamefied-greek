@@ -1865,7 +1865,7 @@ W.debug = { BLOOM, BURSTS, ARENA, get moodNow() { return MOOD; }, get indoor() {
   if (backPortal && Math.hypot(player.position.x - backPortal.x, player.position.z - backPortal.z) > 5) backPortal.armed = true;
   snapCamera();
   setPet();
-  stage = createStage({ FX, bloom: BLOOM, renderer, person, golem, wispMesh, ZONES, KG, animatePerson, applyLook, buildPet, animatePet, GOLEM_COL, teacherLook: (i, nodeId) => teacherLook(i, teacherIndex(i, nodeId)) });
+  stage = createStage({ FX, bloom: BLOOM, mood: () => MOODS[MOOD], renderer, person, golem, wispMesh, ZONES, KG, animatePerson, applyLook, buildPet, animatePet, GOLEM_COL, teacherLook: (i, nodeId) => teacherLook(i, teacherIndex(i, nodeId)) });
   W.debug.stage = stage;
   W.ok = true;
   document.dispatchEvent(new Event('world-ready'));

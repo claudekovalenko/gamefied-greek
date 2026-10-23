@@ -474,9 +474,12 @@ function person({ skin = 0xf0c8a0, robe = 0x3f7d3a, hair = 0x6a3e1e, hood = fals
   const buckle = tmesh(new THREE.BoxGeometry(0.14, 0.12, 0.04), 0xe0b030, {}, 0); buckle.position.set(0, 0.98, 0.43); body.add(buckle);
   // head and face
   const head = tmesh(new THREE.SphereGeometry(0.32, 20, 16), skin); head.position.y = 1.86; body.add(head);
-  const hairM = tmesh(new THREE.SphereGeometry(0.345, 18, 10, 0, Math.PI * 2, 0, Math.PI / 1.9), hair); hairM.position.y = 1.9; hairM.rotation.x = -0.28; body.add(hairM);
+  // hair always stands apart from the skin (dark hair on dark skin read as a balaclava), and sits back off the forehead
+  { const hc = new THREE.Color(hair), sc = new THREE.Color(skin), lum = c => c.r * 0.3 + c.g * 0.59 + c.b * 0.11;
+    if (Math.abs(lum(hc) - lum(sc)) < 0.22) hair = hc.multiplyScalar(lum(sc) > 0.35 ? 0.35 : 1).offsetHSL(0, 0, lum(sc) > 0.35 ? 0 : 0.35).getHex(); }
+  const hairM = tmesh(new THREE.SphereGeometry(0.35, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2.1), hair); hairM.position.set(0, 1.92, -0.03); hairM.rotation.x = -0.5; body.add(hairM);
   for (const sd of [-1, 1]) {
-    const tuft = tmesh(new THREE.SphereGeometry(0.11, 8, 6), hair, {}, 0); tuft.position.set(sd * 0.29, 1.82, -0.04); body.add(tuft);
+    const tuft = tmesh(new THREE.SphereGeometry(0.11, 8, 6), hair, {}, 0); tuft.position.set(sd * 0.27, 1.9, -0.12); body.add(tuft);
     const eye = tmesh(new THREE.SphereGeometry(0.062, 10, 8), 0xffffff, {}, 0); eye.position.set(sd * 0.115, 1.89, 0.27); body.add(eye); eyes.push(eye);
     const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.034, 8, 6), new THREE.MeshBasicMaterial({ color: 0x1a1208 })); pupil.position.set(sd * 0.115, 1.89, 0.322); body.add(pupil); eyes.push(pupil);
     const brow = tmesh(new THREE.BoxGeometry(0.11, 0.025, 0.03), hair === 0xdddddd ? 0xbbbbbb : hair, {}, 0); brow.position.set(sd * 0.115, 1.98, 0.29); brow.rotation.z = sd * -0.12; body.add(brow);
@@ -488,7 +491,11 @@ function person({ skin = 0xf0c8a0, robe = 0x3f7d3a, hair = 0x6a3e1e, hood = fals
     const h = tmesh(new THREE.ConeGeometry(0.44, 0.66, 14), robe); h.position.set(0, 2.18, -0.1); h.rotation.x = -0.4; body.add(h);
   }
   if (long) { const lh = tmesh(new THREE.CylinderGeometry(0.3, 0.36, 0.75, 14, 1, true, Math.PI * 0.6, Math.PI * 1.8), hair, { side: THREE.DoubleSide }, 0); lh.position.set(0, 1.62, -0.06); body.add(lh); }
-  if (beard) { const b = tmesh(new THREE.ConeGeometry(0.24, 0.66, 10), 0xeeeeee); b.position.set(0, 1.55, 0.2); b.rotation.x = Math.PI + 0.25; body.add(b); }
+  // a beard that hangs from the chin, below the mouth, with a moustache over it: a face, not a mask
+  if (beard) {
+    const b = tmesh(new THREE.SphereGeometry(0.2, 12, 10), 0xeeeeee); b.scale.set(1.05, 1.35, 0.7); b.position.set(0, 1.5, 0.2); body.add(b);
+    for (const sd of [-1, 1]) { const m = tmesh(new THREE.SphereGeometry(0.06, 8, 6), 0xeeeeee, {}, 0); m.scale.set(1.5, 0.6, 0.8); m.position.set(sd * 0.07, 1.775, 0.3); m.rotation.z = sd * 0.35; body.add(m); }
+  }
   const cloak = new THREE.Mesh(new THREE.ConeGeometry(0.6, 1.35, 16, 1, true), tmat(robeDark, { side: THREE.DoubleSide })); cloak.castShadow = true; cloak.position.set(0, 1.0, -0.13); body.add(cloak);
   const legs = [], arms = [];
   for (const sd of [-1, 1]) {

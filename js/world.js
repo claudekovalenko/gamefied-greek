@@ -1627,6 +1627,8 @@ function step(dt) {
     camera.lookAt(camLook);
     if (S_SHAKE > 0) { S_SHAKE = Math.max(0, S_SHAKE - dt); camera.position.x += (Math.random() - 0.5) * S_SHAKE; camera.position.y += (Math.random() - 0.5) * S_SHAKE; }
   }
+  // running widens the view a touch, for a sense of speed
+  { const hsp = Math.hypot(P.vel.x, P.vel.z), want = (cam.baseFov || 60) + (P.onGround && hsp > 6.5 && !busy ? 5 : 0); if (Math.abs(camera.fov - want) > 0.05) { camera.fov += (want - camera.fov) * Math.min(1, dt * 3); camera.updateProjectionMatrix(); } }
   sun.position.set(pos.x + 30, pos.y + 60, pos.z + 20); sun.target.position.set(pos.x, pos.y, pos.z);
   sky.position.copy(camera.position); HILLS.update(camera.position); BOW.update(dt, camera.position); AUR.update(camera.position);
 
@@ -1819,7 +1821,7 @@ function resize() {
   const w = innerWidth, h = innerHeight;
   renderer.setSize(w, h); camera.aspect = w / h;
   // portrait phones get a wider view so the hero doesn't fill the screen
-  camera.fov = w / h < 0.8 ? 74 : 60; cam.dist = Math.max(cam.dist, w / h < 0.8 ? 10 : 8.5);
+  camera.fov = cam.baseFov = w / h < 0.8 ? 74 : 60; cam.dist = Math.max(cam.dist, w / h < 0.8 ? 10 : 8.5);
   camera.updateProjectionMatrix();
   if (stage) { stage.camera.aspect = w / h; stage.resize(); }
 }

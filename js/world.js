@@ -355,11 +355,9 @@ function scatterTrees() {
 // wind-blown grass (or wheat) near the road, drawn in one call with a swaying shader
 function grass() {
   if (LOW) return;
-  const wheat = !!D.wheat, N = Math.round((wheat ? 16000 : 9000) * (mobile ? 0.55 : 1)), rand = rng(WI * 31 + 5);
-  const blade = new THREE.BufferGeometry();
-  blade.setAttribute('position', new THREE.Float32BufferAttribute([-0.05, 0, 0, 0.05, 0, 0, 0, wheat ? 1.0 : 0.42, 0], 3));
-  blade.setAttribute('normal', new THREE.Float32BufferAttribute([0, 0, 1, 0, 0, 1, 0, 0, 1], 3));
-  blade.setAttribute('color', new THREE.Float32BufferAttribute([0.62, 0.62, 0.62, 0.62, 0.62, 0.62, 1.1, 1.1, 1.0], 3));
+  const wheat = !!D.wheat, N = Math.round((wheat ? 16000 : 6500) * (mobile ? 0.55 : 1)), rand = rng(WI * 31 + 5);
+  // wheat stays a single tall stalk; grass grows in curved tufts (fewer of them, each fuller)
+  const blade = wheat ? (() => { const b = new THREE.BufferGeometry(); b.setAttribute('position', new THREE.Float32BufferAttribute([-0.05, 0, 0, 0.05, 0, 0, 0, 1.0, 0], 3)); b.setAttribute('normal', new THREE.Float32BufferAttribute([0, 0, 1, 0, 0, 1, 0, 0, 1], 3)); b.setAttribute('color', new THREE.Float32BufferAttribute([0.62, 0.62, 0.62, 0.62, 0.62, 0.62, 1.1, 1.1, 1.0], 3)); return b; })() : FX.grassTuft(0.42);
   const gm = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, vertexColors: true });
   FX.windify(gm, { amp: 0.24, freq: 1.8, push: true, nearFade: true });
   const im = new THREE.InstancedMesh(blade, gm, N);

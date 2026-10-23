@@ -625,6 +625,8 @@ function buildWalkers() {
 }
 function updateWalkers(dt, t, pos) {
   for (const w of walkers) {
+    // a villager right in front of the lens is hidden, so they never fill the screen
+    w.obj.visible = camera.position.distanceTo(w.obj.position) > 2.6;
     const o = w.obj.position, near = Math.hypot(pos.x - o.x, pos.z - o.z);
     // pause and wave at the hero for a moment, then walk on
     if (near < 4 && w.wave <= 0 && !w.waved) { w.wave = 2; w.waved = true; }
@@ -638,6 +640,11 @@ function updateWalkers(dt, t, pos) {
     w.t += w.dir * dt * 0.0045;
     if (Math.abs(w.t - w.t0) > w.span) w.dir = -Math.sign(w.t - w.t0);
     const a = along(w.t, w.side, 1.3), b = along(w.t + w.dir * 0.002, w.side, 1.3);
+    // step off to the verge when they'd stand between the camera and the hero
+    const cx = camera.position.x, cz = camera.position.z, ex = pos.x - cx, ez = pos.z - cz, el = ex * ex + ez * ez || 1;
+    const k = Math.max(0, Math.min(1, ((a.x - cx) * ex + (a.z - cz) * ez) / el)), off = Math.hypot(a.x - cx - ex * k, a.z - cz - ez * k);
+    w.dodge = (w.dodge || 0) + ((k > 0.05 && k < 0.95 && off < 1.6 ? 1 : 0) - (w.dodge || 0)) * Math.min(1, dt * 3);
+    if (w.dodge > 0.01) { const s2 = along(w.t, w.side, 1.3 + w.dodge * 3.5); a.x = s2.x; a.z = s2.z; }
     o.set(a.x, groundAt(a.x, a.z), a.z); w.obj.rotation.y = Math.atan2(b.x - a.x, b.z - a.z);
     animatePerson(w.obj, 1.6, dt);
   }

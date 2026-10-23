@@ -977,11 +977,13 @@ function addStaff(body, staff, arm) {
     // held in the hand, so it follows every swing and spell
     const w = mesh(new THREE.CylinderGeometry(0.03, 0.045, 0.75, 6), 0x6a4a2a); w.position.set(0, -0.82, 0.25); w.rotation.x = 1.25; arm.add(w);
     const st = mesh(new THREE.OctahedronGeometry(0.08), 0xffe9a8, { emissive: 0xffc04a, emissiveIntensity: 1.5 }); st.position.set(0, -0.9, 0.62); arm.add(st);
+    const h = FX.glow(0xffd890, 0.7, 0.6); h.position.copy(st.position); arm.add(h); // the star at the tip glows
     return;
   }
   const col = { oak: 0x6a4a2a, crystal: 0x8a8aa0, lightning: 0xd0a030 }[staff], gem = { oak: [0x5ab04a, 0x2a8020], crystal: [0x7fd0ff, 0x3fa0ff], lightning: [0xffee66, 0xffcc00] }[staff];
   const st = mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.2, 6), col); st.position.set(0.55, 1.15, 0.15); body.add(st);
   const g = mesh(new THREE.OctahedronGeometry(0.16), gem[0], { emissive: gem[1], emissiveIntensity: 1.2 }); g.position.set(0.55, 2.35, 0.15); body.add(g);
+  const h = FX.glow(gem[0], 1, 0.6); h.position.copy(g.position); body.add(h);
 }
 function applyLook(g) {
   const L = E.look();

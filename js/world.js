@@ -753,7 +753,7 @@ function teachingSpot(p, sd, k, title) {
 }
 // the places the teachers live (js/venues.js)
 const VEN = makeVenues({
-  THREE, add: o => WG.add(o), mesh, rawGround: (x, z) => groundBase(x, z), textSprite, glow: (c, sz) => FX.glow(c, sz, ATMOS[WI].stars ? 0.85 : 0.55),
+  THREE, add: o => WG.add(o), mesh, lantern: () => FX.lantern(), rawGround: (x, z) => groundBase(x, z), textSprite, glow: (c, sz) => FX.glow(c, sz, ATMOS[WI].stars ? 0.85 : 0.55),
   col: (x, z, r) => { const c = { x, z, r }; colliders.push(c); return c; }, keep: (x, z, r) => keepOut.push({ x, z, r }),
   free: (x, z, r, tol) => openGround(x, z, r, tol), SPK, water: () => waterMat,
   signBoard: (t, w, h) => FX.signBoard(t, w, h),
@@ -985,7 +985,7 @@ function buildWorld(i) {
   setAtmosphere(i);
   buildTerrain(); buildWater();
   const col = (x, z, r) => colliders.push({ x, z, r });
-  const pctx = { glow: (c, sz) => FX.glow(c, sz, ATMOS[WI].stars ? 0.85 : 0.5), pool: (c, sz) => FX.lightPool(c, sz), signBoard: t => FX.signBoard(t), THREE, mesh, put, add: o => WG.add(o), col, ground: groundAt, textSprite, glyphSprite, anim: fn => anims.push(fn), waterMat, GREEK: GREEK_FONT, waterY: D.water ? D.water.y : 0, bridgeTop: BR ? BR.top : 0 };
+  const pctx = { glow: (c, sz) => FX.glow(c, sz, ATMOS[WI].stars ? 0.85 : 0.5), pool: (c, sz) => FX.lightPool(c, sz), lantern: () => FX.lantern(), signBoard: t => FX.signBoard(t), THREE, mesh, put, add: o => WG.add(o), col, ground: groundAt, textSprite, glyphSprite, anim: fn => anims.push(fn), waterMat, GREEK: GREEK_FONT, waterY: D.water ? D.water.y : 0, bridgeTop: BR ? BR.top : 0 };
   const api = Object.assign(makeProps(pctx), { THREE, mesh, put, col, along, textSprite, rand: rng(i * 101 + 9), GREEK: GREEK_FONT, faceAngle: (x, z, tx, tz) => Math.atan2(tx - x, tz - z) });
   D.build(api);
   W.libraryDoor = pctx.libraryDoor || null;

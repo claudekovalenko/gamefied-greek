@@ -1643,7 +1643,7 @@ function step(dt) {
   for (const e of ents) {
     const d = Math.hypot(pos.x - e.x, pos.z - e.z);
     e.mark.position.y = (e.tagY || 2.7) + 0.9 + Math.sin(t * 3) * 0.12;
-    if (e.tag) e.tag.visible = e !== talkTo && (!INDOOR || camera.position.distanceTo(e.obj.position) > 3.2); // no giant name in your face (in a small room, or mid-conversation)
+    if (e.tag) e.tag.visible = e !== talkTo && (!INDOOR || camera.position.distanceTo(e.obj.position) > 6); // no giant name in your face (in a small room, or mid-conversation)
     if (e.kind === 'side' || e.kind === 'vgate') { if (d < best) { best = d; nearEnt = e; } continue; }
     if (e.kind === 'pedestal') { e.spin.rotation.y += dt; e.spin.position.y = 1.7 + Math.sin(t * 2) * 0.1; }
     else if (d < 12 && !cine) { const want = Math.atan2(pos.x - e.x, pos.z - e.z); let dr = want - e.obj.rotation.y; dr = Math.atan2(Math.sin(dr), Math.cos(dr)); e.obj.rotation.y += dr * Math.min(1, dt * 3); }

@@ -79,6 +79,7 @@ scene.add(sky);
 // sparkles and dust
 const SPK = FX.sparks(scene), DUST = FX.sparks(scene, LOW ? 80 : 200, { additive: false });
 const CRIT = FX.critters(scene); // birds overhead, butterflies by the path
+const ENV = FX.skyEnv(renderer, scene); // soft reflections of the sky on metal and gems
 // a soft glow around bright lights; switched off on low graphics, and dropped if frames run slow
 const BLOOM = FX.bloom(renderer); BLOOM.enabled = BLOOM.enabled && !LOW;
 const bloomPerf = { acc: 0, n: 0, t: 0 };
@@ -110,6 +111,7 @@ function setAtmosphere(i) {
   sky.userData.set(A);
   FX.cloudShade.value = Math.min(1, 0.3 + (A.clouds || 0) * 1.2) * ((A.stars || 0) > 0.5 ? 0.3 : 1);
   HILLS.setColors(A.mid, A.top, A.stars || 0);
+  ENV.set(A.top, A.mid, new THREE.Color(A.mid).lerp(new THREE.Color(0x4a5a3a), 0.6));
   FX.setLight(A);
   SHAFT = { k: (A.stars || 0) > 0.5 || (A.clouds || 0) > 0.8 ? 0 : 1, dir: A.sunDir };
   try { VEN.setDaylight((A.stars || 0) > 0.5 ? 0.35 : Math.min(1, A.sunI / 2.2), (A.stars || 0) > 0.5 ? 0x8aa8ff : 0xffffff); } catch (e) { /* the venues aren't made yet */ }

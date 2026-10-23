@@ -24,7 +24,7 @@ const LAKE = { x: 8, z: 4, r: 24 };
 export const DEFS = [
   { // 0 · Alphabet Hollow: a green bowl of round-doored houses around a pond
     pts: [[0, 50], [-12, 34], [-4, 18], [12, 6], [6, -12], [-10, -26], [-4, -42], [0, -50]],
-    relief: (x, z) => (fbm(x, z) - 0.6) * 4 + 1.5 - 3.2 * smooth(9, 4, Math.hypot(x + 24, z - 4)),
+    relief: (x, z) => (fbm(x, z) - 0.6) * 4 * smooth(3, 10, Math.hypot(x + 24, z - 4)) + 1.5 - 4.2 * smooth(9.5, 3.5, Math.hypot(x + 24, z - 4)), // the pond sits in a bowl deep enough to fill
     water: { kind: 'pond', x: -24, z: 4, r: 8, y: -0.9 },
     trees: { n: 240, kinds: { round: 0.8, pine: 0.2 }, near: 5 },
     ring: 0x6f9a55, critter: 'sheep', flowers: 600,

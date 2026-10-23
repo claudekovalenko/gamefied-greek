@@ -375,7 +375,9 @@ function grass() {
     q.setFromAxisAngle(up, rand() * 6.28);
     m.compose(p.set(x, y - 0.02, z), q, sc.set(s, s * (0.7 + rand() * 0.8), s));
     im.setMatrixAt(n, m);
-    im.setColorAt(n++, c.setHex(base).offsetHSL(0, 0.05, (rand() - 0.3) * 0.12));
+    c.setHex(base).offsetHSL(0, 0.05, (rand() - 0.3) * 0.12);
+    if (D.snowLine !== undefined) c.lerp(new THREE.Color(0xdde6e2), smooth(D.snowLine - 2, D.snowLine + 6, y) * 0.75); // frosted blades on the snowfields
+    im.setColorAt(n++, c);
   }
   im.count = n; WG.add(im);
 }

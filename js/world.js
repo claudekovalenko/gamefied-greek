@@ -119,6 +119,7 @@ function setAtmosphere(i) {
   FX.setNight(INDOOR ? 0 : (A.stars || 0) > 0.5 ? 1 : (A.stars || 0) > 0.15 || A.sunI < 2.1 ? 0.4 : 0);
   AUR.set(INDOOR ? 0 : (WI === 7 || WI === 6) && (A.stars || 0) > 0.1 ? 1 : (WI === 7 ? 0.5 : (A.stars || 0) > 0.5 ? 0.6 : 0));
   FX.setLight(A);
+  BLOOM.grade(...(INDOOR ? [0xfff4e8, 1.05] : A.grade || [0xffffff, 1.06]));
   waterMat.userData.setSun(A.sunDir || [0.35, 0.42, -0.84], new THREE.Color(A.sun).lerp(new THREE.Color(0xffffff), 0.3));
   SHAFT = { k: (A.stars || 0) > 0.5 || (A.clouds || 0) > 0.8 ? 0 : 1, dir: A.sunDir };
   try { VEN.setDaylight((A.stars || 0) > 0.5 ? 0.35 : Math.min(1, A.sunI / 2.2), (A.stars || 0) > 0.5 ? 0x8aa8ff : 0xffffff); } catch (e) { /* the venues aren't made yet */ }

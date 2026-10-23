@@ -171,6 +171,14 @@ export function makeProps(ctx) {
     const t = cyl(0, 2.4, 2.8, color, 4); t.position.y = 1.4; t.rotation.y = Math.PI / 4; g.add(t);
     const pole = cyl(0.05, 0.05, 3.4, 0x6a4a2a, 4); pole.position.y = 1.7; g.add(pole);
     const flap = box(0.9, 1.3, 0.05, 0x3a2a1a); flap.position.set(0, 0.65, 1.2); g.add(flap);
+    // a pennant on the pole, guy ropes to pegs, and a stripe of darker cloth round the hem
+    const flag = mesh(new THREE.ConeGeometry(0.22, 0.6, 3), 0xe0b040); flag.rotation.z = Math.PI / 2; flag.scale.z = 0.15; flag.position.set(0.3, 3.25, 0); g.add(flag);
+    const hem = cyl(2.05, 2.4, 0.4, new THREE.Color(color).multiplyScalar(0.7).getHex(), 4); hem.position.y = 0.2; hem.rotation.y = Math.PI / 4; g.add(hem);
+    for (const [px, pz] of [[2.4, 0], [-2.4, 0], [0, -2.4]]) {
+      const a0 = new THREE.Vector3(px * 0.38, 1.4, pz * 0.38), d = new THREE.Vector3(px, 0.05, pz).sub(a0), rope = cyl(0.015, 0.015, d.length(), 0xd8c8a0, 3);
+      rope.position.copy(a0).addScaledVector(d, 0.5); rope.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()); g.add(rope);
+      const peg = cyl(0.04, 0.03, 0.25, 0x6a4a2a, 4); peg.position.set(px, 0.1, pz); g.add(peg);
+    }
     g.rotation.y = rot; put(g, x, z); col(x, z, 1.9);
   };
   a.scaffold = p => {

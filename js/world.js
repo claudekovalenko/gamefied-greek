@@ -679,12 +679,16 @@ function updateCritters(dt, t, pos) {
     const dT = Math.hypot(c.target.x - o.x, c.target.z - o.z);
     if (dT < 0.4 && (c.wait = (c.wait || 0) - dt) <= 0) { c.target = critterTarget(c); c.wait = 1 + Math.random() * 4; }
     // shy creatures keep their distance from the hero
-    const dp = Math.hypot(pos.x - o.x, pos.z - o.z), flee = dp < 3.5 && !u.swim;
+    // (it starts running inside 3.5 m and only settles beyond 6 m, then heads somewhere away from you, so it never flips back and forth)
+    const dp = Math.hypot(pos.x - o.x, pos.z - o.z);
+    if (!u.swim && !c.flee && dp < 3.5) c.flee = true;
+    else if (c.flee && dp > 6) { c.flee = false; c.target = critterTarget(c); if (Math.hypot(c.target.x - pos.x, c.target.z - pos.z) < 6) c.target = { x: o.x + (o.x - pos.x) * 0.5, z: o.z + (o.z - pos.z) * 0.5 }; }
+    const flee = !!c.flee;
     const tx = flee ? o.x + (o.x - pos.x) : c.target.x, tz = flee ? o.z + (o.z - pos.z) : c.target.z;
     const dx = tx - o.x, dz = tz - o.z, dl = Math.hypot(dx, dz) || 1;
     const moving = flee || dT >= 0.4;
     const sp = (u.dart ? 3 : flee ? 2.4 : 0.8) * (moving ? 1 : 0);
-    if (moving) { o.x += dx / dl * sp * dt; o.z += dz / dl * sp * dt; c.obj.rotation.y = Math.atan2(dx, dz); }
+    if (moving) { o.x += dx / dl * sp * dt; o.z += dz / dl * sp * dt; let dr = Math.atan2(dx, dz) - c.obj.rotation.y; dr = Math.atan2(Math.sin(dr), Math.cos(dr)); c.obj.rotation.y += dr * Math.min(1, dt * 6); } // turns smoothly
     o.y = u.swim ? D.water.y + Math.sin(c.t * 2) * 0.03 : groundAt(o.x, o.z);
     u.body.position.y = moving && !u.swim ? Math.abs(Math.sin(c.t * 10)) * 0.06 : 0;
   }

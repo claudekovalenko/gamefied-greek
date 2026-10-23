@@ -26,6 +26,10 @@ master is a **spell**, and the goal is to read and translate the Greek New Testa
 - **Shades of Forgetting** roam the road. Touch one and you must remember a word (or recast a fading spell)
   to banish it with a bolt from your wand: this is your spaced-repetition review. An **elite shade** in each
   world hunts your weakest words and takes three right answers in a row.
+- **Places to visit**: the master of each world teaches by the road, the others in places of their own,
+  reached by a trail of stones from a signpost: a 🏠 cottage you walk into (the roof lifts away inside), an 🪨
+  island you reach by hopping across stepping stones (miss and you splash back to the shore), a 🌷 garden behind
+  a word gate that opens when you answer a word, a 🔭 lookout up a stair, a 🔥 campfire or a 🛒 market stall.
 - **Side quests**, all fed by your review queue (due words first):
   - 🎣 **Word Fishing** at the pond, river and lake: cast, wait for a bite, name the fish's word before it slips away. Words you know by heart come up as golden fish.
   - 🔤 **Rune Circle** in every world: walk (and hop) across lettered stones to spell the Greek word.
@@ -170,6 +174,7 @@ npm run make-icons   # re-render icons/*.png from the SVGs (needs Playwright)
 | `js/stage.js` | the 3D lesson stage: tablets, challengers, mini-games, power-ups |
 | `js/stagesets.js` | the trial places for each world and each world's creature |
 | `js/fx.js` | shared look: painted sky with sun, clouds and stars, water, wind, sparkles, the hero's body language |
+| `js/venues.js` | the teachers' places: cottage, island, word-gate garden, lookout, campfire, stall |
 | `js/sidequests.js` | Word Fishing, the Rune Circle and Courier errands, driven by the review queue |
 | `js/reader.js` | the Reading Room |
 | `data/nt/` | the whole Greek NT, lexicon and English comparison, built by `scripts/build-nt.mjs` (see its README for sources and licenses) |

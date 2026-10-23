@@ -9,6 +9,7 @@ import { DEFS, R, fbm, vnoise, smooth, hash, rng } from './worlds.js';
 import { makeProps } from './props.js';
 import { makeFX } from './fx.js';
 import { makeSideQuests } from './sidequests.js';
+import { makeVenues, venueOrder } from './venues.js';
 
 const KG = window.KG, E = KG.engine, U = KG.util;
 const W = KG.world = { ok: false, show() {}, hide() {}, onLessonDone() {} };
@@ -189,7 +190,9 @@ function buildHeights() {
   for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) h[i * n + j] = rawHeight(-R + j * cell, -R + i * cell);
   HG = { cell, n, h };
 }
-function groundAt(x, z) {
+// floors, decks and stepping stones of the teachers' places stand on the ground
+const groundAt = (x, z) => VEN.ground(x, z, groundBase(x, z));
+function groundBase(x, z) {
   const { cell, n, h } = HG;
   const fx0 = Math.max(0, Math.min(n - 1.001, (x + R) / cell)), fz0 = Math.max(0, Math.min(n - 1.001, (z + R) / cell));
   const j = Math.floor(fx0), i = Math.floor(fz0), fx = fx0 - j, fz = fz0 - i;
@@ -322,6 +325,7 @@ function flowers() {
   let n = 0;
   for (let i = 0; i < N * 2 && n < N; i++) {
     const a = along(rand(), rand() < 0.5 ? -1 : 1, 3 + rand() * 16), y = groundAt(a.x, a.z);
+    if (keepOut.some(c => Math.hypot(c.x - a.x, c.z - a.z) < c.r)) continue;
     if (y < wy + 0.3) continue;
     m.makeTranslation(a.x, y + 0.18, a.z); fl.setMatrixAt(n, m); fl.setColorAt(n++, c.setHex(U.pick(fcols)));
   }
@@ -624,6 +628,29 @@ function teachingSpot(p, sd, k, title) {
   g.rotation.y = Math.atan2(-nx, -nz);
   put(g, x, z); colliders.push({ x, z, r: 1.2 });
 }
+// the places the teachers live (js/venues.js)
+const VEN = makeVenues({
+  THREE, add: o => WG.add(o), mesh, rawGround: (x, z) => groundBase(x, z), textSprite, glow: (c, sz) => FX.glow(c, sz, ATMOS[WI].stars ? 0.85 : 0.55),
+  col: (x, z, r) => { const c = { x, z, r }; colliders.push(c); return c; }, keep: (x, z, r) => keepOut.push({ x, z, r }),
+  free: (x, z, r, tol) => openGround(x, z, r, tol), SPK, water: () => waterMat,
+  splash: (x, z, face) => {
+    player.position.set(x, groundAt(x, z), z); P.vel.set(0, 0, 0); player.rotation.y = face; cam.yaw = face + Math.PI;
+    KG.app.sfx('splash');
+    if (!P.splashTip || clock.elapsedTime - P.splashTip > 20) { P.splashTip = clock.elapsedTime; KG.app.toast('💦 <b>Splash!</b> Hop from stone to stone: jump with Space or ⤒.'); }
+  },
+});
+// a spot clear of the teachers' places: things that would land inside one move out past its edge
+function clearSpot(x, z) {
+  for (const c of keepOut) { const d = Math.hypot(x - c.x, z - c.z); if (d < c.r + 0.6) { const k = (c.r + 0.8) / (d || 1); x = c.x + (x - c.x || 0.01) * k; z = c.z + (z - c.z) * k; } }
+  return { x, z };
+}
+function besideMentor(m) { return m.venue ? { x: m.venue.entryX, z: m.venue.entryZ } : { x: m.x - 2, z: m.z + 2 }; }
+function openGate(e, now) {
+  e.vgate.unlock(now);
+  const i = ents.indexOf(e); if (i >= 0) ents.splice(i, 1);
+  e.obj.visible = false;
+  if (!now) { const w = ws(); (w.gates = w.gates || []).push(e.vgate.id); E.gainXP(5); E.save(); refreshMarkers(); }
+}
 function buildEntities() {
   ents.length = 0;
   const i = WI, u = KG.units[i], Z = ZONES[i], side = i % 2 ? -1 : 1;
@@ -635,11 +662,18 @@ function buildEntities() {
   for (let k = 0; k < k3; k++) {
     const mine = taught.slice(k * per, (k + 1) * per); if (!mine.length) continue;
     const T = teacherOf(i, k), sd = (i + k) % 2 ? -1 : 1, mp = along(tOf(mine[0]), sd, 4.5);
-    const m = person(teacherLook(i, k));
-    m.rotation.y = Math.atan2(mp.px - mp.x, mp.pz - mp.z);
-    put(m, mp.x, mp.z);
-    teachingSpot(mp, sd, k, mine[0].title);
-    addEnt({ kind: 'mentor', zone: i, teacher: k, T, nodes: mine.map(n => n.id), obj: m, x: mp.x, z: mp.z, label: `${T[0]} · ${T[1]}` });
+    // the master teaches by the road; the others each have a place of their own to visit
+    const v = k > 0 ? VEN.place(venueOrder(k === 1 ? 1 : [2, 4, 5, 0][i % 4]), { rx: mp.px, rz: mp.pz, nx: (mp.x - mp.px) / 4.5, nz: (mp.z - mp.pz) / 4.5, title: mine[0].title, name: T[1], id: i * 10 + k }) : null;
+    const m = person(teacherLook(i, k)), x = v ? v.tx : mp.x, z = v ? v.tz : mp.z;
+    m.rotation.y = v ? v.tFace : Math.atan2(mp.px - mp.x, mp.pz - mp.z);
+    put(m, x, z);
+    if (!v) teachingSpot(mp, sd, k, mine[0].title);
+    const e = addEnt({ kind: 'mentor', zone: i, teacher: k, T, nodes: mine.map(n => n.id), obj: m, x, z, label: `${T[0]} · ${T[1]}`, venue: v });
+    if (v && v.gate) {
+      const g = addEnt({ kind: 'vgate', zone: i, obj: v.gate.obj, x: v.gate.x, z: v.gate.z, label: '🔒 Word Gate', tagY: 2.4, r: 0.01, vgate: v.gate });
+      e.gateEnt = g;
+      if ((ws().gates || []).includes(v.gate.id)) openGate(g, true);
+    }
   }
   // reading pedestals, where the road reaches each reading
   seq.filter(n => n.type === 'reading').forEach((n, k) => {
@@ -703,11 +737,11 @@ function buildEntities() {
 // ── side quests (js/sidequests.js): fishing, the rune circle and a courier ──
 const COURIERS = ['Old Demas', 'Woodcutter Jason', 'Farmer Clopas', 'Ferryman Alexander', 'Mason Erastus', 'Keeper Hermas', 'Boatwoman Chloe', 'Shepherd Carpus', 'Scribe Tertius'];
 // open, fairly flat ground of radius r that no prop or person stands on
-function openGround(x, z, r) {
+function openGround(x, z, r, tol = 1.6) {
   if (Math.abs(x) > R - 10 - r * 0.5 || Math.abs(z) > R - 10 - r * 0.5) return false;
   if (colliders.some(c => Math.hypot(c.x - x, c.z - z) < c.r + r) || keepOut.some(c => Math.hypot(c.x - x, c.z - z) < c.r + r)) return false;
   const y = groundAt(x, z), wy = D.water ? D.water.y : -99;
-  for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2, h = groundAt(x + Math.cos(a) * r, z + Math.sin(a) * r); if (Math.abs(h - y) > 1.6 || h < wy + 0.4) return false; }
+  for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2, h = groundAt(x + Math.cos(a) * r, z + Math.sin(a) * r); if (Math.abs(h - y) > tol || h < wy + 0.4) return false; }
   if (roadInfo(x, z).d < r * 0.6) return false;
   return true;
 }
@@ -753,7 +787,7 @@ function buildCollectibles() {
   letters.length = coins.length = scrolls.length = 0;
   const w = ws();
   if (WI === 0) KG.alphabet.forEach((Lt, i) => {
-    const p = along(0.03 + i * 0.022, i % 2 ? 1 : -1, 4.5 + (i * 7 % 5));
+    const p0 = along(0.03 + i * 0.022, i % 2 ? 1 : -1, 4.5 + (i * 7 % 5)), p = clearSpot(p0.x, p0.z);
     const s = glyphSprite(Lt.l);
     s.position.set(p.x, groundAt(p.x, p.z) + 1.3, p.z); WG.add(s);
     s.visible = !w.letters.includes(i);
@@ -762,7 +796,7 @@ function buildCollectibles() {
   // lost scrolls: NT passages to collect for the Reading Room
   const found = (E.state.scrolls || {});
   KG.passages.filter(p => p.unit === WI).forEach((p, k) => {
-    const a = along(0.33 + k * 0.13, k % 2 ? 1 : -1, 9 + (k * 3) % 5);
+    const a0 = along(0.33 + k * 0.13, k % 2 ? 1 : -1, 9 + (k * 3) % 5), a = clearSpot(a0.x, a0.z);
     const g = new THREE.Group();
     const roll = mesh(new THREE.CylinderGeometry(0.22, 0.22, 1.1, 12), 0xf5e6c0, { emissive: 0xa07a20, emissiveIntensity: 0.6 }); roll.rotation.z = Math.PI / 2; g.add(roll);
     for (const sd of [-1, 1]) { const kn = mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.25, 8), 0x8a5a2a); kn.rotation.z = Math.PI / 2; kn.position.x = sd * 0.65; g.add(kn); }
@@ -775,7 +809,7 @@ function buildCollectibles() {
   const coinG = new THREE.CylinderGeometry(0.32, 0.32, 0.08, 16);
   const coinM = new THREE.MeshStandardMaterial({ color: 0xffd166, metalness: 0.9, roughness: 0.25, emissive: 0x6a4a00 });
   for (let k = 0; k < 14; k++) {
-    const i = WI * 14 + k, a = along(0.04 + k * 0.066 + hash(i, 3) * 0.02, hash(i, 5) < 0.5 ? -1 : 1, hash(i, 7) * 9);
+    const i = WI * 14 + k, a0 = along(0.04 + k * 0.066 + hash(i, 3) * 0.02, hash(i, 5) < 0.5 ? -1 : 1, hash(i, 7) * 9), a = clearSpot(a0.x, a0.z);
     const c = new THREE.Mesh(coinG, coinM); c.rotation.x = Math.PI / 2; c.castShadow = !LOW;
     c.position.set(a.x, groundAt(a.x, a.z) + 0.8, a.z); WG.add(c);
     c.visible = !w.coins.got.includes(i);
@@ -803,7 +837,7 @@ function disposeWorld() {
     if (o.material) for (const m of [].concat(o.material)) { if (m.map && m.map !== dotTex) m.map.dispose(); if (!Object.values(mats).includes(m) && m !== waterMat && m !== portalMat && !Object.values(toonCache).includes(m) && m !== inkMat) m.dispose(); }
   });
   WG = new THREE.Group(); scene.add(WG);
-  SQ.clear();
+  SQ.clear(); VEN.clear();
   colliders.length = 0; anims.length = 0; keepOut.length = 0; waters = []; beacon = null; BR = null;
 }
 function buildWorld(i) {
@@ -982,7 +1016,10 @@ function refreshMarkers() {
   gate.userData.portal.visible = open && !gate.userData.last;
   if (W.libraryDoor) W.libraryDoor.material = mat(open ? 0xffe9a8 : 0x6a3a1a, open ? { emissive: 0xffc04a, emissiveIntensity: 1 } : {});
   // a portal back toward where the quest continues when it lies in another world
-  let target = t.ent;
+  // a closed word gate stands between you and the next teacher: it is the target first
+  const gateE = t.ent && t.ent.gateEnt && ents.includes(t.ent.gateEnt) ? t.ent.gateEnt : null;
+  for (const e of ents) if (e.kind === 'vgate') e.mark.visible = e === gateE;
+  let target = gateE || t.ent;
   if (t.away) target = t.node.unit > WI ? { x: gate.userData.x, z: gate.userData.z, portal: true } : backPortal ? { x: backPortal.x, z: backPortal.z, portal: true } : null;
   if (!beacon) {
     beacon = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 60, 12, 1, true), new THREE.MeshBasicMaterial({ color: 0xffd166, transparent: true, opacity: 0.18, depthWrite: false, side: THREE.DoubleSide, fog: false }));
@@ -994,7 +1031,7 @@ function refreshMarkers() {
   if (t.done) txt = WI === NZ - 1 ? 'All quests complete! Enter the Great Library.' : 'All quests complete! Travel on to the Great Library.';
   else if (t.away) txt = `${t.node.unit > WI ? 'Go through the portal to' : 'Return to'} <b>${esc(ZONES[t.node.unit].name)}</b>: ${esc(t.node.title)}`;
   else {
-    const who = t.ent.kind === 'mentor' ? `Visit ${t.ent.T[1]}` : t.ent.kind === 'pedestal' ? 'Restore the lost scroll' : `Challenge ${t.ent.label}`;
+    const who = t.ent.kind === 'mentor' ? `Visit ${t.ent.T[1]}${t.ent.venue ? ` ${t.ent.venue.where}` : ''}` : t.ent.kind === 'pedestal' ? 'Restore the lost scroll' : `Challenge ${t.ent.label}`;
     txt = `${who}: <b>${esc(t.node.title)}</b>`;
   }
   $('wqtext').innerHTML = txt;
@@ -1014,7 +1051,10 @@ let traveling = false;
 function placeAt(where) {
   let p, face;
   if (where === 'gate') { p = along(0.92); face = p.a + Math.PI; }
-  else if (where === 'mentor') { const m = (questTarget().ent && questTarget().ent.kind === 'mentor' ? questTarget().ent : ents.find(e => e.kind === 'mentor')), r = m.obj.rotation.y; p = { x: m.x + Math.sin(r) * 4 + Math.cos(r) * 1.6, z: m.z + Math.cos(r) * 4 - Math.sin(r) * 1.6 }; face = Math.atan2(m.x - p.x, m.z - p.z); }
+  else if (where === 'mentor') {
+    const m = (questTarget().ent && questTarget().ent.kind === 'mentor' ? questTarget().ent : ents.find(e => e.kind === 'mentor')), r = m.obj.rotation.y;
+    p = m.venue ? { x: m.venue.entryX, z: m.venue.entryZ } : { x: m.x + Math.sin(r) * 4 + Math.cos(r) * 1.6, z: m.z + Math.cos(r) * 4 - Math.sin(r) * 1.6 }; face = Math.atan2(m.x - p.x, m.z - p.z);
+  }
   else if (where && where.x !== undefined) { p = where; face = where.yaw !== undefined ? where.yaw - Math.PI : 0; }
   else { p = along(0.1); face = p.a; } // far enough from the arrival portal that the camera stays clear of it
   player.position.set(p.x, groundAt(p.x, p.z), p.z);
@@ -1097,7 +1137,7 @@ function faceShot(o, dist = 4, h = 1.2, side = 0.6) {
 function behindPlayer() { const pos = player.position; return () => V(pos.x - Math.sin(player.rotation.y) * 7, pos.y + 3.4, pos.z - Math.cos(player.rotation.y) * 7); }
 function arrivalShots(i) {
   const Z = ZONES[i], me = ents.find(e => e.kind === 'mentor'), m = me.obj, T = me.T, mid = along(0.5);
-  const others = ents.filter(e => e.kind === 'mentor' && e !== me).map(e => `${esc(e.T[1])}, ${esc(e.T[2])}`).join(', and ');
+  const others = ents.filter(e => e.kind === 'mentor' && e !== me).map(e => `${esc(e.T[1])}, ${esc(e.T[2])}${e.venue ? ` (${esc(e.venue.where)})` : ''}`).join(', and ');
   const shots = [];
   if (i === 0) {
     shots.push({ cam: orbitShot(mid.px, mid.pz, 46, 26, 0.6, 1.5), look: () => V(mid.px, groundAt(mid.px, mid.pz), mid.pz), who: '📜 The Apprentice’s Journey', text: 'You are <b>Θεόφιλος</b> (Theophilus), an apprentice Koine wizard in Alphabet Hollow. The scrolls of the Great Library lie scattered across nine worlds, and their words are fading into forgetfulness.' });
@@ -1146,6 +1186,7 @@ function talk(e) {
   const Z = ZONES[e.zone], app = KG.app;
   app.sfx('tap');
   if (e.kind === 'side') return SQ.start(e);
+  if (e.kind === 'vgate') return SQ.quiz('🔒 The Word Gate', ok => { if (ok) openGate(e); });
   if (e.kind === 'mentor') {
     const t = questTarget(), T = e.T, mine = KG.units[e.zone].nodes.filter(n => e.nodes.includes(n.id));
     const greet = `<p><span class="gk">${esc(T[3])}</span> <i>(${esc(T[4])})</i></p>`;
@@ -1153,10 +1194,11 @@ function talk(e) {
     const left = mine.filter(n => !E.stars(n.id));
     if (t.done) html += '<p>You have learned every spell I can teach. Go to the Great Library, wizard!</p>';
     else if (t.ent === e) {
+      if (e.venue) html += `<p>${esc(e.venue.hello)}</p>`;
       html += `<p>I am ${esc(T[1])}, ${esc(T[2])}. ${esc(T[5])}</p><p>Your lesson: <b>${esc(t.node.title)}</b> <span class="muted small">(${mine.length - left.length + 1} of ${mine.length} with me)</span></p>`;
       btns.push({ label: `Begin: ${esc(t.node.title)} ▶`, cls: 'primary', fn: () => launch(t.node.id) });
     } else if (t.node.unit === e.zone) {
-      const who = t.ent.kind === 'mentor' ? `${esc(t.ent.T[1])}, ${esc(t.ent.T[2])}` : null;
+      const who = t.ent.kind === 'mentor' ? `${esc(t.ent.T[1])}, ${esc(t.ent.T[2])}</b>${t.ent.venue ? ` ${esc(t.ent.venue.where)}` : ''}<b>` : null;
       if (left.length && !E.unlocked(left[0])) html += `<p>Not yet, apprentice. Finish your lesson${who ? ` with ${who}` : ''} first, then come back to me.</p>`;
       else html += `<p>${who ? `Your next lesson is with <b>${who}</b>. Follow the golden light along the road.` : t.ent.kind === 'pedestal' ? `A lost scroll lies nearby: <b>${esc(t.ent.label)}</b>. Restore it at its pedestal (follow the golden light).` : `You are ready, apprentice! Face <b>${esc(t.ent.label)}</b> at the gate to prove your spells.`}</p>`;
     }
@@ -1289,7 +1331,7 @@ function endBattle() {
     const m = ents.filter(e => e.kind === 'mentor').sort((a, b) => Math.hypot(a.x - player.position.x, a.z - player.position.z) - Math.hypot(b.x - player.position.x, b.z - player.position.z))[0];
     dialog('😵 You fainted…', `<p>The shades overwhelmed you. You wake beside ${esc(m.T[1])}, who gives you some bread and water.</p><p class="muted small">Tip: review your words in 🔁 Review to make the shades easier.</p>`, [{ label: 'Get up', cls: 'primary' }]);
     P.hearts = P.maxHearts;
-    player.position.set(m.x - 2, groundAt(m.x - 2, m.z + 2), m.z + 2);
+    { const p = besideMentor(m); player.position.set(p.x, groundAt(p.x, p.z), p.z); }
     updateHUD();
   }
 }
@@ -1395,7 +1437,7 @@ function step(dt) {
     if (d < r2 && d > 0.001) { pos.x = c.x + dx / d * r2; pos.z = c.z + dz / d * r2; }
   }
   const moved = Math.hypot(pos.x - ox, pos.z - oz), g1 = groundAt(pos.x, pos.z);
-  if (moved > 0 && g1 - g0 > moved * 1.3 + 0.02 && pos.y < g1 + 0.2) { pos.x = ox; pos.z = oz; }
+  if (moved > 0 && g1 - g0 > Math.max(0.4, moved * 1.3 + 0.02) && pos.y < g1 - 0.05) { pos.x = ox; pos.z = oz; }
   if (D.water && groundAt(pos.x, pos.z) < D.water.y - 0.5) { pos.x = ox; pos.z = oz; } // no swimming
   const gy = groundAt(pos.x, pos.z);
   const wasAir = !P.onGround, fall = P.vel.y;
@@ -1427,12 +1469,15 @@ function step(dt) {
       cam.yaw += d * dt * (input.joy ? 2.2 : 1.2) * Math.min(1, mag);
     }
     // pull the camera in when a hill or wall stands between it and the hero
-    let cd = cam.dist;
+    // inside a cottage the camera comes in close and looks down over the cut-away walls
+    P.inT = (P.inT || 0) + ((VEN.inside(pos) ? 1 : 0) - (P.inT || 0)) * Math.min(1, dt * 4);
+    const cDist = cam.dist + (Math.min(cam.dist, 8.5) - cam.dist) * P.inT, cPitch = cam.pitch + (Math.max(cam.pitch, 1.1) - cam.pitch) * P.inT;
+    let cd = cDist;
     for (let k = 1; k <= 6; k++) {
-      const f = k / 6, cx = pos.x + Math.sin(cam.yaw) * Math.cos(cam.pitch) * cam.dist * f, cz = pos.z + Math.cos(cam.yaw) * Math.cos(cam.pitch) * cam.dist * f;
-      if (groundAt(cx, cz) + 0.6 > pos.y + 1.4 + Math.sin(cam.pitch) * cam.dist * f) { cd = Math.max(2.5, cam.dist * (f - 1 / 6)); break; }
+      const f = k / 6, cx = pos.x + Math.sin(cam.yaw) * Math.cos(cPitch) * cDist * f, cz = pos.z + Math.cos(cam.yaw) * Math.cos(cPitch) * cDist * f;
+      if (groundAt(cx, cz) + 0.6 > pos.y + 1.4 + Math.sin(cPitch) * cDist * f) { cd = Math.max(2.5, cDist * (f - 1 / 6)); break; }
     }
-    const cy = Math.sin(cam.pitch) * cd, ch = Math.cos(cam.pitch) * cd;
+    const cy = Math.sin(cPitch) * cd, ch = Math.cos(cPitch) * cd;
     tmp.set(pos.x + Math.sin(cam.yaw) * ch, pos.y + 1.4 + cy, pos.z + Math.cos(cam.yaw) * ch);
     tmp.y = Math.max(tmp.y, groundAt(tmp.x, tmp.z) + 0.8);
     // in a shade battle the camera looks over the hero's shoulder at the shade;
@@ -1468,14 +1513,14 @@ function step(dt) {
   for (const e of ents) {
     const d = Math.hypot(pos.x - e.x, pos.z - e.z);
     e.mark.position.y = (e.tagY || 2.7) + 0.9 + Math.sin(t * 3) * 0.12;
-    if (e.kind === 'side') { if (d < best) { best = d; nearEnt = e; } continue; }
+    if (e.kind === 'side' || e.kind === 'vgate') { if (d < best) { best = d; nearEnt = e; } continue; }
     if (e.kind === 'pedestal') { e.spin.rotation.y += dt; e.spin.position.y = 1.7 + Math.sin(t * 2) * 0.1; }
     else if (d < 12 && !cine) { const want = Math.atan2(pos.x - e.x, pos.z - e.z); let dr = want - e.obj.rotation.y; dr = Math.atan2(Math.sin(dr), Math.cos(dr)); e.obj.rotation.y += dr * Math.min(1, dt * 3); }
     if (e.kind !== 'pedestal') animatePerson(e.obj, 0, dt);
     if (d < best) { best = d; nearEnt = e; }
   }
   const pr = $('wprompt');
-  if (nearEnt && !busy && !(SQ.active() && nearEnt.kind === 'side')) { pr.innerHTML = `<b>E</b> / 💬 ${nearEnt.kind === 'pedestal' ? 'Examine' : nearEnt.kind === 'guardian' ? 'Confront' : nearEnt.kind === 'side' ? (nearEnt.sq === 'courier' ? 'Help' : 'Play at') : 'Talk to'} ${esc(nearEnt.label)}`; pr.classList.add('on'); $('wtalk').classList.add('on'); }
+  if (nearEnt && !busy && !(SQ.active() && nearEnt.kind === 'side')) { pr.innerHTML = `<b>E</b> / 💬 ${nearEnt.kind === 'pedestal' ? 'Examine' : nearEnt.kind === 'guardian' ? 'Confront' : nearEnt.kind === 'side' ? (nearEnt.sq === 'courier' ? 'Help' : 'Play at') : nearEnt.kind === 'vgate' ? 'Open' : 'Talk to'} ${esc(nearEnt.label)}`; pr.classList.add('on'); $('wtalk').classList.add('on'); }
   else { pr.classList.remove('on'); $('wtalk').classList.remove('on'); }
 
   // quest arrow
@@ -1555,6 +1600,7 @@ function step(dt) {
   for (let i = anims.length - 1; i >= 0; i--) if (anims[i](dt, t) === false) anims.splice(i, 1);
   updateCritters(dt, t, pos);
   SQ.update(dt, t, pos, P.onGround);
+  VEN.update(dt, t, pos, P.onGround);
   updateAmbience(dt, t, pos);
 
   if ((saveT += dt) > 5) { saveT = 0; savePos(); }
@@ -1642,7 +1688,7 @@ W.onLessonDone = (node, r) => {
   });
 };
 W.travel = (i, where) => travel(i, where);
-W.debug = { startBattle: w => startBattle(w), SQ, scene, camera, player, cam, P, ents, wisps, questTarget, get world() { return WI; }, groundAt: (x, z) => groundAt(x, z), along: (t, s, o) => along(t, s, o), travel, cutscene, endCutscene, get cine() { return cine; }, gate: () => gate,
+W.debug = { sim: (n, dt = 1 / 60) => { for (let i = 0; i < n; i++) step(dt); }, VEN, startBattle: w => startBattle(w), SQ, scene, camera, player, cam, P, ents, wisps, questTarget, get world() { return WI; }, groundAt: (x, z) => groundAt(x, z), along: (t, s, o) => along(t, s, o), travel, cutscene, endCutscene, get cine() { return cine; }, gate: () => gate,
   teleport: (x, z) => { player.position.set(x, groundAt(x, z), z); snapCamera(); } };
 
 // ── build ─────────────────────────────────────────────────────

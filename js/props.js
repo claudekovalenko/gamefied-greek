@@ -261,10 +261,18 @@ export function makeProps(ctx) {
     g.position.set(x, 4, z); add(g);
   };
   a.plaza = (x, z, w, l) => {
-    const c = document.createElement('canvas'); c.width = c.height = 128; const k = c.getContext('2d');
-    k.fillStyle = '#d8ccb0'; k.fillRect(0, 0, 128, 128); k.strokeStyle = '#b8a888'; k.lineWidth = 3;
-    for (let i = 0; i <= 128; i += 32) { k.beginPath(); k.moveTo(i, 0); k.lineTo(i, 128); k.stroke(); k.beginPath(); k.moveTo(0, i); k.lineTo(128, i); k.stroke(); }
-    const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(w / 4, l / 4); t.colorSpace = THREE.SRGBColorSpace;
+    // worn flagstones in running bond, each a slightly different shade, with grass in the joints and a scuff here and there
+    const N = 256, c = document.createElement('canvas'); c.width = c.height = N; const k = c.getContext('2d');
+    k.fillStyle = '#9a9a70'; k.fillRect(0, 0, N, N);
+    const R = (i, j) => { const v = Math.sin(i * 12.9898 + j * 78.233) * 43758.5453; return v - Math.floor(v); };
+    for (let r = 0; r < 4; r++) for (let i = -1; i < 4; i++) {
+      const x = i * 64 + (r % 2) * 32, y = r * 64, sh = R(i + 7, r) * 22 - 11;
+      k.fillStyle = `rgb(${216 + sh},${204 + sh},${176 + sh * 0.8})`; k.beginPath(); k.roundRect(x + 2, y + 2, 60, 60, 5); k.fill();
+      k.fillStyle = 'rgba(255,255,240,.12)'; k.fillRect(x + 4, y + 4, 56, 4);
+      if (R(i, r + 3) > 0.6) { k.fillStyle = 'rgba(120,100,70,.12)'; k.beginPath(); k.ellipse(x + 20 + R(i, r) * 25, y + 20 + R(r, i) * 25, 10, 6, R(i, i) * 3, 0, 7); k.fill(); }
+    }
+    for (let x = 0; x < N; x += 2) for (let y = 0; y < N; y += 2) if (R(x, y) > 0.94) { k.fillStyle = `rgba(0,0,0,${R(y, x) * 0.06})`; k.fillRect(x, y, 2, 2); }
+    const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(w / 8, l / 8); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
     const p = new THREE.Mesh(new THREE.PlaneGeometry(w, l), new THREE.MeshStandardMaterial({ map: t, roughness: 0.9 }));
     p.rotation.x = -Math.PI / 2; p.position.set(x, 0.05, z); p.receiveShadow = true; add(p);
   };

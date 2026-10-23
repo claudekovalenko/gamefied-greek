@@ -1122,6 +1122,7 @@ const SQ = makeSideQuests({
 function updateHUD() {
   const s = E.state, lv = E.levelInfo();
   $('whearts').innerHTML = '❤'.repeat(P.hearts) + `<span class="lost">${'❤'.repeat(P.maxHearts - P.hearts)}</span>` + (P.shield ? '<span class="wshield">🛡</span>' : '');
+  $('whearts').classList.toggle('low', P.hearts <= 1); // the last heart beats
   $('wlv').textContent = lv.level; $('wxp').style.width = (lv.cur / lv.need) * 100 + '%';
   $('wcoins').textContent = s.coins;
   const due = E.dueWords().length + E.dueSpells().length; $('wdue').textContent = due || ''; $('wdue').style.display = due ? '' : 'none';

@@ -42,6 +42,7 @@ export function makeProps(ctx) {
     const p = cyl(0.08, 0.1, 2.4, 0x3a3a3a, 6); p.position.y = 1.2; g.add(p);
     const l = mesh(new THREE.SphereGeometry(0.22, 8, 8), 0xffe9a8, { emissive: 0xffc04a, emissiveIntensity: 1.2 }); l.position.y = 2.5; g.add(l);
     if (ctx.glow) { const h = ctx.glow(0xffc870, 1.8); h.position.y = 2.5; g.add(h); }
+    if (ctx.pool) { const p = ctx.pool(0xffc870, 4.5); p.position.y = 0.08; g.add(p); } // a pool of light on the ground at night
     put(g, x, z); col(x, z, 0.25);
   };
   a.sign = (p, text) => {

@@ -1153,8 +1153,9 @@ function travel(to, where) {
   setTimeout(() => root.classList.remove('portalfx'), 1000);
 }
 function worldMap() {
-  dialog('🗺 World Map', `<div class="wmap">${ZONES.map((Z, i) => `<button class="wm ${reachable(i) ? '' : 'locked'} ${i === WI ? 'here' : ''}" data-wm="${i}" ${reachable(i) ? '' : 'disabled'}>
-      <b>${i + 1}. ${esc(Z.name)}</b><span>${reachable(i) ? esc(KG.units[i].title) + (i === WI ? ' · you are here' : '') : '🔒 Beat the guardian before it'}</span></button>`).join('')}</div>`, [{ label: 'Close' }]);
+  const icons = ['🏡', '🌲', '🌾', '🌊', '⛰️', '🏛️', '🪞', '🏔️', '📚'];
+  dialog('🗺 World Map', FX.mapHTML(ZONES.map((Z, i) => ({ name: Z.name, sub: reachable(i) ? KG.units[i].title : 'Beat the guardian before it', icon: icons[i], state: i === WI ? 'here' : !reachable(i) ? 'locked' : gateOpen(i) ? 'done' : 'open' }))), [{ label: 'Close' }]);
+  const here = document.querySelector('.wm2.here'), box = here && here.closest('.wmap2'); if (box) box.scrollTop = here.offsetTop - box.clientHeight / 2; // (scrollIntoView would scroll the whole world view)
   document.querySelectorAll('[data-wm]').forEach(b => b.onclick = () => { const i = +b.dataset.wm; closeDialog(); if (i !== WI) travel(i, 'mentor'); });
 }
 

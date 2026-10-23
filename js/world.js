@@ -78,6 +78,7 @@ const sky = FX.sky(500);
 scene.add(sky);
 // sparkles and dust
 const SPK = FX.sparks(scene), DUST = FX.sparks(scene, LOW ? 80 : 200, { additive: false });
+const CRIT = FX.critters(scene); // birds overhead, butterflies by the path
 const hemi = new THREE.HemisphereLight(0xdff0ff, 0x5a6a3a, 1.1);
 scene.add(hemi);
 const ATMOS = [
@@ -1657,6 +1658,7 @@ function step(dt) {
   }
 
   SPK.update(dt); DUST.update(dt);
+  CRIT.update(dt, t, pos, groundAt, INDOOR ? 0 : ((MOODS[MOOD] || ATMOS[WI]).stars || 0) < 0.5 ? 1 : 0);
   for (let i = anims.length - 1; i >= 0; i--) if (anims[i](dt, t) === false) anims.splice(i, 1);
   updateCritters(dt, t, pos);
   SQ.update(dt, t, pos, P.onGround);

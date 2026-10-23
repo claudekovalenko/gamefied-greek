@@ -735,13 +735,36 @@ function teacherIndex(i, nodeId) {
   const j = taught.findIndex(n => n.id === nodeId);
   return j < 0 ? 0 : Math.floor(j / per);
 }
+// a round woven rug: a Greek-key border in gold, a cream ring and a star at the centre
+const rugMats = {};
+function rugMat(base) {
+  if (rugMats[base]) return rugMats[base];
+  const N = 512, c = document.createElement('canvas'); c.width = c.height = N; const x = c.getContext('2d'), C = N / 2, R = C;
+  const ring = (r0, r1, col) => { x.fillStyle = col; x.beginPath(); x.arc(C, C, r1, 0, 7); x.arc(C, C, r0, 0, 7, true); x.fill(); };
+  x.fillStyle = base; x.beginPath(); x.arc(C, C, R, 0, 7); x.fill();
+  ring(R * 0.84, R * 0.96, '#d8a63a');
+  // the meander: a hooked step repeated round the border
+  x.strokeStyle = base; x.lineWidth = R * 0.018; x.lineCap = 'square';
+  const n = 36, rm = R * 0.9, h = R * 0.04;
+  for (let i = 0; i < n; i++) {
+    const a0 = i / n * Math.PI * 2, da = Math.PI * 2 / n, P = (a, r) => [C + Math.cos(a) * r, C + Math.sin(a) * r];
+    x.beginPath(); x.moveTo(...P(a0, rm - h)); x.lineTo(...P(a0, rm + h)); x.lineTo(...P(a0 + da * 0.7, rm + h)); x.lineTo(...P(a0 + da * 0.7, rm - h * 0.2)); x.lineTo(...P(a0 + da * 0.35, rm - h * 0.2)); x.stroke();
+  }
+  ring(R * 0.47, R * 0.51, '#f0d8a0'); ring(R * 0.78, R * 0.8, '#f0d8a0');
+  // an eight-pointed star in the middle
+  x.fillStyle = '#e0b040'; x.beginPath();
+  for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2, r = i % 2 ? R * 0.13 : R * 0.3; x.lineTo(C + Math.cos(a) * r, C + Math.sin(a) * r); }
+  x.fill(); x.fillStyle = base; x.beginPath(); x.arc(C, C, R * 0.06, 0, 7); x.fill();
+  // the weave: faint rows of threads
+  for (let y = 0; y < N; y += 3) { x.fillStyle = `rgba(${y % 6 ? '0,0,0' : '255,255,255'},.05)`; x.fillRect(0, y, N, 1); }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return (rugMats[base] = new THREE.MeshStandardMaterial({ map: t, roughness: 0.95 }));
+}
 // a teacher's spot: a rug, a bench and a slate with the lesson on it
 function teachingSpot(p, sd, k, title) {
   const nx = Math.cos(p.a) * sd, nz = -Math.sin(p.a) * sd, x = p.x + nx * 2.4, z = p.z + nz * 2.4;
-  const rug = new THREE.Mesh(new THREE.CircleGeometry(2.6, 20), mat([0x9a2a2a, 0x2a5a8a, 0x6a2a7a][k]));
-  rug.rotation.x = -Math.PI / 2; rug.position.set(p.x + nx * 0.6, groundAt(p.x + nx * 0.6, p.z + nz * 0.6) + 0.04, p.z + nz * 0.6); WG.add(rug);
-  const trim = new THREE.Mesh(new THREE.RingGeometry(2.25, 2.45, 32), mat(0xe0b040)); trim.rotation.x = -Math.PI / 2; trim.position.copy(rug.position).y += 0.01; WG.add(trim);
-  const inner = new THREE.Mesh(new THREE.RingGeometry(1.2, 1.32, 24), mat(0xf0d8a0)); inner.rotation.x = -Math.PI / 2; inner.position.copy(rug.position).y += 0.01; WG.add(inner);
+  const rug = new THREE.Mesh(new THREE.CircleGeometry(2.6, 32), rugMat(['#9a2a2a', '#2a5a8a', '#6a2a7a'][k]));
+  rug.rotation.x = -Math.PI / 2; rug.position.set(p.x + nx * 0.6, groundAt(p.x + nx * 0.6, p.z + nz * 0.6) + 0.04, p.z + nz * 0.6); rug.receiveShadow = !LOW; WG.add(rug);
   const g = new THREE.Group();
   for (const s of [-1, 1]) { const post = mesh(new THREE.CylinderGeometry(0.07, 0.07, 2, 6), 0x6a4a2a); post.position.set(s * 1.1, 1, 0); g.add(post); }
   const slate = mesh(new THREE.BoxGeometry(2.5, 1.3, 0.1), 0x2a3a2a); slate.position.y = 1.6; g.add(slate);

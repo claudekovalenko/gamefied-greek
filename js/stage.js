@@ -155,8 +155,17 @@ export function createStage(ctx) {
     return lines;
   }
   // draws text centered and shrinks the font until it fits the box
-  function textCanvas(text, { W = 512, H = 256, greek = false, maxSize = 70, minSize = 18, color = '#2a1d0c', bg = null, weight = 800, pad = 26, border = null }) {
+  function textCanvas(text, { W = 512, H = 256, greek = false, maxSize = 70, minSize = 18, color = '#2a1d0c', bg = null, weight = 800, pad = 26, border = null, glass = false }) {
     const c = document.createElement('canvas'); c.width = W; c.height = H; const x = c.getContext('2d');
+    if (glass) {
+      // a soft rounded plaque of smoked glass with a thin gold rim, so the word reads against any sky
+      const r = Math.min(W, H) * 0.22, i = 6;
+      const g = x.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.1, W / 2, H / 2, Math.max(W, H) * 0.6);
+      g.addColorStop(0, 'rgba(24,16,6,.5)'); g.addColorStop(1, 'rgba(24,16,6,.2)');
+      x.fillStyle = g; x.beginPath(); x.roundRect(i, i, W - 2 * i, H - 2 * i, r); x.fill();
+      x.strokeStyle = 'rgba(232,190,110,.55)'; x.lineWidth = 4; x.stroke();
+      x.strokeStyle = 'rgba(255,240,200,.15)'; x.lineWidth = 2; x.beginPath(); x.roundRect(i + 9, i + 9, W - 2 * i - 18, H - 2 * i - 18, r * 0.8); x.stroke();
+    }
     if (bg) {
       // aged parchment: a warm centre, darker edges and a faint grain
       x.fillStyle = bg; x.fillRect(0, 0, W, H);
@@ -178,6 +187,7 @@ export function createStage(ctx) {
       if (lines.length * size * 1.18 <= H - pad * 2 && lines.every(l => x.measureText(l).width <= W - pad * 2)) break;
     }
     x.fillStyle = color; x.textAlign = 'center'; x.textBaseline = 'middle';
+    if (glass) { x.shadowColor = 'rgba(0,0,0,.6)'; x.shadowBlur = size * 0.12; x.shadowOffsetY = size * 0.04; }
     const lh = size * 1.18, y0 = H / 2 - (lines.length - 1) * lh / 2;
     lines.forEach((l, i) => x.fillText(l, W / 2, y0 + i * lh + 2));
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
@@ -222,7 +232,8 @@ export function createStage(ctx) {
   const D = 10; // distance of the UI plane from the camera
   function frame() {
     const hh = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * D;
-    return { hh, hw: hh * camera.aspect, portrait: camera.aspect < 0.9 };
+    // upright screens keep a margin at the sides so tablets and banner rods aren't clipped
+    return { hh, hw: hh * camera.aspect * (camera.aspect < 0.9 ? 0.93 : 1), portrait: camera.aspect < 0.9 };
   }
   function clearUI() { for (const c of [...ui.children]) ui.remove(c); S.picks = []; S.sel = null; }
 
@@ -329,16 +340,14 @@ export function createStage(ctx) {
     const { hh, hw, portrait } = frame();
     const prompt = strip(q.prompt);
     const bw = Math.min(hw * 1.9, 13), bh = portrait ? hh * 0.26 : hh * 0.24;
-    const b = banner(prompt, bw, bh); place(b, 0, hh - bh / 2 - hh * 0.12); introAnim(b, 0);
+    const b = banner(prompt, bw, bh); place(b, 0, hh - bh / 2 - hh * (portrait ? 0.2 : 0.12)); introAnim(b, 0); // upright: clear of the round buttons
     if (q.big) {
       const bigH = portrait ? hh * 0.3 : hh * 0.32, txt = strip(q.big);
       // short words get a snug plane so they can be drawn big
       const bigW = Math.min(hw * 1.5, 9, bigH * (1.2 + txt.length * 0.42));
       const BH = Math.round(1024 * bigH / bigW);
-      const big = new THREE.Mesh(new THREE.PlaneGeometry(bigW, bigH), new THREE.MeshBasicMaterial({ map: textCanvas(txt, { W: 1024, H: BH, greek: true, maxSize: Math.round(BH * 0.78), minSize: 40, color: '#fff7e0', pad: Math.round(BH * 0.06) }), transparent: true, depthWrite: false }));
-      const shadow = new THREE.Mesh(big.geometry, new THREE.MeshBasicMaterial({ map: big.material.map, color: 0x000000, transparent: true, opacity: 0.45, depthWrite: false }));
-      shadow.position.set(0.06, -0.06, -0.01);
-      const bg = new THREE.Group(); bg.add(shadow, big); bg.userData = { base: new THREE.Vector3() };
+      const big = new THREE.Mesh(new THREE.PlaneGeometry(bigW, bigH), new THREE.MeshBasicMaterial({ map: textCanvas(txt, { W: 1024, H: BH, greek: true, maxSize: Math.round(BH * (txt.length <= 2 ? 1 : 0.78)), minSize: 40, color: '#fff7e0', glass: true, pad: Math.round(BH * (txt.length <= 2 ? 0.03 : 0.1)) }), transparent: true, depthWrite: false }));
+      const bg = new THREE.Group(); bg.add(big); bg.userData = { base: new THREE.Vector3() };
       place(bg, 0, portrait ? hh * 0.2 : hh * 0.18); introAnim(bg, 0.05);
       S.big = bg;
     }

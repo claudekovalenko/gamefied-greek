@@ -632,3 +632,4 @@ body.in-stage .main > .s3 { pointer-events: none; }
 body.irisfx::after { content: ''; position: fixed; inset: 0; z-index: 60; pointer-events: none; background: radial-gradient(circle at 50% 50%, transparent 0, transparent var(--iris, 0%), #10121c calc(var(--iris, 0%) + 2%)); animation: irisfx .85s ease-out forwards; }
 @property --iris { syntax: '<percentage>'; inherits: false; initial-value: 0%; }
 @keyframes irisfx { from { --iris: 0%; } to { --iris: 110%; } }
+#wqglyph { display: block; line-height: 1; }

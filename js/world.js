@@ -88,6 +88,7 @@ const BURSTS = FX.bursts(scene); // light pillars when a foe is banished
 const PRINTS = FX.footprints(scene); // footprints fading behind you on the road
 const HILLS = FX.farHills(scene); // far mountain ranges on the horizon
 const BOW = FX.rainbow(scene); // a rainbow after the storm
+const AUR = FX.aurora(scene); // northern lights on cold and starry nights
 const GUST = FX.gusts(scene); // a flurry of leaves on the wind now and then
 const STARS = FX.shootingStars(scene); // a shooting star now and then at night
 const SHAFTS = FX.sunShafts(scene); // sunbeams slanting down among the trees
@@ -116,6 +117,7 @@ function setAtmosphere(i) {
   HILLS.setColors(A.mid, A.top, A.stars || 0);
   ENV.set(A.top, A.mid, new THREE.Color(A.mid).lerp(new THREE.Color(0x4a5a3a), 0.6));
   FX.setNight(INDOOR ? 0 : (A.stars || 0) > 0.5 ? 1 : (A.stars || 0) > 0.15 || A.sunI < 2.1 ? 0.4 : 0);
+  AUR.set(INDOOR ? 0 : (WI === 7 || WI === 6) && (A.stars || 0) > 0.1 ? 1 : (WI === 7 ? 0.5 : (A.stars || 0) > 0.5 ? 0.6 : 0));
   FX.setLight(A);
   waterMat.userData.setSun(A.sunDir || [0.35, 0.42, -0.84], new THREE.Color(A.sun).lerp(new THREE.Color(0xffffff), 0.3));
   SHAFT = { k: (A.stars || 0) > 0.5 || (A.clouds || 0) > 0.8 ? 0 : 1, dir: A.sunDir };
@@ -1624,7 +1626,7 @@ function step(dt) {
     if (S_SHAKE > 0) { S_SHAKE = Math.max(0, S_SHAKE - dt); camera.position.x += (Math.random() - 0.5) * S_SHAKE; camera.position.y += (Math.random() - 0.5) * S_SHAKE; }
   }
   sun.position.set(pos.x + 30, pos.y + 60, pos.z + 20); sun.target.position.set(pos.x, pos.y, pos.z);
-  sky.position.copy(camera.position); HILLS.update(camera.position); BOW.update(dt, camera.position);
+  sky.position.copy(camera.position); HILLS.update(camera.position); BOW.update(dt, camera.position); AUR.update(camera.position);
 
   // portals
   const gu = gate.userData;
@@ -1746,7 +1748,7 @@ function step(dt) {
   }
 
   SPK.update(dt); DUST.update(dt); ARENA.update(dt); BURSTS.update(dt); if (!INDOOR) POND.update(dt, pos); STARS.update(dt, camera.position, INDOOR ? 0 : ((MOODS[MOOD] || ATMOS[WI]).stars || 0));
-  { const want = !LOW && !INDOOR && ((MOODS[MOOD] || ATMOS[WI]).stars || 0) > 0.5 ? 7 : 0; heroLight.intensity += (want - heroLight.intensity) * Math.min(1, dt * 2); heroLight.position.set(pos.x, pos.y + 2.2, pos.z); }
+  { const want = !LOW && !INDOOR && ((MOODS[MOOD] || ATMOS[WI]).stars || 0) > 0.5 ? 3.5 : 0; heroLight.intensity += (want - heroLight.intensity) * Math.min(1, dt * 2); heroLight.position.set(pos.x, pos.y + 3.2, pos.z); }
   FX.hero.value.copy(pos);
   GUST.update(dt, pos, INDOOR ? null : ZONES[WI].leaf.concat(ACCENT[WI] || []));
   SHAFTS.update(dt, pos, camera.position, groundAt, INDOOR ? 0 : SHAFT.k, SHAFT.dir);

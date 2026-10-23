@@ -1870,6 +1870,7 @@ let pending = [];
 W.show = () => {
   if (stage) stage.exit();
   mode = 'world'; worldShown = true;
+  if (WI >= 0) setAtmosphere(WI); // the world's own light again (the stage may have changed the lamps)
   root.classList.remove('staging');
   root.classList.add('on');
   root.classList.toggle('stick-right', stickRight());

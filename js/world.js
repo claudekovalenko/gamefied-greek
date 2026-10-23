@@ -81,6 +81,7 @@ const SPK = FX.sparks(scene), DUST = FX.sparks(scene, LOW ? 80 : 200, { additive
 const CRIT = FX.critters(scene); // birds overhead, butterflies by the path
 const ARENA = FX.arena(scene); // the rune circle of a shade battle
 const BURSTS = FX.bursts(scene); // light pillars when a foe is banished
+const STARS = FX.shootingStars(scene); // a shooting star now and then at night
 const POND = FX.pondLife(scene, () => { const L = []; WG.traverse(o => { if (o.isMesh && o.material === waterMat) L.push(o); }); return L; }); // ripples and leaping fish
 const hemi = new THREE.HemisphereLight(0xdff0ff, 0x5a6a3a, 1.1);
 scene.add(hemi);
@@ -101,6 +102,7 @@ function setAtmosphere(i) {
   const A = moodAtmos(ATMOS[i], MOOD), mid = new THREE.Color(A.mid);
   sky.userData.set(A);
   FX.cloudShade.value = Math.min(1, 0.3 + (A.clouds || 0) * 1.2) * ((A.stars || 0) > 0.5 ? 0.3 : 1);
+  FX.setLight(A);
   waterMat.userData.setColors(...(A.water || [0x1f6a9a, 0x5ac0e0]), A.mid);
   scene.fog.color.copy(mid); scene.fog.near = A.fog[0]; scene.fog.far = A.fog[1];
   sun.color.setHex(A.sun); sun.intensity = A.sunI; hemi.intensity = A.hemi;
@@ -668,6 +670,7 @@ const VEN = makeVenues({
   THREE, add: o => WG.add(o), mesh, rawGround: (x, z) => groundBase(x, z), textSprite, glow: (c, sz) => FX.glow(c, sz, ATMOS[WI].stars ? 0.85 : 0.55),
   col: (x, z, r) => { const c = { x, z, r }; colliders.push(c); return c; }, keep: (x, z, r) => keepOut.push({ x, z, r }),
   free: (x, z, r, tol) => openGround(x, z, r, tol), SPK, water: () => waterMat,
+  smoke: p => DUST.emit(p, { color: 0xd8d4d0, n: 1, speed: 0.25, up: 1.2, gravity: 0.6, drag: 0.6, size: 0.6, size1: 2.2, life: 3.2, spread: 0.2 }),
   splash: (x, z, face) => {
     player.position.set(x, groundAt(x, z), z); P.vel.set(0, 0, 0); player.rotation.y = face; cam.yaw = face + Math.PI;
     KG.app.sfx('splash');
@@ -1671,7 +1674,7 @@ function step(dt) {
     ]);
   }
 
-  SPK.update(dt); DUST.update(dt); ARENA.update(dt); BURSTS.update(dt); if (!INDOOR) POND.update(dt, pos);
+  SPK.update(dt); DUST.update(dt); ARENA.update(dt); BURSTS.update(dt); if (!INDOOR) POND.update(dt, pos); STARS.update(dt, camera.position, INDOOR ? 0 : ((MOODS[MOOD] || ATMOS[WI]).stars || 0));
   FX.hero.value.copy(pos);
   CRIT.update(dt, t, pos, groundAt, INDOOR ? 0 : ((MOODS[MOOD] || ATMOS[WI]).stars || 0) < 0.5 ? 1 : 0);
   for (let i = anims.length - 1; i >= 0; i--) if (anims[i](dt, t) === false) anims.splice(i, 1);

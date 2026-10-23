@@ -97,6 +97,7 @@ let MOOD = 0, INDOOR = null, DOOR = null, EXPO = 1;
 function setAtmosphere(i) {
   const A = moodAtmos(ATMOS[i], MOOD), mid = new THREE.Color(A.mid);
   sky.userData.set(A);
+  FX.cloudShade.value = Math.min(1, 0.3 + (A.clouds || 0) * 1.2) * ((A.stars || 0) > 0.5 ? 0.3 : 1);
   waterMat.userData.setColors(...(A.water || [0x1f6a9a, 0x5ac0e0]), A.mid);
   scene.fog.color.copy(mid); scene.fog.near = A.fog[0]; scene.fog.far = A.fog[1];
   sun.color.setHex(A.sun); sun.intensity = A.sunI; hemi.intensity = A.hemi;

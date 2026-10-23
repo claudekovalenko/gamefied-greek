@@ -323,7 +323,7 @@ function grass() {
   blade.setAttribute('normal', new THREE.Float32BufferAttribute([0, 0, 1, 0, 0, 1, 0, 0, 1], 3));
   blade.setAttribute('color', new THREE.Float32BufferAttribute([0.62, 0.62, 0.62, 0.62, 0.62, 0.62, 1.1, 1.1, 1.0], 3));
   const gm = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, vertexColors: true });
-  FX.windify(gm, { amp: 0.24, freq: 1.8 });
+  FX.windify(gm, { amp: 0.24, freq: 1.8, push: true });
   const im = new THREE.InstancedMesh(blade, gm, N);
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3(), c = new THREE.Color(), up = new THREE.Vector3(0, 1, 0);
   const wy = D.water ? D.water.y : -99, base = wheat ? 0xe0c060 : ZONES[WI].grass;
@@ -1664,6 +1664,7 @@ function step(dt) {
   }
 
   SPK.update(dt); DUST.update(dt); ARENA.update(dt); BURSTS.update(dt);
+  FX.hero.value.copy(pos);
   CRIT.update(dt, t, pos, groundAt, INDOOR ? 0 : ((MOODS[MOOD] || ATMOS[WI]).stars || 0) < 0.5 ? 1 : 0);
   for (let i = anims.length - 1; i >= 0; i--) if (anims[i](dt, t) === false) anims.splice(i, 1);
   updateCritters(dt, t, pos);

@@ -313,7 +313,7 @@ const ACCENT = [[0xf2a8c4, 0xf8c8d8], null, [0xe8c040], [0xf0b0d0], [0xd8803a, 0
 function scatterTrees() {
   const T = D.trees, N = Math.round(T.n * (LOW ? 0.45 : mobile ? 0.7 : 1)), rand = rng(WI * 977 + 13), sc0 = T.scale || 1;
   const parts = {
-    trunk: new THREE.InstancedMesh(new THREE.CylinderGeometry(0.18, 0.28, 1.6, 6), mat(0x6a4a2a), N),
+    trunk: new THREE.InstancedMesh(new THREE.CylinderGeometry(0.18, 0.28, 1.6, 6), FX.windify(new THREE.MeshStandardMaterial({ color: 0x6a4a2a, roughness: 0.85, flatShading: true }), { amp: 0, gust: false, nearFade: true }), N),
     round: new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1.3, 0), FX.windify(new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.9 }), { amp: 0.06, base: -1.3, shade: [-1.3, 1.3], nearFade: true }), N * 2),
     cone: new THREE.InstancedMesh(new THREE.ConeGeometry(1.2, 3.2, 7), FX.windify(new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.9 }), { amp: 0.035, base: -1.6, freq: 1.1, shade: [-1.6, 1.6], nearFade: true }), N * 2),
     snowcap: new THREE.InstancedMesh(new THREE.ConeGeometry(0.62, 1.1, 7), mat(0xf4f8fb), T.snowy ? N : 1),

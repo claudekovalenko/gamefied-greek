@@ -1859,7 +1859,7 @@ W.onLessonDone = (node, r) => {
   });
 };
 W.travel = (i, where) => travel(i, where);
-W.debug = { BOW, BLOOM, BURSTS, ARENA, get moodNow() { return MOOD; }, get indoor() { return !!INDOOR; }, mood: m => { MOOD = m; setAtmosphere(WI); }, sim: (n, dt = 1 / 60) => { for (let i = 0; i < n; i++) step(dt); }, VEN, startBattle: w => startBattle(w), SQ, scene, camera, player, cam, P, ents, wisps, questTarget, get world() { return WI; }, groundAt: (x, z) => groundAt(x, z), along: (t, s, o) => along(t, s, o), travel, cutscene, endCutscene, get cine() { return cine; }, gate: () => gate,
+W.debug = { renderer, BOW, BLOOM, BURSTS, ARENA, get moodNow() { return MOOD; }, get indoor() { return !!INDOOR; }, mood: m => { MOOD = m; setAtmosphere(WI); }, sim: (n, dt = 1 / 60) => { for (let i = 0; i < n; i++) step(dt); }, VEN, startBattle: w => startBattle(w), SQ, scene, camera, player, cam, P, ents, wisps, questTarget, get world() { return WI; }, groundAt: (x, z) => groundAt(x, z), along: (t, s, o) => along(t, s, o), travel, cutscene, endCutscene, get cine() { return cine; }, gate: () => gate,
   teleport: (x, z) => { player.position.set(x, groundAt(x, z), z); snapCamera(); } };
 
 // ── build ─────────────────────────────────────────────────────

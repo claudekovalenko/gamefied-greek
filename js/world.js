@@ -256,7 +256,7 @@ function buildTerrain() {
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   g.setAttribute('color', new THREE.BufferAttribute(cols, 3));
   g.setIndex(idx); g.computeVertexNormals();
-  const t = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 }));
+  const t = new THREE.Mesh(g, FX.groundDetail(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 })));
   t.receiveShadow = !LOW; WG.add(t);
 }
 

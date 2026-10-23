@@ -79,6 +79,9 @@ scene.add(sky);
 // sparkles and dust
 const SPK = FX.sparks(scene), DUST = FX.sparks(scene, LOW ? 80 : 200, { additive: false });
 const CRIT = FX.critters(scene); // birds overhead, butterflies by the path
+// a soft glow around bright lights; switched off on low graphics, and dropped if frames run slow
+const BLOOM = FX.bloom(renderer); BLOOM.enabled = BLOOM.enabled && !LOW;
+const bloomPerf = { acc: 0, n: 0, t: 0 };
 const ARENA = FX.arena(scene); // the rune circle of a shade battle
 const BURSTS = FX.bursts(scene); // light pillars when a foe is banished
 const HILLS = FX.farHills(scene); // far mountain ranges on the horizon
@@ -1734,7 +1737,8 @@ function loop() {
   const dt = Math.min(0.05, clock.getDelta());
   FX.tick(clock.elapsedTime);
   if (mode === 'stage') { renderer.toneMappingExposure = 1; stage.update(dt, clock.elapsedTime); stage.render(renderer); }
-  else { step(dt); renderer.toneMappingExposure = EXPO + FLASH; renderer.render(scene, camera); }
+  else { step(dt); renderer.toneMappingExposure = EXPO + FLASH; BLOOM.render(scene, camera);
+    if (BLOOM.enabled) { bloomPerf.acc += dt; bloomPerf.n++; if ((bloomPerf.t += dt) > 3) { if (bloomPerf.acc / bloomPerf.n > 1 / 38) BLOOM.enabled = false; bloomPerf.acc = bloomPerf.n = bloomPerf.t = 0; } } }
   adaptQuality(dt);
 }
 function startLoop() { if (!active) { active = true; clock.getDelta(); loop(); } }
@@ -1792,7 +1796,7 @@ W.onLessonDone = (node, r) => {
   });
 };
 W.travel = (i, where) => travel(i, where);
-W.debug = { BURSTS, ARENA, get moodNow() { return MOOD; }, get indoor() { return !!INDOOR; }, mood: m => { MOOD = m; setAtmosphere(WI); }, sim: (n, dt = 1 / 60) => { for (let i = 0; i < n; i++) step(dt); }, VEN, startBattle: w => startBattle(w), SQ, scene, camera, player, cam, P, ents, wisps, questTarget, get world() { return WI; }, groundAt: (x, z) => groundAt(x, z), along: (t, s, o) => along(t, s, o), travel, cutscene, endCutscene, get cine() { return cine; }, gate: () => gate,
+W.debug = { BLOOM, BURSTS, ARENA, get moodNow() { return MOOD; }, get indoor() { return !!INDOOR; }, mood: m => { MOOD = m; setAtmosphere(WI); }, sim: (n, dt = 1 / 60) => { for (let i = 0; i < n; i++) step(dt); }, VEN, startBattle: w => startBattle(w), SQ, scene, camera, player, cam, P, ents, wisps, questTarget, get world() { return WI; }, groundAt: (x, z) => groundAt(x, z), along: (t, s, o) => along(t, s, o), travel, cutscene, endCutscene, get cine() { return cine; }, gate: () => gate,
   teleport: (x, z) => { player.position.set(x, groundAt(x, z), z); snapCamera(); } };
 
 // ── build ─────────────────────────────────────────────────────

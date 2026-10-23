@@ -1761,9 +1761,11 @@ function step(dt) {
 
   // portals
   const gu = gate.userData;
-  if (gu.portal.visible) { gu.portal.userData.disc.rotation.z -= dt * 1.5; gu.portal.children[0].rotation.z += dt * 0.4; gu.portal.userData.vortex.userData.update(dt); gu.portal.userData.vortex2.userData.update(dt); }
+  if (gu.portal.visible) { gu.portal.userData.disc.visible = camera.position.distanceTo(gu.portal.userData.disc.getWorldPosition(tmp2)) > 3.4; gu.portal.userData.disc.rotation.z -= dt * 1.5; gu.portal.children[0].rotation.z += dt * 0.4; gu.portal.userData.vortex.userData.update(dt); gu.portal.userData.vortex2.userData.update(dt); }
   if (backPortal) {
     backPortal.g.userData.disc.rotation.z += dt;
+    // the swirl would fill the whole view (a white-out) when the camera, far back on a phone, passes through it
+    backPortal.g.userData.disc.visible = Math.hypot(camera.position.x - backPortal.x, camera.position.z - backPortal.z) > 3;
     const bd = Math.hypot(pos.x - backPortal.x, pos.z - backPortal.z);
     if (bd > 5) backPortal.armed = true;
     else if (bd < 1.6 && backPortal.armed && !busy) travel(WI - 1, 'gate');

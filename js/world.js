@@ -112,6 +112,7 @@ function setAtmosphere(i) {
   FX.cloudShade.value = Math.min(1, 0.3 + (A.clouds || 0) * 1.2) * ((A.stars || 0) > 0.5 ? 0.3 : 1);
   HILLS.setColors(A.mid, A.top, A.stars || 0);
   ENV.set(A.top, A.mid, new THREE.Color(A.mid).lerp(new THREE.Color(0x4a5a3a), 0.6));
+  FX.setNight(INDOOR ? 0 : (A.stars || 0) > 0.5 ? 1 : (A.stars || 0) > 0.15 || A.sunI < 2.1 ? 0.4 : 0);
   FX.setLight(A);
   SHAFT = { k: (A.stars || 0) > 0.5 || (A.clouds || 0) > 0.8 ? 0 : 1, dir: A.sunDir };
   try { VEN.setDaylight((A.stars || 0) > 0.5 ? 0.35 : Math.min(1, A.sunI / 2.2), (A.stars || 0) > 0.5 ? 0x8aa8ff : 0xffffff); } catch (e) { /* the venues aren't made yet */ }

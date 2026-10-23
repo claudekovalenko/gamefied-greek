@@ -9,7 +9,7 @@ import { DEFS, R, fbm, vnoise, smooth, hash, rng } from './worlds.js';
 import { makeProps } from './props.js';
 import { makeFX } from './fx.js';
 import { makeSideQuests } from './sidequests.js';
-import { makeVenues, venueOrder } from './venues.js';
+import { makeVenues, venueOrder, moodAtmos, moodMotes, MOODS } from './venues.js';
 import { tallyRaiders, raiderMesh, animateRaider } from './raiders.js';
 
 const KG = window.KG, E = KG.engine, U = KG.util;
@@ -91,13 +91,35 @@ const ATMOS = [
   { top: 0x7a98c8, mid: 0xe0e8f0, bot: 0xffffff, sun: 0xffffff, sunI: 2.0, hemi: 1.3, fog: [30, 170], clouds: 0.6 },   // Peaks: cold white
   { top: 0x4a3a8a, mid: 0xf8c070, bot: 0xfff0c8, sun: 0xffc860, sunI: 2.3, hemi: 1.1, fog: [60, 220], clouds: 0.4, stars: 0.15, sunDir: [0.1, 0.12, -0.99] },   // Great Library: golden sunset
 ];
+// MOOD: how far the day has moved on (each cottage you step out of moves it on); INDOOR: inside a room
+let MOOD = 0, INDOOR = null, DOOR = null, EXPO = 1;
 function setAtmosphere(i) {
-  const A = ATMOS[i], mid = new THREE.Color(A.mid);
+  const A = moodAtmos(ATMOS[i], MOOD), mid = new THREE.Color(A.mid);
   sky.userData.set(A);
   waterMat.userData.setColors(...(A.water || [0x1f6a9a, 0x5ac0e0]), A.mid);
   scene.fog.color.copy(mid); scene.fog.near = A.fog[0]; scene.fog.far = A.fog[1];
   sun.color.setHex(A.sun); sun.intensity = A.sunI; hemi.intensity = A.hemi;
+  hemi.color.setHex(A.hemiSky || 0xdff0ff); hemi.groundColor.setHex(A.hemiGround || 0x5a6a3a); EXPO = A.exposure || 1;
+  // indoors: warm lamplight, the sun only through the windows
+  if (INDOOR) { sun.intensity *= 0.25; hemi.color.setHex(0xffdcb0); hemi.groundColor.setHex(0x7a5a3a); hemi.intensity = 1.25; EXPO = 1; }
   root.style.background = '#' + mid.getHexString();
+}
+// stepping through a cottage door: a quick fade, and you're in a room of your own;
+// step back out and the day outside has moved on
+function doorway(v) {
+  root.classList.remove('doorfx'); void root.offsetWidth; root.classList.add('doorfx');
+  // the day moves on only after a real visit, not a step back over the threshold
+  const leaving = !v, moveOn = leaving && performance.now() - (doorway.at || 0) > 2500;
+  if (v) doorway.at = performance.now();
+  DOOR = v;
+  setTimeout(() => {
+    INDOOR = v;
+    if (moveOn) MOOD = (MOOD + 1) % MOODS.length;
+    setAtmosphere(WI);
+    cam.snap = true;
+    if (moveOn && MOODS[MOOD]) KG.app.toast(MOODS[MOOD].say);
+  }, 220);
+  setTimeout(() => root.classList.remove('doorfx'), 800);
 }
 sun = new THREE.DirectionalLight(0xfff1d6, 2.2);
 sun.castShadow = true;
@@ -591,7 +613,7 @@ let gate = null, backPortal = null;
 function marker(text, color) { return textSprite(text, { size: 64, bg: null, color, font: `900 64px Nunito, sans-serif`, scale: 0.016 }); }
 function addEnt(e) {
   const nameTag = textSprite(e.label, { size: 30 });
-  nameTag.position.y = e.tagY || 2.7; e.obj.add(nameTag);
+  nameTag.position.y = e.tagY || 2.7; e.obj.add(nameTag); e.tag = nameTag;
   e.mark = marker('!', '#ffd166'); e.mark.position.y = (e.tagY || 2.7) + 0.9; e.mark.visible = false; e.obj.add(e.mark);
   ents.push(e); colliders.push({ x: e.x, z: e.z, r: e.r || 0.8 });
   return e;
@@ -669,7 +691,7 @@ function buildEntities() {
     m.rotation.y = v ? v.tFace : Math.atan2(mp.px - mp.x, mp.pz - mp.z);
     put(m, x, z);
     if (!v) teachingSpot(mp, sd, k, mine[0].title);
-    const e = addEnt({ kind: 'mentor', zone: i, teacher: k, T, nodes: mine.map(n => n.id), obj: m, x, z, label: `${T[0]} · ${T[1]}`, venue: v });
+    const e = addEnt({ kind: 'mentor', zone: i, teacher: k, T, nodes: mine.map(n => n.id), obj: m, x, z, label: `${T[0]} · ${T[1]}`, venue: v, tagY: v && v.room ? 2.3 : undefined });
     if (v && v.gate) {
       const g = addEnt({ kind: 'vgate', zone: i, obj: v.gate.obj, x: v.gate.x, z: v.gate.z, label: '🔒 Word Gate', tagY: 2.4, r: 0.01, vgate: v.gate });
       e.gateEnt = g;
@@ -856,6 +878,7 @@ function buildWorld(i) {
   WI = i; D = DEFS[i]; LY = makeRoad(D);
   buildHeights();
   if (D.bridge) BR = Object.assign({}, D.bridge, { top: Math.max(rawHeight(D.bridge.x, D.bridge.z - D.bridge.half), rawHeight(D.bridge.x, D.bridge.z + D.bridge.half)) + 0.35 });
+  MOOD = 0; INDOOR = DOOR = null;
   setAtmosphere(i);
   buildTerrain(); buildWater();
   const col = (x, z, r) => colliders.push({ x, z, r });
@@ -1489,9 +1512,10 @@ function step(dt) {
       cam.yaw += d * dt * (input.joy ? 2.2 : 1.2) * Math.min(1, mag);
     }
     // pull the camera in when a hill or wall stands between it and the hero
-    // inside a cottage the camera comes in close and looks down over the cut-away walls
-    P.inT = (P.inT || 0) + ((VEN.inside(pos) ? 1 : 0) - (P.inT || 0)) * Math.min(1, dt * 4);
-    const cDist = cam.dist + (Math.min(cam.dist, 8.5) - cam.dist) * P.inT, cPitch = cam.pitch + (Math.max(cam.pitch, 1.1) - cam.pitch) * P.inT;
+    // through a cottage door: the camera comes inside with you
+    const room = VEN.room(pos);
+    if (room !== DOOR) doorway(room);
+    const cDist = INDOOR ? Math.min(cam.dist, 4.6) : cam.dist, cPitch = INDOOR ? Math.max(0.55, Math.min(0.8, cam.pitch)) : cam.pitch;
     let cd = cDist;
     for (let k = 1; k <= 6; k++) {
       const f = k / 6, cx = pos.x + Math.sin(cam.yaw) * Math.cos(cPitch) * cDist * f, cz = pos.z + Math.cos(cam.yaw) * Math.cos(cPitch) * cDist * f;
@@ -1508,7 +1532,9 @@ function step(dt) {
       tmp.set(pos.x - dx / dl * 5.5 - dz / dl * sd, Math.max(pos.y, aim.y) + (foe ? 5 : 4), pos.z - dz / dl * 5.5 + dx / dl * sd);
       tmp.y = Math.max(tmp.y, groundAt(tmp.x, tmp.z) + 1);
     }
-    camera.position.lerp(tmp, Math.min(1, dt * (aim ? 4 : 8)));
+    if (INDOOR && !aim) { INDOOR.roomCam(pos, tmp); let dy = INDOOR.face - cam.yaw; cam.yaw += Math.atan2(Math.sin(dy), Math.cos(dy)) * Math.min(1, dt * 3); }
+    if (INDOOR) INDOOR.clampCam(tmp);
+    camera.position.lerp(tmp, cam.snap ? 1 : Math.min(1, dt * (aim ? 4 : 8))); cam.snap = false;
     camLook.lerp(tmp2.set(pos.x, pos.y + 1.4, pos.z).lerp(focus || tmp2, focus ? (foe ? 0.45 : 0.7) : 0), Math.min(1, dt * 6));
     camera.lookAt(camLook);
     if (S_SHAKE > 0) { S_SHAKE = Math.max(0, S_SHAKE - dt); camera.position.x += (Math.random() - 0.5) * S_SHAKE; camera.position.y += (Math.random() - 0.5) * S_SHAKE; }
@@ -1533,6 +1559,7 @@ function step(dt) {
   for (const e of ents) {
     const d = Math.hypot(pos.x - e.x, pos.z - e.z);
     e.mark.position.y = (e.tagY || 2.7) + 0.9 + Math.sin(t * 3) * 0.12;
+    if (e.tag) e.tag.visible = !INDOOR || camera.position.distanceTo(e.obj.position) > 3.2; // no giant name in your face in a small room
     if (e.kind === 'side' || e.kind === 'vgate') { if (d < best) { best = d; nearEnt = e; } continue; }
     if (e.kind === 'pedestal') { e.spin.rotation.y += dt; e.spin.position.y = 1.7 + Math.sin(t * 2) * 0.1; }
     else if (d < 12 && !cine) { const want = Math.atan2(pos.x - e.x, pos.z - e.z); let dr = want - e.obj.rotation.y; dr = Math.atan2(Math.sin(dr), Math.cos(dr)); e.obj.rotation.y += dr * Math.min(1, dt * 3); }
@@ -1632,6 +1659,7 @@ function step(dt) {
   updateCritters(dt, t, pos);
   SQ.update(dt, t, pos, P.onGround);
   VEN.update(dt, t, pos, P.onGround);
+  if (!INDOOR) moodMotes(MOOD, SPK, pos, dt);
   updateAmbience(dt, t, pos);
 
   if ((saveT += dt) > 5) { saveT = 0; savePos(); }
@@ -1660,8 +1688,8 @@ function loop() {
   raf = requestAnimationFrame(loop);
   const dt = Math.min(0.05, clock.getDelta());
   FX.tick(clock.elapsedTime);
-  if (mode === 'stage') { stage.update(dt, clock.elapsedTime); stage.render(renderer); }
-  else { step(dt); renderer.render(scene, camera); }
+  if (mode === 'stage') { renderer.toneMappingExposure = 1; stage.update(dt, clock.elapsedTime); stage.render(renderer); }
+  else { step(dt); renderer.toneMappingExposure = EXPO; renderer.render(scene, camera); }
   adaptQuality(dt);
 }
 function startLoop() { if (!active) { active = true; clock.getDelta(); loop(); } }
@@ -1719,7 +1747,7 @@ W.onLessonDone = (node, r) => {
   });
 };
 W.travel = (i, where) => travel(i, where);
-W.debug = { sim: (n, dt = 1 / 60) => { for (let i = 0; i < n; i++) step(dt); }, VEN, startBattle: w => startBattle(w), SQ, scene, camera, player, cam, P, ents, wisps, questTarget, get world() { return WI; }, groundAt: (x, z) => groundAt(x, z), along: (t, s, o) => along(t, s, o), travel, cutscene, endCutscene, get cine() { return cine; }, gate: () => gate,
+W.debug = { get moodNow() { return MOOD; }, get indoor() { return !!INDOOR; }, mood: m => { MOOD = m; setAtmosphere(WI); }, sim: (n, dt = 1 / 60) => { for (let i = 0; i < n; i++) step(dt); }, VEN, startBattle: w => startBattle(w), SQ, scene, camera, player, cam, P, ents, wisps, questTarget, get world() { return WI; }, groundAt: (x, z) => groundAt(x, z), along: (t, s, o) => along(t, s, o), travel, cutscene, endCutscene, get cine() { return cine; }, gate: () => gate,
   teleport: (x, z) => { player.position.set(x, groundAt(x, z), z); snapCamera(); } };
 
 // ── build ─────────────────────────────────────────────────────

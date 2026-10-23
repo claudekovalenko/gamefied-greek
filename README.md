@@ -174,7 +174,7 @@ npm run make-icons   # re-render icons/*.png from the SVGs (needs Playwright)
 | `js/stage.js` | the 3D lesson stage: tablets, challengers, mini-games, power-ups |
 | `js/stagesets.js` | the trial places for each world and each world's creature |
 | `js/fx.js` | shared look: painted sky with sun, clouds and stars, water, wind, sparkles, the hero's body language |
-| `js/venues.js` | the teachers' places: cottage, island, word-gate garden, lookout, campfire, stall |
+| `js/venues.js` | the teachers' places: cottage (a room of its own; step back out and the day has moved on: sunset, night, dawn, storm), island, word-gate garden, lookout, campfire, stall |
 | `js/raiders.js` | Raiders of Forgetting: arrive for each missed day (Profile → "If I miss a day") |
 | `js/cloud.js` | cloud save across devices with a private sync code (Supabase `game_save`/`game_load`) |
 | `js/sidequests.js` | Word Fishing, the Rune Circle and Courier errands, driven by the review queue |

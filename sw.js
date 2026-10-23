@@ -1,6 +1,6 @@
 // Offline support: cache the app shell on install, use the network when it is
 // available and fall back to the cache when offline.
-const CACHE = 'koine-quest-v28';
+const CACHE = 'koine-quest-v29';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/style.css',
   'js/data/alphabet.js', 'js/data/vocab.js', 'js/data/grammar.js', 'js/data/readings.js', 'js/data/curriculum.js', 'js/data/passages.js', 'js/data/teach.js', 'js/data/story.js', 'js/data/wardrobe.js', 'js/reader.js', 'data/nt/books.json', 'data/nt/lexicon.json',
@@ -24,7 +24,10 @@ self.addEventListener('fetch', e => {
   e.respondWith((async () => {
     const cache = await caches.open(CACHE);
     try {
-      const res = await fetch(e.request);
+      // always ask the server whether a file changed (the browser may otherwise reuse a copy for minutes, and an
+      // old file next to a new one can break the game); unchanged files come back as a quick "not modified"
+      const same = new URL(e.request.url).origin === location.origin;
+      const res = await fetch(e.request, same ? { cache: 'no-cache' } : undefined);
       if (res.ok && (res.type === 'basic' || res.type === 'cors')) cache.put(e.request, res.clone());
       return res;
     } catch (err) {

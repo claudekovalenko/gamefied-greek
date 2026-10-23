@@ -103,7 +103,7 @@ const ATMOS = [
   { top: 0x5a7ab8, mid: 0xf0d8a0, bot: 0xf8e8c0, sun: 0xffd890, sunI: 2.4, hemi: 1.1, fog: [60, 220], clouds: 0.4, sunDir: [0.5, 0.18, -0.85] },   // Fields: golden hour
   { top: 0x2a78d8, mid: 0x9ad0f8, bot: 0xe0f0f8, sun: 0xffffff, sunI: 2.4, hemi: 1.2, fog: [70, 230], clouds: 0.35, water: [0x14648f, 0x4ac8d8] },   // Verb River: clear blue
   { top: 0x6a7888, mid: 0xc0c8d0, bot: 0xe0e0e0, sun: 0xf0f0f0, sunI: 1.6, hemi: 1.2, fog: [40, 170], clouds: 0.85 },   // Builders' Ridge: overcast
-  { top: 0x3a2a6a, mid: 0xf0a070, bot: 0xf8d0a0, sun: 0xffa060, sunI: 2.0, hemi: 0.9, fog: [45, 190], clouds: 0.45, stars: 0.4, sunDir: [-0.3, 0.08, -0.95] },   // Ruins of Time: dusk
+  { top: 0x3a2a6a, mid: 0xf0a070, bot: 0xf8d0a0, sun: 0xffa060, sunI: 2.0, hemi: 0.9, fog: [60, 210], clouds: 0.45, stars: 0.4, sunDir: [-0.3, 0.08, -0.95] },   // Ruins of Time: dusk
   { top: 0x101a46, mid: 0x5a70b0, bot: 0xb0c0e0, sun: 0xc0d0ff, sunI: 1.3, hemi: 0.85, fog: [40, 190], clouds: 0.3, stars: 1, sunDir: [0.2, 0.3, -0.9], water: [0x18285a, 0x4a6aa8] },  // Mirror Lake: twilight, moonlit
   { top: 0x7a98c8, mid: 0xe0e8f0, bot: 0xffffff, sun: 0xffffff, sunI: 2.0, hemi: 1.3, fog: [30, 170], clouds: 0.6 },   // Peaks: cold white
   { top: 0x4a3a8a, mid: 0xf8c070, bot: 0xfff0c8, sun: 0xffc860, sunI: 2.3, hemi: 1.1, fog: [60, 220], clouds: 0.4, stars: 0.15, sunDir: [0.1, 0.12, -0.99] },   // Great Library: golden sunset
@@ -257,7 +257,7 @@ function groundBase(x, z) {
 function buildTerrain() {
   const { cell, n, h } = HG, pos = new Float32Array(n * n * 3), cols = new Float32Array(n * n * 3), idx = [];
   const grass = new THREE.Color(ZONES[WI].grass), dirt = new THREE.Color(WI === 8 ? 0xd8ccb0 : WI === 5 ? 0xc8a878 : WI === 7 ? 0xa89a88 : 0xb8925a);
-  const rock = new THREE.Color(WI === 5 ? 0xb09070 : 0x8a8378), snow = new THREE.Color(0xf2f4f6), sand = new THREE.Color(0xd8c48a), c = new THREE.Color(), ring = new THREE.Color(D.ring), ringC = new THREE.Color();
+  const dry = new THREE.Color(), rock = new THREE.Color(WI === 5 ? 0xb09070 : 0x8a8378), snow = new THREE.Color(0xf2f4f6), sand = new THREE.Color(0xd8c48a), c = new THREE.Color(), ring = new THREE.Color(D.ring), ringC = new THREE.Color();
   const wy = D.water ? D.water.y : -99;
   for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
     const k = i * n + j, x = -R + j * cell, z = -R + i * cell, y = h[k];
@@ -266,6 +266,7 @@ function buildTerrain() {
     const slope = Math.hypot(gx, gz), { d } = roadInfo(x, z);
     c.copy(grass).offsetHSL(0, 0, (fbm(x * 3, z * 3) - 0.8) * 0.08);
     if (D.sand) c.lerp(sand, D.sand * fbm(x * 0.7, z * 0.7));
+    if (D.sand) c.lerp(dry.setHex(0x8a9a58), smooth(0.5, 0.7, fbm(x * 0.35 + 9, z * 0.35)) * 0.6); // tufts of dry olive scrub break up the sand
     c.lerp(rock, Math.min(1, smooth(0.55, 1.1, slope) + (D.rock || 0) * smooth(0.3, 0.7, slope)));
     if (D.snowLine !== undefined) c.lerp(snow, smooth(D.snowLine, D.snowLine + 8, y) * (slope < 1.2 ? 0.95 : 0.2));
     else if (y > 16) c.lerp(snow, smooth(16, 26, y) * 0.5);

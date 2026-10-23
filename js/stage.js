@@ -94,7 +94,7 @@ export function createStage(ctx) {
   function setOpponent(kind, unit) {
     if (opp) scene.remove(opp);
     if (S.hpObj) { scene.remove(S.hpObj); S.hpObj = null; }
-    if (kind === 'guardian') { opp = golem(GOLEM_COL[unit], unit); opp.scale.setScalar(1.25); }
+    if (kind === 'guardian') { opp = golem(GOLEM_COL[unit], unit); opp.scale.setScalar(1.25); if (opp.userData.rune) opp.userData.rune.visible = false; } // the question's glyph has the floor; no rune on its chest
     else if (kind === 'beast') { opp = sets.beast(unit); }
     else if (kind === 'shade') { opp = wispMesh(); opp.scale.setScalar(2.6); opp.userData.float = 2.6; }
     else if (kind === 'arcade') {

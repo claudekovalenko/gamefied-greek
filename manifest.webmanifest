@@ -5,7 +5,7 @@
   "start_url": "./index.html#path",
   "scope": "./",
   "display": "standalone",
-  "orientation": "portrait",
+  "orientation": "any",
   "background_color": "#f6efe1",
   "theme_color": "#1f3b5c",
   "categories": ["education", "books"],

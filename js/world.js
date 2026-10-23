@@ -1798,7 +1798,7 @@ function step(dt) {
   }
 
   SPK.update(dt); DUST.update(dt); ARENA.update(dt); BURSTS.update(dt); if (!INDOOR) POND.update(dt, pos); STARS.update(dt, camera.position, INDOOR ? 0 : ((MOODS[MOOD] || ATMOS[WI]).stars || 0));
-  { const want = !LOW && !INDOOR && ((MOODS[MOOD] || ATMOS[WI]).stars || 0) > 0.5 ? 3.5 : 0; heroLight.intensity += (want - heroLight.intensity) * Math.min(1, dt * 2); heroLight.position.set(pos.x, pos.y + 3.2, pos.z); }
+  { const want = !LOW && !INDOOR && ((MOODS[MOOD] || ATMOS[WI]).stars || 0) > 0.5 ? 5 : 0; heroLight.intensity += (want - heroLight.intensity) * Math.min(1, dt * 2); heroLight.position.set(pos.x + (camera.position.x - pos.x) * 0.35, pos.y + 2.6, pos.z + (camera.position.z - pos.z) * 0.35); }
   FX.hero.value.copy(pos);
   GUST.update(dt, pos, INDOOR ? null : ZONES[WI].leaf.concat(ACCENT[WI] || []));
   SHAFTS.update(dt, pos, camera.position, groundAt, INDOOR ? 0 : SHAFT.k, SHAFT.dir);

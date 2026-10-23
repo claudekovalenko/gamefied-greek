@@ -82,6 +82,8 @@ const CRIT = FX.critters(scene); // birds overhead, butterflies by the path
 const ARENA = FX.arena(scene); // the rune circle of a shade battle
 const BURSTS = FX.bursts(scene); // light pillars when a foe is banished
 const STARS = FX.shootingStars(scene); // a shooting star now and then at night
+// at night the hero's wand gives a soft warm glow (always in the scene, so switching it on costs nothing)
+const heroLight = new THREE.PointLight(0xffcf8a, 0, 10, 1.6); scene.add(heroLight);
 const POND = FX.pondLife(scene, () => { const L = []; WG.traverse(o => { if (o.isMesh && o.material === waterMat) L.push(o); }); return L; }); // ripples and leaping fish
 const hemi = new THREE.HemisphereLight(0xdff0ff, 0x5a6a3a, 1.1);
 scene.add(hemi);
@@ -1675,6 +1677,7 @@ function step(dt) {
   }
 
   SPK.update(dt); DUST.update(dt); ARENA.update(dt); BURSTS.update(dt); if (!INDOOR) POND.update(dt, pos); STARS.update(dt, camera.position, INDOOR ? 0 : ((MOODS[MOOD] || ATMOS[WI]).stars || 0));
+  { const want = !LOW && !INDOOR && ((MOODS[MOOD] || ATMOS[WI]).stars || 0) > 0.5 ? 7 : 0; heroLight.intensity += (want - heroLight.intensity) * Math.min(1, dt * 2); heroLight.position.set(pos.x, pos.y + 2.2, pos.z); }
   FX.hero.value.copy(pos);
   CRIT.update(dt, t, pos, groundAt, INDOOR ? 0 : ((MOODS[MOOD] || ATMOS[WI]).stars || 0) < 0.5 ? 1 : 0);
   for (let i = anims.length - 1; i >= 0; i--) if (anims[i](dt, t) === false) anims.splice(i, 1);

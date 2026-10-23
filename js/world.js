@@ -607,6 +607,37 @@ function buildCritters() {
     WG.add(c.obj); critters.push(c);
   }
 }
+// villagers out for a stroll along the road: they walk to and fro, and wave as you pass
+const walkers = [];
+function buildWalkers() {
+  walkers.length = 0;
+  const rand = rng(WI * 17 + 9), n = LOW ? 1 : 3;
+  const robes = [0x8a6a4a, 0x5a7a9a, 0x9a5a5a, 0x6a8a5a, 0xa08a5a], hairs = [0x2a1a10, 0x8a5a2a, 0xbbbbbb, 0x4a2a1a];
+  for (let i = 0; i < n; i++) {
+    const p = person({ robe: robes[(i + WI) % 5], hair: hairs[(i * 3 + WI) % 4], skin: [0xf0c8a0, 0xd8a878, 0xb07850, 0xe8b890][(i + WI * 2) % 4], hood: rand() < 0.3, long: rand() < 0.4, scale: 0.92 });
+    const w = { obj: p, t0: 0.12 + rand() * 0.7, t: 0, dir: rand() < 0.5 ? 1 : -1, side: rand() < 0.5 ? 1 : -1, wave: 0, span: 0.06 + rand() * 0.08 };
+    w.t = w.t0; WG.add(p); walkers.push(w);
+  }
+}
+function updateWalkers(dt, t, pos) {
+  for (const w of walkers) {
+    const o = w.obj.position, near = Math.hypot(pos.x - o.x, pos.z - o.z);
+    // pause and wave at the hero for a moment, then walk on
+    if (near < 4 && w.wave <= 0 && !w.waved) { w.wave = 2; w.waved = true; }
+    if (near > 10) w.waved = false;
+    if (w.wave > 0) {
+      w.wave -= dt; const u = w.obj.userData; u.arms[1].rotation.x = -2.6; u.arms[1].rotation.z = -0.3 + Math.sin(t * 10) * 0.35;
+      w.obj.rotation.y += (Math.atan2(pos.x - o.x, pos.z - o.z) - w.obj.rotation.y) * Math.min(1, dt * 5); animatePerson(w.obj, 0, dt);
+      if (w.wave <= 0) { u.arms[1].rotation.z = 0; }
+      continue;
+    }
+    w.t += w.dir * dt * 0.0045;
+    if (Math.abs(w.t - w.t0) > w.span) w.dir = -Math.sign(w.t - w.t0);
+    const a = along(w.t, w.side, 1.3), b = along(w.t + w.dir * 0.002, w.side, 1.3);
+    o.set(a.x, groundAt(a.x, a.z), a.z); w.obj.rotation.y = Math.atan2(b.x - a.x, b.z - a.z);
+    animatePerson(w.obj, 1.6, dt);
+  }
+}
 function critterTarget(c) {
   let x = c.home.x + (Math.random() - 0.5) * 10, z = c.home.z + (Math.random() - 0.5) * 10;
   if (c.obj.userData.swim) {
@@ -948,7 +979,7 @@ function buildWorld(i) {
   W.libraryDoor = pctx.libraryDoor || null;
   buildEntities(); buildSideQuests();
   scatterTrees(); grass(); flowers(); horizon();
-  buildCollectibles(); buildWisps(); buildCritters();
+  buildCollectibles(); buildWisps(); buildCritters(); buildWalkers();
   setAmbience(i);
   P.zone = i;
   refreshMarkers();
@@ -1767,7 +1798,7 @@ function step(dt) {
   SHAFTS.update(dt, pos, camera.position, groundAt, INDOOR ? 0 : SHAFT.k, SHAFT.dir);
   CRIT.update(dt, t, pos, groundAt, INDOOR ? 0 : ((MOODS[MOOD] || ATMOS[WI]).stars || 0) < 0.5 ? 1 : 0);
   for (let i = anims.length - 1; i >= 0; i--) if (anims[i](dt, t) === false) anims.splice(i, 1);
-  updateCritters(dt, t, pos);
+  updateCritters(dt, t, pos); updateWalkers(dt, t, pos);
   SQ.update(dt, t, pos, P.onGround);
   VEN.update(dt, t, pos, P.onGround);
   if (!INDOOR) moodMotes(MOOD, SPK, pos, dt);
@@ -1872,7 +1903,7 @@ W.onLessonDone = (node, r) => {
   });
 };
 W.travel = (i, where) => travel(i, where);
-W.debug = { renderer, BOW, BLOOM, BURSTS, ARENA, get moodNow() { return MOOD; }, get indoor() { return !!INDOOR; }, mood: m => { MOOD = m; setAtmosphere(WI); }, sim: (n, dt = 1 / 60) => { for (let i = 0; i < n; i++) step(dt); }, VEN, startBattle: w => startBattle(w), SQ, scene, camera, player, cam, P, ents, wisps, questTarget, get world() { return WI; }, groundAt: (x, z) => groundAt(x, z), along: (t, s, o) => along(t, s, o), travel, cutscene, endCutscene, get cine() { return cine; }, gate: () => gate,
+W.debug = { walkers, renderer, BOW, BLOOM, BURSTS, ARENA, get moodNow() { return MOOD; }, get indoor() { return !!INDOOR; }, mood: m => { MOOD = m; setAtmosphere(WI); }, sim: (n, dt = 1 / 60) => { for (let i = 0; i < n; i++) step(dt); }, VEN, startBattle: w => startBattle(w), SQ, scene, camera, player, cam, P, ents, wisps, questTarget, get world() { return WI; }, groundAt: (x, z) => groundAt(x, z), along: (t, s, o) => along(t, s, o), travel, cutscene, endCutscene, get cine() { return cine; }, gate: () => gate,
   teleport: (x, z) => { player.position.set(x, groundAt(x, z), z); snapCamera(); } };
 
 // ── build ─────────────────────────────────────────────────────

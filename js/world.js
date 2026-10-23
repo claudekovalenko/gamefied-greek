@@ -358,7 +358,7 @@ function grass() {
   blade.setAttribute('normal', new THREE.Float32BufferAttribute([0, 0, 1, 0, 0, 1, 0, 0, 1], 3));
   blade.setAttribute('color', new THREE.Float32BufferAttribute([0.62, 0.62, 0.62, 0.62, 0.62, 0.62, 1.1, 1.1, 1.0], 3));
   const gm = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, vertexColors: true });
-  FX.windify(gm, { amp: 0.24, freq: 1.8, push: true });
+  FX.windify(gm, { amp: 0.24, freq: 1.8, push: true, nearFade: true });
   const im = new THREE.InstancedMesh(blade, gm, N);
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3(), c = new THREE.Color(), up = new THREE.Vector3(0, 1, 0);
   const wy = D.water ? D.water.y : -99, base = wheat ? 0xe0c060 : ZONES[WI].grass;
@@ -381,7 +381,7 @@ function grass() {
 }
 function flowers() {
   const N = Math.round((D.flowers || 0) * (LOW ? 0.4 : 1)); if (!N) return;
-  const rand = rng(WI * 7 + 1), fl = new THREE.InstancedMesh(FX.flowerGeo(), FX.windify(new THREE.MeshStandardMaterial({ roughness: 1, vertexColors: true }), { amp: 0.35, freq: 2 }), N);
+  const rand = rng(WI * 7 + 1), fl = new THREE.InstancedMesh(FX.flowerGeo(), FX.windify(new THREE.MeshStandardMaterial({ roughness: 1, vertexColors: true }), { amp: 0.35, freq: 2, nearFade: true }), N);
   const m = new THREE.Matrix4(), c = new THREE.Color(), fcols = [0xffe066, 0xff8fab, 0xffffff, 0xb197fc, 0xff6b6b];
   const wy = D.water ? D.water.y : -99;
   let n = 0;

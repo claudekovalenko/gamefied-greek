@@ -272,9 +272,17 @@ function buildTerrain() {
     cols.set([c.r, c.g, c.b], k * 3);
     if (i < n - 1 && j < n - 1) { const a = k, b = k + 1, d2 = k + n, e = k + n + 1; idx.push(a, d2, b, b, d2, e); }
   }
+  // near the water each vertex remembers the water level, for wet sand and foam along the shore
+  const shore = new Float32Array(n * n), Wd = D.water;
+  if (Wd) for (let k = 0; k < n * n; k++) {
+    const x = pos[k * 3], z = pos[k * 3 + 2];
+    const near = Wd.kind === 'river' ? Math.abs(z - Wd.f(x)) < Wd.w + 6 : Math.hypot(x - Wd.x, z - Wd.z) < Wd.r + 6;
+    if (near) shore[k] = 1000 + Wd.y;
+  }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   g.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+  g.setAttribute('shore', new THREE.BufferAttribute(shore, 1));
   g.setIndex(idx); g.computeVertexNormals();
   const t = new THREE.Mesh(g, FX.groundDetail(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 })));
   t.receiveShadow = !LOW; WG.add(t);

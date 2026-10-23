@@ -341,7 +341,7 @@ function scatterTrees() {
       const k = kind === 'tall' ? 1.6 : 1;
       addI('cone', x, y + 2.6 * s * k, z, s, s * 1.1 * k, s, leaf);
       if (T.snowy) addI('snowcap', x, y + (2.6 * k + 1.2) * s, z, s, s, s);
-    } else if (kind === 'cypress') addI('cone', x, y + 3 * s, z, s * 0.45, s * 1.5, s * 0.45, col.setHex(0x2f4a2a).offsetHSL(0, 0, (rand() - 0.5) * 0.05));
+    } else if (kind === 'cypress') addI('cone', x, y + 3 * s, z, s * 0.45, s * 1.5, s * 0.45, col.setHex(0x3f6236).offsetHSL((rand() - 0.5) * 0.03, 0, (rand() - 0.5) * 0.07));
     else if (kind === 'willow') { addI('round', x, y + 2.4 * s, z, s * 1.5, s * 1.1, s * 1.5, col.setHex(0x7aa84a)); addI('round', x, y + 1.6 * s, z, s * 1.3, s * 0.9, s * 1.3, col.setHex(0x6a983a)); }
     else { if (ACCENT[WI] && rand() < 0.14) leaf.setHex(U.pick(ACCENT[WI])).offsetHSL(0, 0, (rand() - 0.5) * 0.06);
       addI('round', x, y + 2.3 * s, z, s * 1.1, s, s * 1.1, leaf); addI('round', x + 0.5 * s, y + 3.1 * s, z - 0.3 * s, s * 0.75, s * 0.7, s * 0.75, leaf.offsetHSL(0, 0, 0.05)); }

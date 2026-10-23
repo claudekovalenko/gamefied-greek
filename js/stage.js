@@ -8,7 +8,7 @@ import { makeSets, THEMES } from './stagesets.js';
 export function createStage(ctx) {
   const { renderer, person, golem, wispMesh, ZONES, KG, GOLEM_COL } = ctx;
   const LOW = (KG.engine.state.settings || {}).gfx === 'low';
-  const sets = makeSets(THREE, { LOW, golem });
+  const sets = makeSets(THREE, { LOW, golem, FX: ctx.FX });
   const U = KG.util;
   const E_look = () => KG.engine.look();
   const GK = '"Gentium Plus", "Noto Serif", Georgia, serif';
@@ -59,18 +59,21 @@ export function createStage(ctx) {
     void key;
   }
   S.flames = [];
+  S.useSet = useSet; // for tests
 
   // hero
   const hero = ctx.applyLook(new THREE.Group());
-  hero.position.set(0, 0, 5.2); hero.rotation.y = Math.PI;
+  // the hero stands to one side, so the challenger and the word stay in full view
+  const HERO_X = -2.6, HERO_R = Math.PI - 0.36;
+  hero.position.set(HERO_X, 0, 5.2); hero.rotation.y = HERO_R;
   scene.add(hero);
   let pet = null;
   const aura = new THREE.Mesh(new THREE.TorusGeometry(1, 0.08, 8, 40), new THREE.MeshBasicMaterial({ color: 0xffd166, transparent: true, opacity: 0 }));
-  aura.rotation.x = Math.PI / 2; aura.position.set(0, 0.05, 5.2); scene.add(aura);
+  aura.rotation.x = Math.PI / 2; aura.position.set(HERO_X, 0.05, 5.2); scene.add(aura);
 
   // the Shield power-up: a glowing bubble around the hero
   const shieldBubble = new THREE.Mesh(new THREE.IcosahedronGeometry(1.5, 1), new THREE.MeshBasicMaterial({ color: 0x7fd0ff, transparent: true, opacity: 0.3, depthWrite: false, blending: THREE.AdditiveBlending, wireframe: true }));
-  shieldBubble.position.set(0, 1.2, 5.2); shieldBubble.visible = false; scene.add(shieldBubble);
+  shieldBubble.position.set(HERO_X, 1.2, 5.2); shieldBubble.visible = false; scene.add(shieldBubble);
 
   // opponent slot
   let opp = null, hpBar = null;
@@ -459,7 +462,7 @@ export function createStage(ctx) {
     clearUI(); S.q = null;
     S.active = true; S.comboN = 0; aura.material.opacity = 0;
     ctx.applyLook(hero);
-    hero.position.set(0, 0, 5.2); hero.rotation.set(0, Math.PI, 0);
+    hero.position.set(HERO_X, 0, 5.2); hero.rotation.set(0, HERO_R, 0);
     if (pet) scene.remove(pet);
     pet = ctx.buildPet(E_look().pet);
     if (pet) { pet.position.set(1.5, pet.userData.fly ? 2.6 : 0, 5.6); pet.rotation.y = Math.PI; scene.add(pet); }
@@ -767,7 +770,7 @@ export function createStage(ctx) {
       if (opp && FOES.includes(S.oppKind)) { const p = worldPos(opp).add(new THREE.Vector3(0, 2, 0)); shock(p, 0xffffff, 7); setTimeout(() => { particles(p, 0xffd166, 80, 9); shock(p, 0xffd166, 10); popText(p.clone().add(new THREE.Vector3(0, 2, 0)), 'K.O.!', '#ffd166', 1.5); }, 500); }
       if (opp && FOES.includes(S.oppKind)) tween(1.2, t => { opp.rotation.x = -t * 0.5; opp.position.y = oppPos.y - t * 2; opp.scale.setScalar((S.oppKind === 'shade' ? 2.6 : S.oppKind === 'guardian' ? 1.25 : 1) * (1 - t * 0.5)); });
       else if (opp && opp.userData.body) nod();
-      tween(0.8, t => { hero.position.y = Math.sin(t * Math.PI) * 1.2; hero.rotation.y = Math.PI + t * Math.PI * 2; });
+      tween(0.8, t => { hero.position.y = Math.sin(t * Math.PI) * 1.2; hero.rotation.y = HERO_R + t * Math.PI * 2; });
     } else {
       tween(0.8, t => { hero.rotation.x = t * 0.25; });
     }

@@ -1012,7 +1012,7 @@ function buildWorld(i) {
   setAtmosphere(i);
   buildTerrain(); buildWater();
   const col = (x, z, r) => colliders.push({ x, z, r });
-  const pctx = { glow: (c, sz) => FX.glow(c, sz, ATMOS[WI].stars ? 0.85 : 0.5), pool: (c, sz) => FX.lightPool(c, sz), lantern: () => FX.lantern(), signBoard: t => FX.signBoard(t), THREE, mesh, put, add: o => WG.add(o), col, ground: groundAt, textSprite, glyphSprite, anim: fn => anims.push(fn), waterMat, GREEK: GREEK_FONT, waterY: D.water ? D.water.y : 0, bridgeTop: BR ? BR.top : 0 };
+  const pctx = { glow: (c, sz) => FX.glow(c, sz, ATMOS[WI].stars ? 0.85 : 0.5), pool: (c, sz) => FX.lightPool(c, sz), lantern: () => FX.lantern(), mossy: (m, c, k) => FX.mossy(m, c, k), signBoard: t => FX.signBoard(t), THREE, mesh, put, add: o => WG.add(o), col, ground: groundAt, textSprite, glyphSprite, anim: fn => anims.push(fn), waterMat, GREEK: GREEK_FONT, waterY: D.water ? D.water.y : 0, bridgeTop: BR ? BR.top : 0 };
   const api = Object.assign(makeProps(pctx), { THREE, mesh, put, col, along, textSprite, rand: rng(i * 101 + 9), GREEK: GREEK_FONT, faceAngle: (x, z, tx, tz) => Math.atan2(tx - x, tz - z) });
   D.build(api);
   W.libraryDoor = pctx.libraryDoor || null;

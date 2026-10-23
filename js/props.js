@@ -217,8 +217,11 @@ export function makeProps(ctx) {
     put(g, x, z); col(x, z, 4.2);
     anim((dt, t) => { const k = (t * 0.05) % 1; sandT.scale.setScalar(Math.max(0.05, 1 - k)); sandB.scale.setScalar(0.3 + k * 0.7); g.rotation.y += dt * 0.05; });
   };
+  let fallenMat = null;
   a.fallen = (x, z, rand) => {
-    const c = cyl(0.42, 0.45, 2 + rand() * 2.5, 0xe0d6c0, 10); c.rotation.set(0, rand() * 6, Math.PI / 2 + (rand() - 0.5) * 0.2); put(c, x, z, 0.35); col(x, z, 1);
+    // a column that has lain here for ages: moss has crept over its upper side
+    if (ctx.mossy && !fallenMat) fallenMat = ctx.mossy(new THREE.MeshStandardMaterial({ color: 0xe0d6c0, roughness: 0.9, flatShading: true }), 0x5f8a35, 0.9);
+    const c = fallenMat ? new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.45, 2 + rand() * 2.5, 10), fallenMat) : cyl(0.42, 0.45, 2 + rand() * 2.5, 0xe0d6c0, 10); c.castShadow = c.receiveShadow = true; c.rotation.set(0, rand() * 6, Math.PI / 2 + (rand() - 0.5) * 0.2); put(c, x, z, 0.35); col(x, z, 1);
   };
   a.sundial = p => {
     const g = G();

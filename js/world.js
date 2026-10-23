@@ -116,6 +116,7 @@ function setAtmosphere(i) {
   ENV.set(A.top, A.mid, new THREE.Color(A.mid).lerp(new THREE.Color(0x4a5a3a), 0.6));
   FX.setNight(INDOOR ? 0 : (A.stars || 0) > 0.5 ? 1 : (A.stars || 0) > 0.15 || A.sunI < 2.1 ? 0.4 : 0);
   FX.setLight(A);
+  waterMat.userData.setSun(A.sunDir || [0.35, 0.42, -0.84], new THREE.Color(A.sun).lerp(new THREE.Color(0xffffff), 0.3));
   SHAFT = { k: (A.stars || 0) > 0.5 || (A.clouds || 0) > 0.8 ? 0 : 1, dir: A.sunDir };
   try { VEN.setDaylight((A.stars || 0) > 0.5 ? 0.35 : Math.min(1, A.sunI / 2.2), (A.stars || 0) > 0.5 ? 0x8aa8ff : 0xffffff); } catch (e) { /* the venues aren't made yet */ }
   waterMat.userData.setColors(...(A.water || [0x1f6a9a, 0x5ac0e0]), A.mid);

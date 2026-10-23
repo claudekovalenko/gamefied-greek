@@ -303,6 +303,8 @@ function buildWater() {
   WG.add(m); waters.push(m);
 }
 
+// a few broadleaf trees in each region wear their own season: blossom, gold or autumn red
+const ACCENT = [[0xf2a8c4, 0xf8c8d8], null, [0xe8c040], [0xf0b0d0], [0xd8803a, 0xc8502a], [0xd8702a, 0xb84a2a, 0xe8a030], [0xe0e8f0], null, [0xf0c860, 0xd8803a]];
 // instanced trees: round, pine, tall pine, cypress, dead and willow
 function scatterTrees() {
   const T = D.trees, N = Math.round(T.n * (LOW ? 0.45 : mobile ? 0.7 : 1)), rand = rng(WI * 977 + 13), sc0 = T.scale || 1;
@@ -333,7 +335,8 @@ function scatterTrees() {
       if (T.snowy) addI('snowcap', x, y + (2.6 * k + 1.2) * s, z, s, s, s);
     } else if (kind === 'cypress') addI('cone', x, y + 3 * s, z, s * 0.45, s * 1.5, s * 0.45, col.setHex(0x2f4a2a).offsetHSL(0, 0, (rand() - 0.5) * 0.05));
     else if (kind === 'willow') { addI('round', x, y + 2.4 * s, z, s * 1.5, s * 1.1, s * 1.5, col.setHex(0x7aa84a)); addI('round', x, y + 1.6 * s, z, s * 1.3, s * 0.9, s * 1.3, col.setHex(0x6a983a)); }
-    else { addI('round', x, y + 2.3 * s, z, s * 1.1, s, s * 1.1, leaf); addI('round', x + 0.5 * s, y + 3.1 * s, z - 0.3 * s, s * 0.75, s * 0.7, s * 0.75, leaf.offsetHSL(0, 0, 0.05)); }
+    else { if (ACCENT[WI] && rand() < 0.14) leaf.setHex(U.pick(ACCENT[WI])).offsetHSL(0, 0, (rand() - 0.5) * 0.06);
+      addI('round', x, y + 2.3 * s, z, s * 1.1, s, s * 1.1, leaf); addI('round', x + 0.5 * s, y + 3.1 * s, z - 0.3 * s, s * 0.75, s * 0.7, s * 0.75, leaf.offsetHSL(0, 0, 0.05)); }
     if (d < 9) colliders.push({ x, z, r: 0.4 * s });
   }
   for (const [k, im] of Object.entries(parts)) { im.count = cnt[k]; im.castShadow = !LOW && k !== 'snowcap'; im.receiveShadow = !LOW; if (cnt[k]) WG.add(im); }

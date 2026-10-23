@@ -1,6 +1,6 @@
 // Offline support: cache the app shell on install, use the network when it is
 // available and fall back to the cache when offline.
-const CACHE = 'koine-quest-v16';
+const CACHE = 'koine-quest-v17';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/style.css',
   'js/data/alphabet.js', 'js/data/vocab.js', 'js/data/grammar.js', 'js/data/readings.js', 'js/data/curriculum.js', 'js/data/passages.js', 'js/data/teach.js', 'js/data/story.js', 'js/data/wardrobe.js', 'js/reader.js', 'data/nt/books.json', 'data/nt/lexicon.json',

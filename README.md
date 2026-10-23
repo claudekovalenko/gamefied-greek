@@ -173,7 +173,7 @@ npm run make-icons   # re-render icons/*.png from the SVGs (needs Playwright)
 | `js/worlds.js`, `js/props.js` | the nine worlds' roads, ground shapes and landmarks |
 | `js/stage.js` | the 3D lesson stage: tablets, challengers, mini-games, power-ups |
 | `js/stagesets.js` | the trial places for each world and each world's creature |
-| `js/fx.js` | shared look: painted sky with sun, moon, clouds, stars, aurora and rainbow; far hills; water with ripples, fish and shore foam; painterly ground with cloud shadows, rock ledges and rain puddles; wind in trees, grass and flowers; birds, butterflies and leaf gusts; sunbeams, bloom, rim light and sky reflections; battle rune circle, light pillars, portal vortex, footprints; the parchment world map; the hero's body language |
+| `js/fx.js` | shared look: painted sky with sun, moon, clouds, stars, aurora and rainbow; far hills; water with ripples, fish and shore foam; painterly ground with cloud shadows, rock ledges and rain puddles; wind in trees, grass and flowers; birds, butterflies and leaf gusts; sunbeams, bloom, rim light and sky reflections; battle rune circle, light pillars, portal vortex, footprints; moss on rocks, lantern heads, painted sign boards; colour grade with a soft vignette; the parchment world map; the hero's body language |
 | `js/venues.js` | the teachers' places: cottage (a room of its own; step back out and the day has moved on: sunset, night, dawn, storm), island, word-gate garden, lookout, campfire, stall |
 | `js/raiders.js` | Raiders of Forgetting: arrive for each missed day (Profile → "If I miss a day") |
 | `js/cloud.js` | cloud save across devices with a private sync code (Supabase `game_save`/`game_load`) |

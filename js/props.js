@@ -47,7 +47,7 @@ export function makeProps(ctx) {
   };
   a.sign = (p, text) => {
     const g = G();
-    const post = cyl(0.1, 0.1, 2.2, 0x6a4a2a, 6); post.position.y = 1.1; g.add(post);
+    const ph = ctx.signBoard ? 1.7 : 2.2, post = cyl(0.1, 0.1, ph, 0x6a4a2a, 6); post.position.y = ph / 2; g.add(post); // under the board, not through its name
     if (ctx.signBoard) { const b = ctx.signBoard(text); b.position.y = 2; b.rotation.y = p.a || 0; g.add(b); } // the name painted on the board
     else { const b = box(2.4, 0.6, 0.12, 0x8a6a3a); b.position.y = 2; g.add(b); const t = textSprite(text, { size: 30, bg: null, color: '#ffe9a8', scale: 0.008 }); t.position.y = 2.75; g.add(t); }
     put(g, p.x, p.z); col(p.x, p.z, 0.3);

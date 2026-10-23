@@ -782,7 +782,10 @@ function teachingSpot(p, sd, k, title) {
   const frame = mesh(new THREE.BoxGeometry(2.72, 1.52, 0.08), 0x7a5230); frame.position.set(0, 1.6, -0.03); g.add(frame); // a wooden frame round the slate
   const ledge = mesh(new THREE.BoxGeometry(2.6, 0.06, 0.2), 0x7a5230); ledge.position.set(0, 0.88, 0.08); g.add(ledge);
   const chalk = mesh(new THREE.BoxGeometry(0.16, 0.04, 0.04), 0xf4f0e0); chalk.position.set(0.7, 0.93, 0.1); g.add(chalk);
-  const txt = textSprite(title, { size: 34, bg: null, color: '#f5f0dc', scale: 0.0075 }); txt.position.set(0, 1.6, 0.2); g.add(txt);
+  // the title is chalked flat on the slate (a billboard poked through the board when seen from the side), shrunk to fit
+  const tsp = textSprite(title, { size: 34, bg: null, color: '#f5f0dc', scale: 0.0075 }), fit = Math.min(1, 2.3 / tsp.scale.x);
+  const txt = new THREE.Mesh(new THREE.PlaneGeometry(tsp.scale.x * fit, tsp.scale.y * fit), new THREE.MeshBasicMaterial({ map: tsp.material.map, transparent: true, depthWrite: false }));
+  txt.position.set(0, 1.6, 0.06); g.add(txt);
   const bench = mesh(new THREE.BoxGeometry(2, 0.15, 0.5), 0x8a6a3a); bench.position.set(0, 0.45, 1.4); g.add(bench);
   for (const s of [-1, 1]) { const l = mesh(new THREE.BoxGeometry(0.12, 0.45, 0.4), 0x6a4a2a); l.position.set(s * 0.8, 0.22, 1.4); g.add(l); }
   g.rotation.y = Math.atan2(-nx, -nz);

@@ -359,7 +359,7 @@ function grass() {
   // wheat stays a single tall stalk; grass grows in curved tufts (fewer of them, each fuller)
   const blade = wheat ? (() => { const b = new THREE.BufferGeometry(); b.setAttribute('position', new THREE.Float32BufferAttribute([-0.05, 0, 0, 0.05, 0, 0, 0, 1.0, 0], 3)); b.setAttribute('normal', new THREE.Float32BufferAttribute([0, 0, 1, 0, 0, 1, 0, 0, 1], 3)); b.setAttribute('color', new THREE.Float32BufferAttribute([0.62, 0.62, 0.62, 0.62, 0.62, 0.62, 1.1, 1.1, 1.0], 3)); return b; })() : FX.grassTuft(0.42);
   const gm = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, vertexColors: true });
-  FX.windify(gm, { amp: 0.24, freq: 1.8, push: true, nearFade: true });
+  FX.windify(gm, { amp: 0.24, freq: 1.8, push: true, nearFade: 1.6 });
   const im = new THREE.InstancedMesh(blade, gm, N);
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3(), c = new THREE.Color(), up = new THREE.Vector3(0, 1, 0);
   const wy = D.water ? D.water.y : -99, base = wheat ? 0xe0c060 : ZONES[WI].grass;

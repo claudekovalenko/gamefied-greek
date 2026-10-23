@@ -48,8 +48,8 @@ export function makeProps(ctx) {
   a.sign = (p, text) => {
     const g = G();
     const post = cyl(0.1, 0.1, 2.2, 0x6a4a2a, 6); post.position.y = 1.1; g.add(post);
-    const b = box(2.4, 0.6, 0.12, 0x8a6a3a); b.position.y = 2; g.add(b);
-    const t = textSprite(text, { size: 30, bg: null, color: '#ffe9a8', scale: 0.008 }); t.position.y = 2.75; g.add(t);
+    if (ctx.signBoard) { const b = ctx.signBoard(text); b.position.y = 2; b.rotation.y = p.a || 0; g.add(b); } // the name painted on the board
+    else { const b = box(2.4, 0.6, 0.12, 0x8a6a3a); b.position.y = 2; g.add(b); const t = textSprite(text, { size: 30, bg: null, color: '#ffe9a8', scale: 0.008 }); t.position.y = 2.75; g.add(t); }
     put(g, p.x, p.z); col(p.x, p.z, 0.3);
   };
   a.fence = (x, z, ang, len = 5) => {

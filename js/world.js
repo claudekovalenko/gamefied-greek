@@ -765,6 +765,7 @@ function buildEntities() {
   const ring = new THREE.Mesh(new THREE.TorusGeometry(3, 0.25, 10, 48), new THREE.MeshStandardMaterial({ color: 0xffd166, emissive: 0xffb020, emissiveIntensity: 1.2, metalness: 0.6, roughness: 0.3 }));
   portal.add(ring);
   const disc = portalDisc(2.8); portal.add(disc); portal.userData.disc = disc;
+  const vx = FX.vortex(3); portal.add(vx); portal.userData.vortex = vx; const vx2 = FX.vortex(3); vx2.rotation.y = Math.PI; portal.add(vx2); portal.userData.vortex2 = vx2;
   gate.add(portal);
   if (!last) { const dest = textSprite(`→ ${ZONES[i + 1].name}`, { size: 30 }); dest.position.y = 3.6 + 3.8; portal.add(dest); }
   gate.rotation.y = gp.a;
@@ -1584,7 +1585,7 @@ function step(dt) {
 
   // portals
   const gu = gate.userData;
-  if (gu.portal.visible) { gu.portal.userData.disc.rotation.z -= dt * 1.5; gu.portal.children[0].rotation.z += dt * 0.4; }
+  if (gu.portal.visible) { gu.portal.userData.disc.rotation.z -= dt * 1.5; gu.portal.children[0].rotation.z += dt * 0.4; gu.portal.userData.vortex.userData.update(dt); gu.portal.userData.vortex2.userData.update(dt); }
   if (backPortal) {
     backPortal.g.userData.disc.rotation.z += dt;
     const bd = Math.hypot(pos.x - backPortal.x, pos.z - backPortal.z);

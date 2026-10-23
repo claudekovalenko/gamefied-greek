@@ -600,7 +600,11 @@ window.KG = window.KG || {};
       const T = KG.teach[node.lesson];
       if (first && T) T.beats.forEach((b, i) => {
         plan.push(teach({ say: b.say, demo: b.demo, spell: i === 0 ? T.spell : null }));
-        plan.push(guided(mc(b.check.q, b.check.a, b.check.w, { explain: b.check.ex || '' })));
+        // a question about the shown example ("Which word is doing the loving?") keeps the example in view, also on a retry;
+        // not when the example spells out the answer
+        const ex = (b.demo || '').replace(/[[\]]/g, ''), bare = t => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        const keep = ex && !/[=→]/.test(ex) && !/[\u0370-\u03ff\u1f00-\u1fff]/.test(b.check.q) && !bare(ex).includes(bare(b.check.a));
+        plan.push(guided(mc(b.check.q, b.check.a, b.check.w, Object.assign({ explain: b.check.ex || '' }, keep ? { big: ex } : {}))));
       });
       plan.push(trial(node));
       const mg = miniFor(node);

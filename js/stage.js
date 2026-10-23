@@ -573,7 +573,8 @@ export function createStage(ctx) {
   function miniBanner(text) {
     const { hh, hw } = frame();
     if (MG && MG.banner) ui.remove(MG.banner);
-    const b = banner(text, Math.min(hw * 1.9, 13), hh * 0.17); place(b, 0, hh * 0.7); introAnim(b, 0);
+    // a little nearer the camera than the game pieces, so falling stones pass behind it
+    const b = banner(text, Math.min(hw * 1.75, 12), hh * 0.16); place(b, 0, hh * 0.7, 0.8); introAnim(b, 0);
     if (MG) MG.banner = b;
   }
   function miniEnd(ok, text) {

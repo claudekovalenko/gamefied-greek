@@ -525,6 +525,8 @@ body.in-stage .main > .s3 { pointer-events: none; }
 .pwcards div { display: flex; flex-direction: column; background: var(--bg2); border-radius: 10px; padding: 8px 10px; }
 .s3 .pwbar { position: absolute; bottom: calc(40px + env(safe-area-inset-bottom)); right: 10px; margin: 0; padding: 0; }
 .s3 .pwbar .pw { padding: 4px 8px; font-size: .78rem; }
+/* on a narrow phone the help line under a game runs to two lines: keep the power-ups clear of it */
+@media (max-width: 600px) { .s3 .pwbar { bottom: calc(78px + env(safe-area-inset-bottom)); } }
 /* walking stick: a faint resting ring shows where to put your thumb; buttons move to the other side */
 .wjoy-rest { position: absolute; left: 28px; bottom: calc(40px + env(safe-area-inset-bottom)); width: 110px; height: 110px; border-radius: 50%; border: 2px dashed rgba(255,255,255,.35); background: rgba(255,255,255,.06); display: none; }
 @media (pointer: coarse) { .wjoy-rest { display: block; } }

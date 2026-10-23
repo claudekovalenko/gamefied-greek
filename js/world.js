@@ -372,6 +372,7 @@ function grass() {
     const y = groundAt(x, z); if (y < wy + 0.3) continue;
     if (wheat && colliders.some(cl => Math.abs(cl.x - x) < cl.r + 1 && Math.abs(cl.z - z) < cl.r + 1)) continue;
     if (keepOut.some(c => Math.hypot(c.x - x, c.z - z) < c.r - 0.5)) continue;
+    if (D.paved && Math.abs(x) < D.paved + 3 && z > -48) continue; // no grass through the Library's paving
     const s = 0.6 + rand() * 0.9;
     q.setFromAxisAngle(up, rand() * 6.28);
     m.compose(p.set(x, y - 0.02, z), q, sc.set(s, s * (0.7 + rand() * 0.8), s));

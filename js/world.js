@@ -86,6 +86,7 @@ const ARENA = FX.arena(scene); // the rune circle of a shade battle
 const BURSTS = FX.bursts(scene); // light pillars when a foe is banished
 const HILLS = FX.farHills(scene); // far mountain ranges on the horizon
 const STARS = FX.shootingStars(scene); // a shooting star now and then at night
+const SHAFTS = FX.sunShafts(scene); // sunbeams slanting down among the trees
 // at night the hero's wand gives a soft warm glow (always in the scene, so switching it on costs nothing)
 const heroLight = new THREE.PointLight(0xffcf8a, 0, 10, 1.6); scene.add(heroLight);
 const POND = FX.pondLife(scene, () => { const L = []; WG.traverse(o => { if (o.isMesh && o.material === waterMat) L.push(o); }); return L; }); // ripples and leaping fish
@@ -103,13 +104,14 @@ const ATMOS = [
   { top: 0x4a3a8a, mid: 0xf8c070, bot: 0xfff0c8, sun: 0xffc860, sunI: 2.3, hemi: 1.1, fog: [60, 220], clouds: 0.4, stars: 0.15, sunDir: [0.1, 0.12, -0.99] },   // Great Library: golden sunset
 ];
 // MOOD: how far the day has moved on (each cottage you step out of moves it on); INDOOR: inside a room
-let MOOD = 0, INDOOR = null, DOOR = null, EXPO = 1, FLASH = 0;
+let MOOD = 0, INDOOR = null, DOOR = null, EXPO = 1, FLASH = 0, SHAFT = { k: 1 };
 function setAtmosphere(i) {
   const A = moodAtmos(ATMOS[i], MOOD), mid = new THREE.Color(A.mid);
   sky.userData.set(A);
   FX.cloudShade.value = Math.min(1, 0.3 + (A.clouds || 0) * 1.2) * ((A.stars || 0) > 0.5 ? 0.3 : 1);
   HILLS.setColors(A.mid, A.top, A.stars || 0);
   FX.setLight(A);
+  SHAFT = { k: (A.stars || 0) > 0.5 || (A.clouds || 0) > 0.8 ? 0 : 1, dir: A.sunDir };
   try { VEN.setDaylight((A.stars || 0) > 0.5 ? 0.35 : Math.min(1, A.sunI / 2.2), (A.stars || 0) > 0.5 ? 0x8aa8ff : 0xffffff); } catch (e) { /* the venues aren't made yet */ }
   waterMat.userData.setColors(...(A.water || [0x1f6a9a, 0x5ac0e0]), A.mid);
   scene.fog.color.copy(mid); scene.fog.near = A.fog[0]; scene.fog.far = A.fog[1];
@@ -860,7 +862,7 @@ function buildCollectibles() {
     scrolls.push({ p, g, x: a.x, z: a.z });
   });
   const coinG = new THREE.CylinderGeometry(0.32, 0.32, 0.08, 16);
-  const coinM = new THREE.MeshStandardMaterial({ color: 0xffd166, metalness: 0.9, roughness: 0.25, emissive: 0x6a4a00 });
+  const coinM = new THREE.MeshStandardMaterial({ color: 0xffd166, metalness: 0.35, roughness: 0.3, emissive: 0xc08a10, emissiveIntensity: 0.55 }); // bright gold even with nothing to reflect
   for (let k = 0; k < 14; k++) {
     const i = WI * 14 + k, a0 = along(0.04 + k * 0.066 + hash(i, 3) * 0.02, hash(i, 5) < 0.5 ? -1 : 1, hash(i, 7) * 9), a = clearSpot(a0.x, a0.z);
     const c = new THREE.Mesh(coinG, coinM); c.rotation.x = Math.PI / 2; c.castShadow = !LOW;
@@ -1697,6 +1699,7 @@ function step(dt) {
   SPK.update(dt); DUST.update(dt); ARENA.update(dt); BURSTS.update(dt); if (!INDOOR) POND.update(dt, pos); STARS.update(dt, camera.position, INDOOR ? 0 : ((MOODS[MOOD] || ATMOS[WI]).stars || 0));
   { const want = !LOW && !INDOOR && ((MOODS[MOOD] || ATMOS[WI]).stars || 0) > 0.5 ? 7 : 0; heroLight.intensity += (want - heroLight.intensity) * Math.min(1, dt * 2); heroLight.position.set(pos.x, pos.y + 2.2, pos.z); }
   FX.hero.value.copy(pos);
+  SHAFTS.update(dt, pos, camera.position, groundAt, INDOOR ? 0 : SHAFT.k, SHAFT.dir);
   CRIT.update(dt, t, pos, groundAt, INDOOR ? 0 : ((MOODS[MOOD] || ATMOS[WI]).stars || 0) < 0.5 ? 1 : 0);
   for (let i = anims.length - 1; i >= 0; i--) if (anims[i](dt, t) === false) anims.splice(i, 1);
   updateCritters(dt, t, pos);

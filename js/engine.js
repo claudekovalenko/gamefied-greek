@@ -324,6 +324,10 @@ window.KG = window.KG || {};
     const options = shuffle(uniq([correct, ...wrongs.filter(w => w !== correct)]).slice(0, 4));
     if (!options.includes(correct)) options[0] = correct;
     const opts = shuffle(options);
+    // a hint must not simply say the answer: any option spelled out in it is blanked
+    if (extra.hint) { const plain = t => String(t).replace(/<[^>]+>/g, '').replace(/[«»“”"]/g, '').trim(); let h = String(extra.hint); for (const o of opts) { const t = plain(o); if (t.length > 1 && h.includes(t)) h = h.split(t).join('…'); } extra = Object.assign({}, extra, { hint: h }); }
+    // and a question that asks for a Greek word must not quote that word in its own wording (some hooks do)
+    if (extra.greekOpts) for (const o of opts) { const t = String(o).replace(/<[^>]+>/g, '').replace(/[«»]/g, '').trim(); if (t.length > 1 && prompt.includes(t)) prompt = prompt.split(t).join('…'); }
     return Object.assign({ type: 'mc', prompt, options: opts, answer: opts.indexOf(correct) }, extra);
   }
   const others = (correct, pool, n = 3) => sample(uniq(pool).filter(x => x !== correct), n);

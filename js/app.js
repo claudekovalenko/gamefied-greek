@@ -839,6 +839,7 @@
         <div><b>🚀 XP boost</b><p class="muted small">Double XP on your next 3 lessons${s.boost ? ` (${s.boost} left)` : ''}.</p><button class="btn primary" data-act="buy" data-arg="boost">80 🪙</button></div></div></div>
       <div class="card"><h3>🪄 Power-ups</h3><div class="pwcards">${Object.entries(E.POWERS).map(([k, p]) => `<div><b>${p[0]} ${p[1]} × ${E.powers()[k]}</b><span class="muted small">${p[2]}</span></div>`).join('')}</div>
         <p class="muted small">Earn them by finishing daily quests, keeping your day streak (every 3rd day 🛡, every 7th ⏳), reaching an 8× combo in a lesson (💡) and setting Arcade records. Use them from the bar above a question: 💡 in any choice question, 🛡 in guardian battles and against the shades, ⏳ in timed games.</p></div>
+      ${KG.cloud ? KG.cloud.card() : ''}
       ${wardrobeCard()}
       <div class="card"><h3>🏆 Trophy room <span class="muted small">${Object.keys(s.ach).length}/${KG.achievements.length}</span></h3>
         <div class="achs">${KG.achievements.map(a => `<div class="ach ${s.ach[a.id] ? 'got' : ''}" title="${esc(a.desc)}"><div class="ai">${a.icon}</div><b>${esc(a.name)}</b><span>${esc(a.desc)}</span></div>`).join('')}</div></div>
@@ -848,6 +849,7 @@
         <label class="tg"><input type="checkbox" id="setspeech" ${s.settings.speech ? 'checked' : ''}><span>Read Greek aloud <span class="muted small">(uses your device's Greek voice, modern pronunciation)</span></span></label>
         <label>After each answer <select id="autosel">${[['fast', 'Move on quickly'], ['normal', 'Move on automatically'], ['relaxed', 'Move on slowly (more time to read)'], ['off', 'Wait for me to tap Continue']].map(([k, t]) => `<option value="${k}" ${(s.settings.autoAdvance || 'normal') === k ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
         <label>Graphics <select id="gfxsel"><option value="high" ${(s.settings.gfx || 'high') === 'high' ? 'selected' : ''}>High (grass, shadows, effects)</option><option value="low" ${s.settings.gfx === 'low' ? 'selected' : ''}>Low (smoother on older phones)</option></select></label>
+        <label>If I miss a day <select id="raidsel">${[['off', 'Nothing happens'], ['some', 'A few raiders come'], ['many', 'A horde of raiders comes']].map(([k, t]) => `<option value="${k}" ${(s.settings.raiders || 'some') === k ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
  <label>Walking stick on phones <select id="sticksel"><option value="right" ${(s.settings.stick || 'right') === 'right' ? 'selected' : ''}>Right side (right hand)</option><option value="left" ${s.settings.stick === 'left' ? 'selected' : ''}>Left side (left hand)</option></select></label>
         <label class="tg"><input type="checkbox" id="set3d" ${s.settings.mode3d !== false ? 'checked' : ''}><span>Play lessons in 3D <span class="muted small">(turn off for simple 2D cards on older devices)</span></span></label>
         <label class="tg"><input type="checkbox" id="setunlock" ${s.settings.unlockAll ? 'checked' : ''}><span>Unlock all lessons <span class="muted small">(if you already know some Greek)</span></span></label>
@@ -858,6 +860,7 @@
     $('#setsound').onchange = e => { s.settings.sound = e.target.checked; E.save(); };
     $('#setspeech').onchange = e => { s.settings.speech = e.target.checked; E.save(); if (e.target.checked) speak('Ἐν ἀρχῇ ἦν ὁ λόγος'); };
     $('#gfxsel').onchange = e => { s.settings.gfx = e.target.value; E.save(); toast('Graphics setting saved. It applies the next time the app opens.'); };
+    $('#raidsel').onchange = e => { s.settings.raiders = e.target.value; if (e.target.value === 'off' && s.raiders) s.raiders.count = 0; E.save(); };
     $('#sticksel').onchange = e => { s.settings.stick = e.target.value; E.save(); toast(`Walking stick: ${e.target.value} side`); };
     $('#autosel').onchange = e => { s.settings.autoAdvance = e.target.value; E.save(); };
     $('#set3d').onchange = e => { s.settings.mode3d = e.target.checked; E.save(); };

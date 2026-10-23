@@ -175,6 +175,8 @@ npm run make-icons   # re-render icons/*.png from the SVGs (needs Playwright)
 | `js/stagesets.js` | the trial places for each world and each world's creature |
 | `js/fx.js` | shared look: painted sky with sun, clouds and stars, water, wind, sparkles, the hero's body language |
 | `js/venues.js` | the teachers' places: cottage, island, word-gate garden, lookout, campfire, stall |
+| `js/raiders.js` | Raiders of Forgetting: arrive for each missed day (Profile → "If I miss a day") |
+| `js/cloud.js` | cloud save across devices with a private sync code (Supabase `game_save`/`game_load`) |
 | `js/sidequests.js` | Word Fishing, the Rune Circle and Courier errands, driven by the review queue |
 | `js/reader.js` | the Reading Room |
 | `data/nt/` | the whole Greek NT, lexicon and English comparison, built by `scripts/build-nt.mjs` (see its README for sources and licenses) |

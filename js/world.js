@@ -99,12 +99,13 @@ const ATMOS = [
   { top: 0x4a3a8a, mid: 0xf8c070, bot: 0xfff0c8, sun: 0xffc860, sunI: 2.3, hemi: 1.1, fog: [60, 220], clouds: 0.4, stars: 0.15, sunDir: [0.1, 0.12, -0.99] },   // Great Library: golden sunset
 ];
 // MOOD: how far the day has moved on (each cottage you step out of moves it on); INDOOR: inside a room
-let MOOD = 0, INDOOR = null, DOOR = null, EXPO = 1;
+let MOOD = 0, INDOOR = null, DOOR = null, EXPO = 1, FLASH = 0;
 function setAtmosphere(i) {
   const A = moodAtmos(ATMOS[i], MOOD), mid = new THREE.Color(A.mid);
   sky.userData.set(A);
   FX.cloudShade.value = Math.min(1, 0.3 + (A.clouds || 0) * 1.2) * ((A.stars || 0) > 0.5 ? 0.3 : 1);
   FX.setLight(A);
+  try { VEN.setDaylight((A.stars || 0) > 0.5 ? 0.35 : Math.min(1, A.sunI / 2.2), (A.stars || 0) > 0.5 ? 0x8aa8ff : 0xffffff); } catch (e) { /* the venues aren't made yet */ }
   waterMat.userData.setColors(...(A.water || [0x1f6a9a, 0x5ac0e0]), A.mid);
   scene.fog.color.copy(mid); scene.fog.near = A.fog[0]; scene.fog.far = A.fog[1];
   sun.color.setHex(A.sun); sun.intensity = A.sunI; hemi.intensity = A.hemi;
@@ -1685,6 +1686,11 @@ function step(dt) {
   SQ.update(dt, t, pos, P.onGround);
   VEN.update(dt, t, pos, P.onGround);
   if (!INDOOR) moodMotes(MOOD, SPK, pos, dt);
+  // lightning in the storm: the whole valley flickers bright for a moment
+  if (MOODS[MOOD] && MOODS[MOOD].name === 'storm' && !INDOOR && (P.boltT = (P.boltT ?? 4) - dt) <= 0) {
+    P.boltT = 5 + Math.random() * 9; FLASH = 1.3; setTimeout(() => { FLASH = 1.0; }, 160);
+  }
+  FLASH = Math.max(0, FLASH - dt * 3.5);
   updateAmbience(dt, t, pos);
 
   if ((saveT += dt) > 5) { saveT = 0; savePos(); }
@@ -1714,7 +1720,7 @@ function loop() {
   const dt = Math.min(0.05, clock.getDelta());
   FX.tick(clock.elapsedTime);
   if (mode === 'stage') { renderer.toneMappingExposure = 1; stage.update(dt, clock.elapsedTime); stage.render(renderer); }
-  else { step(dt); renderer.toneMappingExposure = EXPO; renderer.render(scene, camera); }
+  else { step(dt); renderer.toneMappingExposure = EXPO + FLASH; renderer.render(scene, camera); }
   adaptQuality(dt);
 }
 function startLoop() { if (!active) { active = true; clock.getDelta(); loop(); } }

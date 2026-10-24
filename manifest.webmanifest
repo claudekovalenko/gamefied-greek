@@ -2,7 +2,7 @@
   "name": "Koine Quest: Learn Biblical Greek",
   "short_name": "Koine Quest",
   "description": "Learn Koine Greek as a game and read the New Testament in the original.",
-  "start_url": "./index.html#path",
+  "start_url": "./index.html#world",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",

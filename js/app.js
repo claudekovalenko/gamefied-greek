@@ -840,7 +840,7 @@
     const s = S(), lv = E.levelInfo(), st = s.stats;
     const days = Array.from({ length: 7 }, (_, i) => U.addDays(U.day(), i - 6));
     const maxD = Math.max(s.dailyGoal, ...days.map(d => s.history[d] || 0));
-    main.innerHTML = `<h1 class="vh">Profile</h1>${questsCard()}
+    main.innerHTML = `<h1 class="vh">Profile</h1>${KG.cloud ? KG.cloud.card() : ''}${questsCard()}
       <div class="card lvcard"><div class="lvbig">${lv.level}</div><div class="grow"><div class="muted">Level ${lv.level}</div><h3>${lv.title}</h3>
         <div class="xpbar"><i style="width:${(lv.cur / lv.need) * 100}%"></i></div><div class="muted small">${lv.cur} / ${lv.need} XP to level ${lv.level + 1} · ${s.xp} XP total</div></div></div>
       <div class="statgrid">
@@ -857,7 +857,6 @@
         <div><b>🚀 XP boost</b><p class="muted small">Double XP on your next 3 lessons${s.boost ? ` (${s.boost} left)` : ''}.</p><button class="btn primary" data-act="buy" data-arg="boost">80 🪙</button></div></div></div>
       <div class="card"><h3>🪄 Power-ups</h3><div class="pwcards">${Object.entries(E.POWERS).map(([k, p]) => `<div><b>${p[0]} ${p[1]} × ${E.powers()[k]}</b><span class="muted small">${p[2]}</span></div>`).join('')}</div>
         <p class="muted small">Earn them by finishing daily quests, keeping your day streak (every 3rd day 🛡, every 7th ⏳), reaching an 8× combo in a lesson (💡) and setting Arcade records. Use them from the bar above a question: 💡 in any choice question, 🛡 in guardian battles and against the shades, ⏳ in timed games.</p></div>
-      ${KG.cloud ? KG.cloud.card() : ''}
       ${wardrobeCard()}
       <div class="card"><h3>🏆 Trophy room <span class="muted small">${Object.keys(s.ach).length}/${KG.achievements.length}</span></h3>
         <div class="achs">${KG.achievements.map(a => `<div class="ach ${s.ach[a.id] ? 'got' : ''}" title="${esc(a.desc)}"><div class="ai">${a.icon}</div><b>${esc(a.name)}</b><span>${esc(a.desc)}</span></div>`).join('')}</div></div>

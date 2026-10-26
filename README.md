@@ -8,8 +8,8 @@ No account, no server, no build step. Your progress is saved on your device.
 
 ## The adventure
 
-Koine Quest is a third-person 3D journey in the spirit of *The Hobbit*. You are **Theophilus**, an apprentice
-**Koine wizard**, travelling through nine worlds from Alphabet Hollow to the Great Library. Every grammar rule you
+Koine Quest is a third-person 3D journey through the world of the New Testament. You are **Theophilus**, an apprentice
+**scribe**, travelling through nine worlds from Alphabet Hollow to the Great Library. Every grammar rule you
 master is a **spell**, and the goal is to read and translate the Greek New Testament freely.
 
 - **Nine separate worlds**, each its own valley with its own road, landmarks, creatures and weather:

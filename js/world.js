@@ -229,10 +229,21 @@ function along(t, side = 0, off = 0) {
   const nx = s.dz / s.l, nz = -s.dx / s.l;
   return { x: px + nx * side * off, z: pz + nz * side * off, px, pz, a: Math.atan2(s.dx, s.dz) };
 }
+// how far a point is from the world's water, so the rolling ground leaves banks and shores level
+function waterDist(x, z) {
+  const W = D.water; if (!W) return 1e9;
+  if (W.kind === 'river') return Math.max(0, Math.abs(z - W.f(x)) - W.w / 2);
+  return Math.max(0, Math.hypot(x - W.x, z - W.z) - W.r);
+}
 function rawHeight(x, z) {
-  const { d } = roadInfo(x, z);
+  const { d, t } = roadInfo(x, z);
   const paved = D.paved && Math.abs(x) < D.paved + 3 && z > -48;
-  let h = (D.baseY ? D.baseY(x, z) : 0) + D.relief(x, z, d) * smooth(2.6, 12, d) + (paved ? 0 : (vnoise(x * 0.4, z * 0.4) - 0.5) * 0.15);
+  // the ground rolls: the road rises and falls in long walkable swells, and hummocks grow beside it;
+  // both fade out near water (so ponds, rivers and lakes keep their shores) and on paving
+  const calm = paved ? 0 : smooth(4, 16, waterDist(x, z));
+  const swell = ((vnoise(t * 7 + WI * 3.1, 2.3) - 0.5) * 3.2 + (vnoise(t * 19 + WI, 7.7) - 0.5) * 1.2) * calm;
+  const humps = (vnoise(x * 0.1 + WI * 5, z * 0.1) - 0.5) * 3.2 * smooth(4, 13, d) * calm;
+  let h = (D.baseY ? D.baseY(x, z) : 0) + swell + humps + D.relief(x, z, d) * smooth(2.6, 12, d) + (paved ? 0 : (vnoise(x * 0.4, z * 0.4) - 0.5) * 0.15);
   if (D.carve) h += D.carve(x, z);
   const e = Math.max(Math.abs(x), Math.abs(z)), wall = smooth(R - 18, R - 2, e);
   return h + wall * wall * 28 + wall * fbm(x * 2, z * 2) * 6;

@@ -7,16 +7,22 @@ export function makeProps(ctx) {
   const cyl = (rt, rb, h, c, seg = 8, o) => mesh(new THREE.CylinderGeometry(rt, rb, h, seg), c, o);
   const a = {};
 
+  // the lowest ground under a footprint, so a building on a slope digs in rather than floats
+  const footLow = (x, z, r) => { let lo = 1e9; for (const [p, q] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [0.7, 0.7], [-0.7, 0.7], [0.7, -0.7], [-0.7, -0.7]]) lo = Math.min(lo, ground(x + p * r, z + q * r)); return lo; };
+  // a first-century Galilean house: whitewashed stone, a flat roof with a parapet,
+  // an outside stair up to the roof, a cloth awning over the door, a water jar
   a.hillHouse = (x, z, door = 0x2f6a3a, face = 0) => {
-    const g = G();
-    const hill = mesh(new THREE.SphereGeometry(4.2, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), 0x5f9a45);
-    hill.scale.set(1, 0.7, 1); g.add(hill);
-    const frame = mesh(new THREE.TorusGeometry(1.15, 0.18, 6, 20), 0x7a5a3a); frame.position.set(0, 1.1, 3.75); g.add(frame);
-    const d = mesh(new THREE.CircleGeometry(1.05, 20), door); d.position.set(0, 1.1, 3.8); g.add(d);
-    const knob = mesh(new THREE.SphereGeometry(0.1, 6, 6), 0xffd166, { metalness: 0.8, roughness: 0.3 }); knob.position.set(0, 1.1, 3.88); g.add(knob);
-    for (const s of [-1, 1]) { const w = mesh(new THREE.CircleGeometry(0.5, 14), 0xffe9a8, { emissive: 0x6a5020 }); w.position.set(s * 2.2, 1.3, 3.25); w.rotation.y = s * 0.45; g.add(w); }
-    const chim = cyl(0.3, 0.35, 1.4, 0x8a7a6a, 6); chim.position.set(1.4, 3, -0.8); g.add(chim);
-    g.rotation.y = face; put(g, x, z, -0.3); col(x, z, 4.2);
+    const g = G(), wall = 0xe9e1cf, stone = 0xcfc4ac;
+    const body = box(6, 3.2, 5, wall); body.position.y = 1.6; g.add(body);
+    const parapet = box(6.3, 0.35, 5.3, stone); parapet.position.y = 3.35; g.add(parapet);
+    for (let i = 0; i < 4; i++) { const beam = cyl(0.1, 0.1, 0.6, 0x7a5a3a, 6); beam.rotation.x = Math.PI / 2; beam.position.set(-2.2 + i * 1.45, 2.95, 2.75); g.add(beam); }
+    const d = box(1.05, 1.95, 0.14, door); d.position.set(-1.25, 0.98, 2.53); g.add(d);
+    const lintel = box(1.5, 0.22, 0.3, 0x7a5a3a); lintel.position.set(-1.25, 2.05, 2.55); g.add(lintel);
+    const awning = box(1.9, 0.06, 1.1, door); awning.position.set(-1.25, 2.35, 3.0); awning.rotation.x = 0.35; g.add(awning);
+    const win = box(0.75, 0.6, 0.12, 0xffe2a0, { emissive: 0x5a4020 }); win.position.set(1.45, 2.0, 2.53); g.add(win);
+    for (let k = 0; k < 5; k++) { const hgt = 0.32 * (1 + k * 2), st = box(1, hgt, 0.9, stone); st.position.set(3.5, hgt / 2, 1.6 - k * 0.85); g.add(st); }
+    const jar = cyl(0.28, 0.2, 0.75, 0xb06a3a, 10); jar.position.set(0.1, 0.38, 2.9); g.add(jar);
+    g.rotation.y = face; put(g, x, z, footLow(x, z, 3.4) - ground(x, z) - 0.1); col(x, z, 4.2);
     return g;
   };
   a.temple = (x, z, s = 1, face = 0, ruined = false, rand = Math.random) => {
@@ -34,7 +40,7 @@ export function makeProps(ctx) {
       const ped = cyl(4.2, 4.2, 9.6, 0xc9452b, 3); ped.rotation.z = Math.PI / 2; ped.scale.set(1, 1, 0.26); ped.position.y = 6.4; g.add(ped);
     } else for (let i = 0; i < 4; i++) { const b = cyl(0.4, 0.4, 1.4, stone); b.rotation.z = Math.PI / 2; b.position.set(-4 + rand() * 8, 1.1, -4 + rand() * 8); g.add(b); }
     g.scale.setScalar(s); g.rotation.y = face;
-    put(g, x, z, -0.2); col(x, z, 4.8 * s);
+    put(g, x, z, footLow(x, z, 4.4 * s) - ground(x, z) - 0.2); col(x, z, 4.8 * s);
     return g;
   };
   a.lamp = (x, z) => {

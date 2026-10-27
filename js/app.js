@@ -260,6 +260,7 @@
     return `<div class="ph"><button class="x" data-act="quit" aria-label="Quit">✕</button>
       <div class="prog"><i style="width:${pct}%"></i></div>
       ${P.mode === 'boss' ? `<div class="hearts">${heartsHTML()}</div>` : ''}
+      ${P.node && P.node.type !== 'boss' && P.node.type !== 'reading' ? `<button class="rulebtn" data-act="rule" title="See the rule again">📖</button>` : ''}
       <div class="combo ${P.combo >= 3 ? 'hot' : ''}">${P.combo >= 2 ? `🔥${P.combo}` : ''}</div></div>${powerBar()}`;
   }
   const heartsHTML = () => `${'❤'.repeat(Math.max(0, P.hearts))}<span class="lost">${'❤'.repeat(3 - Math.max(0, P.hearts))}</span>${P.shield ? '<span class="wshield">🛡</span>' : ''}`;
@@ -299,8 +300,32 @@
     refreshPowers();
   }
   // [bracketed] parts of a demo glow
-  const demoHTML = d => esc(d).replace(/\[(.+?)\]/g, '<b class="glow">$1</b>');
+  const demoHTML = d => {
+    // with Sound + English help, a Greek-only example carries the sound and meaning under each word
+    if (E.greekHelp() === 'english' && !/[A-Za-z]/.test(d)) return d.split(/(\s+)/).map(tok => {
+      const g = tok.replace(/[[\]]/g, '');
+      if (!isGreek(g)) return esc(tok);
+      const m = E.meaning(g);
+      return `<span class="ilw"><span>${esc(tok).replace(/\[(.+?)\]/g, '<b class="glow">$1</b>')}</span><small>${esc(U.translit(g))}</small>${m ? `<em>${esc(m)}</em>` : ''}</span>`;
+    }).join('');
+    return esc(d).replace(/\[(.+?)\]/g, '<b class="glow">$1</b>');
+  };
+  // the big idea in plain English, an English example and one thing to remember
+  const plainHTML = k => { const PL = KG.plain && KG.plain[k]; return PL ? `<div class="plain"><p>${PL.idea}</p><p class="pl-like">🇬🇧 ${PL.like}</p><p class="pl-tip">📌 ${PL.tip}</p></div>` : ''; };
+  // 📖 Rule: the lesson's explanation, any time during practice
+  function ruleSheet() {
+    const n = P && P.node; if (!n) return;
+    const T = n.type === 'grammar' && KG.teach[n.lesson];
+    let h = '';
+    if (n.type === 'grammar') {
+      h += plainHTML(n.lesson);
+      if (T) h += `<h3>${T.spell.icon} ${esc(T.spell.name)}</h3>${T.beats.map(b => `<div class="rule-beat"><div class="t-say">${b.say}</div>${b.demo ? `<div class="t-demo gk">${demoHTML(b.demo)}</div>` : ''}</div>`).join('')}`;
+      h += `<details class="rule-more"><summary>Full notes and charts</summary>${learnHTML(n)}</details>`;
+    } else h += learnHTML(n);
+    sheet(`<div class="sheet-k">📖 The rule</div><h2>${esc(n.title)}</h2>${h}<p class="muted small">Close this to carry on with your lesson.</p>`);
+  }
   function teachHTML(q) {
+    if (q.plain) return plainHTML(q.plain);
     let h = q.spell ? `<div class="spellnew"><span class="sp-ic">${q.spell.icon}</span><div><div class="sp-k">✨ New spell</div><b>${esc(q.spell.name)}</b><div class="small">${esc(q.spell.desc)}</div></div></div>` : '';
     if (q.say) h += `<div class="t-say">${q.say}</div>`;
     if (q.demo) h += `<div class="t-demo gk">${demoHTML(q.demo)}</div>`;
@@ -312,7 +337,7 @@
   }
   function renderTeach(q) {
     P.answered = true;
-    const lead = q.words ? 'New words' : q.letters ? 'New letters' : q.reading ? 'Read it first' : 'Your master teaches';
+    const lead = q.plain ? '💡 The big idea, in plain English' : q.words ? 'New words' : q.letters ? 'New letters' : q.reading ? 'Read it first' : 'Your master teaches';
     if (P.is3D) {
       main.innerHTML = `<div class="s3">${header()}<div class="s3teach"><div class="s3t-k">🧙 ${lead}</div>${teachHTML(q)}<button class="btn primary wide" data-act="next" id="nextbtn">Got it ▶</button></div></div>`;
       ST().teach(q);
@@ -485,10 +510,11 @@
     }
     const head = ok ? U.pick(['Excellent!', 'Correct!', 'Well done!', 'Καλῶς!', 'Nice!', 'Great!']) : q.guided ? 'Not yet. Read this, then try again' : (q.type === 'mc' ? 'Not quite' : 'Keep practicing');
     let detail = q.explain || '';
+    const ruleLink = !ok && P.node && P.node.type === 'grammar' ? ` <button class="sq-link" data-act="rule">📖 See the rule again</button>` : '';
     if (!ok && q.type === 'mc') detail = `Answer: <b class="${q.greekOpts ? 'gk' : ''}">${q.greekOpts ? esc(q.options[q.answer]) : q.options[q.answer]}</b>${detail ? '<br>' + detail : ''}`;
     const foot = $('#foot');
     foot.className = 'foot ' + (ok ? 'ok' : 'no');
-    foot.innerHTML = `<div class="fb"><div class="fb-h">${ok ? '✔' : '✘'} ${head}</div>${detail ? `<div class="fb-d">${detail}</div>` : ''}</div>
+    foot.innerHTML = `<div class="fb"><div class="fb-h">${ok ? '✔' : '✘'} ${head}</div>${detail || ruleLink ? `<div class="fb-d">${detail}${ruleLink}</div>` : ''}</div>
       <button class="btn ${ok ? 'good' : 'bad'} wide autonext" data-act="next" id="nextbtn">Continue</button>`;
     scheduleAuto(ok, (q.explain || '').length + (ok ? 0 : 60));
     if (P.is3D) foot.classList.add('s3foot');
@@ -940,7 +966,7 @@
     review: () => startReview('review'), mistakes: () => startReview('mistakes'), weak: () => startReview('weak'),
     arcade: k => startArcade(k), apick: (i, el) => arcadePick(i, el),
     quitArcade: () => { if (A) { clearInterval(A.timer); if (A.mini && A.is3D) ST().stopMini(); } A = null; go('arcade'); },
-    power: k => usePower(k), peek: () => peek(),
+    power: k => usePower(k), peek: () => peek(), rule: () => ruleSheet(),
     readVerse,
     equip: a => { const [sl, id] = a.split(':'); if (E.equip(sl, id)) { sfx('tap'); renderProfile(); } },
     buyItem: a => {

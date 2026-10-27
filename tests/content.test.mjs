@@ -14,7 +14,7 @@ const ctx = { console, localStorage: { getItem: k => store[k] ?? null, setItem: 
 ctx.window = ctx;
 vm.createContext(ctx);
 ctx.fetch = async url => { const t = readFileSync(path.join(root, url), 'utf8'); return { ok: true, json: async () => JSON.parse(t) }; };
-for (const f of ['js/data/alphabet.js', 'js/data/vocab.js', 'js/data/grammar.js', 'js/data/readings.js', 'js/data/curriculum.js', 'js/data/passages.js', 'js/data/teach.js', 'js/data/story.js', 'js/data/wardrobe.js', 'js/engine.js']) {
+for (const f of ['js/data/alphabet.js', 'js/data/vocab.js', 'js/data/grammar.js', 'js/data/readings.js', 'js/data/curriculum.js', 'js/data/passages.js', 'js/data/teach.js', 'js/data/plain.js', 'js/data/story.js', 'js/data/wardrobe.js', 'js/engine.js']) {
   vm.runInContext(readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f });
 }
 const { KG } = ctx, E = KG.engine;
@@ -264,4 +264,14 @@ test('spacing: learned spells fade and come back as review questions', () => {
   E.recordAnswer(Object.assign(E.spellQuestions(k, 1)[0], {}), true, true);
   assert.equal(E.state.spellSRS[k].box, 2);
   assert.equal(E.dueSpells().length, 0);
+});
+
+test('every grammar lesson starts with the big idea in plain English', () => {
+  for (const k of Object.keys(KG.teach)) {
+    const P = KG.plain[k];
+    assert.ok(P && P.idea && P.like && P.tip, `plain English for ${k}`);
+  }
+  E.reset();
+  const n = E.nodes.find(x => x.type === 'grammar');
+  assert.equal(E.planFor(n)[0].plain, n.lesson, 'the big idea comes first');
 });

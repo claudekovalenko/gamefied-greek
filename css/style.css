@@ -704,3 +704,16 @@ body.irisfx::after { content: ''; position: fixed; inset: 0; z-index: 60; pointe
 .pw.peek { background: #eaf2fb; border-color: #9ab8d8; }
 .sq-slots span.ghost { color: rgba(31,59,92,.35); border-color: #b8935a; }
 .sq-tip.center { text-align: center; }
+/* the big idea in plain English, and the 📖 rule sheet */
+.plain { background: var(--bg2); border-left: 4px solid var(--gold); border-radius: 12px; padding: 10px 14px; line-height: 1.5; }
+.plain p { margin: .3em 0 .5em; }
+.plain .pl-like { color: #2f5f8f; }
+.plain .pl-tip { font-weight: 700; }
+.rule-beat { border-top: 1px dashed var(--line); padding: 8px 0; }
+.rule-more summary { cursor: pointer; font-weight: 800; margin: 8px 0; }
+.rulebtn { flex: none; width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--line); background: var(--card); font-size: 1rem; cursor: pointer; }
+.s3 .rulebtn { background: rgba(250,244,228,.92); }
+/* interlinear examples: sound and meaning under each Greek word */
+.t-demo .ilw { display: inline-flex; flex-direction: column; align-items: center; vertical-align: top; margin: 0 .2em; }
+.t-demo .ilw small { font-family: var(--ui, Nunito, sans-serif); font-size: .45em; font-style: italic; color: var(--muted); }
+.t-demo .ilw em { font-family: var(--ui, Nunito, sans-serif); font-size: .45em; font-style: normal; font-weight: 700; color: #2f5f8f; }

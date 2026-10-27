@@ -65,6 +65,11 @@ Lessons move on automatically after each answer: quickly when you're right, more
 correction to read. Tap to skip ahead, or change the speed in Settings. Finished grammar lessons add a spell to
 your **Spellbook**, where its notes and charts can be studied any time.
 
+**Clear concepts**: every grammar lesson opens with *the big idea* in plain English, the same thing in English
+(*he / him* for the cases, *go / went* for the second aorist) and one thing to remember (`js/data/plain.js`).
+Greek examples carry the sound and meaning under each word. The **📖** button in any lesson, and the link under a
+wrong answer, opens the rule again with its charts.
+
 ## The Reading Room
 
 Open **any passage of the Greek New Testament**: the whole SBLGNT is built in, every word parsed. Tap a word for
@@ -181,6 +186,7 @@ npm run make-icons   # re-render icons/*.png from the SVGs (needs Playwright)
 | `js/engine.js` | saved state, XP/levels/streaks, spaced repetition, question generators |
 | `js/app.js` | screens, lesson player, arcade, effects |
 | `js/data/teach.js` | teaching beats and the spell for every grammar lesson |
+| `js/data/plain.js` | the big idea of each grammar lesson in plain English, with an English example and a tip |
 | `js/data/passages.js`, `story.js`, `wardrobe.js` | collectible scrolls, story beats, cosmetics |
 | `js/world.js` | the 3D world engine: terrain, portals, cutscenes, characters (Three.js, vendored in `js/vendor/` under the MIT license) |
 | `js/worlds.js`, `js/props.js` | the nine worlds' roads, ground shapes and landmarks |

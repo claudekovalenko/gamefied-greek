@@ -621,7 +621,7 @@ window.KG = window.KG || {};
       const put = (k, v) => { k = norm(k); if (k && v && !MEAN.has(k)) MEAN.set(k, v); };
       for (const v of KG.vocab) { put(v.g, v.en); put(v.lex.split(/[ ,]/)[0], v.en); }
       for (const R of Object.values(KG.readings)) for (const w of R.words) put(w.w, w.gloss);
-      for (const k of Object.keys(KG.grammar)) for (const c of cells(KG.grammar[k])) put(c.form, E.glossOf(c.lemma));
+      for (const k of Object.keys(KG.grammar)) for (const c of cells(KG.grammar[k])) put(c.form, c.form === c.lemma ? E.glossOf(c.lemma) : E.glossOf(c.lemma).replace(/^I /, '').replace(/, I /g, ', '));
       for (const [k, v] of [...MEAN]) put(U.bare(k), v);
     }
     const w = norm(greek);
@@ -661,6 +661,9 @@ window.KG = window.KG || {};
     const plan = [];
     if (node.type === 'grammar') {
       const T = KG.teach[node.lesson];
+      // first the big idea in plain English, then the master's beats
+      const PL = KG.plain && KG.plain[node.lesson];
+      if (first && PL) plan.push(teach({ plain: node.lesson, say: PL.idea }));
       if (first && T) T.beats.forEach((b, i) => {
         plan.push(teach({ say: b.say, demo: b.demo, spell: i === 0 ? T.spell : null }));
         // a question about the shown example ("Which word is doing the loving?") keeps the example in view, also on a retry;

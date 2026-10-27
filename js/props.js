@@ -20,7 +20,7 @@ export function makeProps(ctx) {
     const lintel = box(1.5, 0.22, 0.3, 0x7a5a3a); lintel.position.set(-1.25, 2.05, 2.55); g.add(lintel);
     const awning = box(1.9, 0.06, 1.1, door); awning.position.set(-1.25, 2.35, 3.0); awning.rotation.x = 0.35; g.add(awning);
     const win = box(0.75, 0.6, 0.12, 0xffe2a0, { emissive: 0x5a4020 }); win.position.set(1.45, 2.0, 2.53); g.add(win);
-    for (let k = 0; k < 5; k++) { const hgt = 0.32 * (1 + k * 2), st = box(1, hgt, 0.9, stone); st.position.set(3.5, hgt / 2, 1.6 - k * 0.85); g.add(st); }
+    for (let k = 0; k < 8; k++) { const top = 0.4 * (k + 1), st = box(1, top + 2, 0.56, stone); st.position.set(3.5, top / 2 - 1, 2.15 - k * 0.55); g.add(st); }
     const jar = cyl(0.28, 0.2, 0.75, 0xb06a3a, 10); jar.position.set(0.1, 0.38, 2.9); g.add(jar);
     g.rotation.y = face; put(g, x, z, footLow(x, z, 3.4) - ground(x, z) - 0.1); col(x, z, 4.2);
     return g;

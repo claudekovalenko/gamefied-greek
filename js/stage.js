@@ -163,7 +163,7 @@ export function createStage(ctx) {
     return lines;
   }
   // draws text centered and shrinks the font until it fits the box
-  function textCanvas(text, { W = 512, H = 256, greek = false, maxSize = 70, minSize = 18, color = '#2a1d0c', bg = null, weight = 800, pad = 26, border = null, glass = false }) {
+  function textCanvas(text, { W = 512, H = 256, greek = false, maxSize = 70, minSize = 18, color = '#2a1d0c', bg = null, weight = 800, pad = 26, border = null, glass = false, sub = '' }) {
     const c = document.createElement('canvas'); c.width = W; c.height = H; const x = c.getContext('2d');
     if (glass) {
       // a soft rounded plaque of smoked glass with a thin gold rim, so the word reads against any sky
@@ -188,26 +188,35 @@ export function createStage(ctx) {
       x.globalAlpha = 0.55; x.lineWidth = Math.max(2, b / 3); x.strokeRect(b * 2.6, b * 2.6, W - 5.2 * b, H - 5.2 * b); x.globalAlpha = 1;
       x.fillStyle = border; for (const [cx, cy] of [[b * 2.6, b * 2.6], [W - b * 2.6, b * 2.6], [b * 2.6, H - b * 2.6], [W - b * 2.6, H - b * 2.6]]) { x.beginPath(); x.arc(cx, cy, b * 0.9, 0, 7); x.fill(); }
     }
-    let size = maxSize, lines;
+    // a subtitle line (how the Greek sounds) takes the lower part of the face
+    const SH = sub ? H * 0.32 : 0, MH = H - SH;
+    let size = Math.round(maxSize * (sub ? 0.8 : 1)), lines;
     for (; size >= minSize; size -= 2) {
       x.font = `${greek ? 400 : weight} ${size}px ${greek ? GK : UI}`;
       lines = wrap(x, text, W - pad * 2);
-      if (lines.length * size * 1.18 <= H - pad * 2 && lines.every(l => x.measureText(l).width <= W - pad * 2)) break;
+      if (lines.length * size * 1.18 <= MH - pad * (sub ? 1.2 : 2) && lines.every(l => x.measureText(l).width <= W - pad * 2)) break;
+    }
+    if (sub) {
+      let ss = Math.round(SH * 0.72); x.font = `italic 700 ${ss}px ${UI}`;
+      while (ss > 12 && x.measureText(sub).width > W - pad * 2) { ss -= 2; x.font = `italic 700 ${ss}px ${UI}`; }
+      x.fillStyle = 'rgba(90,60,20,.85)'; x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.fillText(sub, W / 2, MH + SH * 0.38 - pad * 0.2);
     }
     x.fillStyle = color; x.textAlign = 'center'; x.textBaseline = 'middle';
     if (glass) { x.shadowColor = 'rgba(0,0,0,.6)'; x.shadowBlur = size * 0.12; x.shadowOffsetY = size * 0.04; }
-    const lh = size * 1.18, y0 = H / 2 - (lines.length - 1) * lh / 2;
+    x.font = `${greek ? 400 : weight} ${size}px ${greek ? GK : UI}`; x.fillStyle = color;
+    const lh = size * 1.18, y0 = (sub ? MH / 2 + pad * 0.3 : H / 2) - (lines.length - 1) * lh / 2;
     lines.forEach((l, i) => x.fillText(l, W / 2, y0 + i * lh + 2));
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
     return t;
   }
   // a parchment-faced stone slab
   const stoneMat = M(0xd8ccb0, { flatShading: false, roughness: 0.9 });
-  function slab(text, w, h, { greek = false, num = null, face = '#f3e7c8', color = '#2a1d0c' } = {}) {
+  function slab(text, w, h, { greek = false, num = null, face = '#f3e7c8', color = '#2a1d0c', sub = '' } = {}) {
     const g = new THREE.Group();
     // the canvas keeps the slab's shape, so wide slabs don't stretch their text
     const ratio = w / h, H = Math.max(96, Math.round(512 / ratio)), W = Math.min(2048, Math.max(512, Math.round(H * ratio)));
-    const tex = textCanvas(text, { W, H, greek, color, bg: face, maxSize: Math.round(H * (greek ? 0.62 : 0.42)), minSize: 16, border: '#b8935a', pad: Math.min(26, Math.round(H * 0.13)) });
+    const tex = textCanvas(text, { W, H, greek, color, bg: face, maxSize: Math.round(H * (greek ? 0.62 : 0.42)), minSize: 16, border: '#b8935a', pad: Math.min(26, Math.round(H * 0.13)), sub });
     const front = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.8, emissive: 0x000000 });
     const box = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.28), [stoneMat, stoneMat, stoneMat, stoneMat, front, stoneMat]);
     box.castShadow = true;
@@ -374,16 +383,18 @@ export function createStage(ctx) {
       const big = new THREE.Mesh(new THREE.PlaneGeometry(bigW, bigH), new THREE.MeshBasicMaterial({ map: textCanvas(txt, { W: 1024, H: BH, greek: true, maxSize: Math.round(BH * (txt.length <= 2 ? 1 : 0.78)), minSize: 40, color: '#fff7e0', glass: true, pad: Math.round(BH * (txt.length <= 2 ? 0.03 : 0.1)) }), transparent: true, depthWrite: false }));
       const bg = new THREE.Group(); bg.add(big); bg.userData = { base: new THREE.Vector3() };
       place(bg, 0, portrait ? hh * 0.2 : hh * 0.18); introAnim(bg, 0.05);
-      if (S.h && S.h.help) { const c = caption(U.translit(strip(q.big)), bigW * 0.7, bigH * 0.22); c.position.set(0, -bigH * 0.5, 0.02); bg.add(c); }
+      if (S.h && S.h.help && /[Ͱ-Ͽἀ-῿]/.test(txt)) { const c = caption(U.translit(strip(q.big)), bigW * 0.7, bigH * 0.22); c.position.set(0, -bigH * 0.5, 0.02); bg.add(c); }
       S.big = bg;
     }
     const n = q.options.length;
     const cols = portrait ? 2 : Math.min(4, n), rows = Math.ceil(n / cols);
+    // Greek answers carry their pronunciation underneath when Greek help is on
+    const sound = !!(S.h && S.h.help && q.greekOpts);
     const gap = hw * 0.04, tw = (hw * 1.92 - gap * (cols - 1)) / cols, th = portrait ? hh * 0.22 : hh * 0.3;
     const top = portrait ? -hh * 0.12 : -hh * 0.3;
     q.options.forEach((o, i) => {
       const r = Math.floor(i / cols), c = i % cols;
-      const s = slab(q.greekOpts ? o : strip(o), tw, th, { greek: !!q.greekOpts, num: i + 1 });
+      const s = slab(q.greekOpts ? o : strip(o), tw, th, { greek: !!q.greekOpts, num: i + 1, sub: sound ? U.translit(strip(o)) : '' });
       const x = -hw * 0.96 + tw / 2 + c * (tw + gap), y = top - r * (th + gap);
       place(s, x, y); introAnim(s, 0.08 + i * 0.06);
       s.userData.pick = { type: 'opt', i };
@@ -398,7 +409,7 @@ export function createStage(ctx) {
     const L = U.shuffle(q.pairs.map((p, i) => ({ t: p[0], i }))), R = U.shuffle(q.pairs.map((p, i) => ({ t: p[1], i })));
     S.match = { sel: null, done: 0, miss: 0, n };
     [L, R].forEach((col, side) => col.forEach((it, k) => {
-      const s = slab(it.t, tw, th, { greek: side === 0 && q.greekLeft, face: side ? '#f3e7c8' : '#e9f0f8' });
+      const s = slab(it.t, tw, th, { greek: side === 0 && q.greekLeft, face: side ? '#f3e7c8' : '#e9f0f8', sub: side === 0 && q.greekLeft && S.h && S.h.help ? U.translit(it.t) : '' });
       place(s, side ? hw * 0.5 : -hw * 0.5, hh * 0.56 - th / 2 - k * (th + gap));
       introAnim(s, k * 0.05 + side * 0.1);
       s.userData.pick = { type: 'mt', side, i: it.i };
@@ -628,7 +639,7 @@ export function createStage(ctx) {
     MG.gold = gold;
     words.forEach((g, i) => {
       const st = slab(g, tw, th, { greek: true, face: gold ? '#ffe08a' : '#f3e7c8' }); // a golden round gilds every stone, so the colour never points at the answer
-      if (!MG.q.arcade) { const c = caption(U.translit(g), tw * 0.8, th * 0.4); c.position.set(0, -th * 0.68, 0.1); st.add(c); }
+      if (KG.engine.greekHelp() === 'full' || (KG.engine.greekHelp() === 'some' && !MG.q.arcade)) { const c = caption(U.translit(g), tw * 0.8, th * 0.4); c.position.set(0, -th * 0.68, 0.1); st.add(c); }
       const col = i % 2, x = (col ? 1 : -1) * hw * 0.48 + (Math.random() - 0.5) * hw * 0.1;
       place(st, x, hh * 0.62 + i * hh * 0.16);
       st.userData.pick = { type: 'mini', ok: g === tgt.g };

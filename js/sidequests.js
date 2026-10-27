@@ -20,7 +20,8 @@ const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { c
 //   person(look) → a character, animatePerson(obj, speed, dt), SPK, DUST (fx sparks), hud (element),
 //   pool(n) → [{ g, en, key }] words to review, due first;  others(word, n) → wrong English glosses,
 //   record(word, ok), reward(xp, coins, questId), sfx(kind), speak(greek), toast(html, cls),
-//   dialog(name, html, buttons), colliders (array of {x, z, r}), free(x, z) → true if a spot is open ground
+//   dialog(name, html, buttons), colliders (array of {x, z, r}), free(x, z) → true if a spot is open ground,
+//   helpSound(greek) → how the word sounds ('' to show only the Greek; optional)
 // }
 export function makeSideQuests(ctx) {
   const { THREE } = ctx;
@@ -38,15 +39,18 @@ export function makeSideQuests(ctx) {
   // the rune circle's letters: bare glowing glyphs over the stones
   const runeGlyph = ch => ctx.textSprite(ch, { size: 64, bg: null, color: '#fff6d8', font: `700 64px ${ctx.GREEK}`, scale: 0.012 });
   // a word to find out in the world: dark ink on a bright parchment tag with a gold rim, readable from across a field
-  function glowWord(text) {
-    const size = 72, font = `700 ${size}px ${ctx.GREEK}`, c = document.createElement('canvas'), x = c.getContext('2d');
-    x.font = font;
-    const w = Math.ceil(x.measureText(text).width + size * 1.1), h = Math.ceil(size * 1.65), r = h / 2.4;
+  const sound = g => (ctx.helpSound ? ctx.helpSound(g) : '');
+  function glowWord(text, withSound = false) {
+    const sub = withSound ? sound(text) : '';
+    const size = 72, font = `700 ${size}px ${ctx.GREEK}`, subFont = `italic 700 ${size * 0.5}px Nunito, sans-serif`, c = document.createElement('canvas'), x = c.getContext('2d');
+    x.font = font; const tw = x.measureText(text).width; x.font = subFont; const sw = sub ? x.measureText(sub).width : 0;
+    const w = Math.ceil(Math.max(tw, sw) + size * 1.1), h = Math.ceil(size * (sub ? 2.2 : 1.65)), r = Math.min(h, size * 1.65) / 2.4;
     c.width = w; c.height = h; x.font = font;
     const pill = i => { x.beginPath(); x.moveTo(r, i); x.lineTo(w - r, i); x.arc(w - r, h / 2, h / 2 - i, -Math.PI / 2, Math.PI / 2); x.lineTo(r, h - i); x.arc(r, h / 2, h / 2 - i, Math.PI / 2, Math.PI * 1.5); x.closePath(); };
     pill(0); x.fillStyle = '#d8a43a'; x.fill();
     pill(6); x.fillStyle = '#fff6dc'; x.fill();
-    x.fillStyle = '#2a1d0c'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(text, w / 2, h / 2 + 3);
+    x.fillStyle = '#2a1d0c'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(text, w / 2, sub ? size * 0.78 : h / 2 + 3);
+    if (sub) { x.font = subFont; x.fillStyle = '#7a5a2a'; x.fillText(sub, w / 2, size * 1.62); }
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
     const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthWrite: false, fog: false }));
     sp.scale.set(w * 0.0125, h * 0.0125, 1); sp.renderOrder = 10;
@@ -120,7 +124,7 @@ export function makeSideQuests(ctx) {
     r.opts = opts; r.ans = opts.indexOf(w.en);
     ctx.speak(w.g);
     show(`<div class="sq-h">🎣 A bite! <span class="sq-n">${r.i + 1}/${r.list.length}</span></div>
-      <div class="sq-word gk">${esc(w.g)}</div><div class="sq-timer"><i id="sqtime"></i></div>
+      <div class="sq-word gk">${esc(w.g)}</div>${sound(w.g) ? `<div class="translit">${esc(sound(w.g))}</div>` : ''}<div class="sq-timer"><i id="sqtime"></i></div>
       <div class="sq-opts">${opts.map((o, k) => `<button class="sq-opt" data-sq="fish" data-k="${k}"><span class="k">${k + 1}</span>${esc(o)}</button>`).join('')}</div>`);
   }
   function reel(k) {
@@ -208,7 +212,7 @@ export function makeSideQuests(ctx) {
     const r = run, w = r.list[r.i];
     const slots = r.b.split('').map((c, i) => `<span class="${i < r.at ? 'on' : ''}">${i < r.at ? c : '_'}</span>`).join('');
     show(`<div class="sq-h">🔤 Rune Circle <span class="sq-n">${r.i + 1}/${r.list.length}</span><button class="sq-x" data-sq="quit">✕</button></div>
-      <div class="sq-tip">Walk onto the stones to spell the Greek for <b>“${esc(w.en)}”</b></div><div class="sq-slots gk">${slots}</div>
+      <div class="sq-tip">Walk onto the stones to spell the Greek for <b>“${esc(w.en)}”</b></div><div class="sq-slots gk">${slots}</div>${sound(w.g) ? `<div class="translit">it sounds like <b>${esc(sound(w.g))}</b></div>` : ''}
       ${msg ? `<div class="sq-fb">${msg}</div>` : `<div class="sq-tip small">Same letter twice? Hop on the stone again. <button class="sq-link" data-sq="hint">💡 Show me the next one</button></div>`}`);
   }
   function stepTile(i) {
@@ -300,7 +304,7 @@ export function makeSideQuests(ctx) {
         ox = e.x + Math.cos(a) * d; oz = e.z + Math.sin(a) * d;
         if (ctx.free(ox, oz) && r.orbs.every(o => Math.hypot(o.x - ox, o.z - oz) > 5)) break;
       }
-      const s = glowWord(wd.g); s.scale.multiplyScalar(1.3);
+      const s = glowWord(wd.g, true); s.scale.multiplyScalar(1.3);
       s.position.set(ox, ctx.groundAt(ox, oz) + 1.4, oz); ctx.add(s);
       r.orbs.push({ s, w: wd, x: ox, z: oz, ok: wd.g === w.g, ph: k });
     });
@@ -351,7 +355,7 @@ export function makeSideQuests(ctx) {
     run = { kind: 'quiz', w, opts, ans: opts.indexOf(w.en), done, title, answered: false };
     ctx.speak(w.g);
     show(`<div class="sq-h">${esc(title)}<button class="sq-x" data-sq="quit">✕</button></div><div class="sq-tip">The gate whispers a word. What does it mean?</div>
-      <div class="sq-word gk">${esc(w.g)}</div>
+      <div class="sq-word gk">${esc(w.g)}</div>${sound(w.g) ? `<div class="translit">${esc(sound(w.g))}</div>` : ''}
       <div class="sq-opts">${opts.map((o, k) => `<button class="sq-opt" data-sq="qz" data-k="${k}"><span class="k">${k + 1}</span>${esc(o)}</button>`).join('')}</div>`);
   }
   function quizAnswer(k) {
@@ -426,7 +430,7 @@ export function makeSideQuests(ctx) {
     e.w = w; e.ans = opts.findIndex(o => o.g === w.g); e.opts = opts;
     opts.forEach((o, i) => {
       if (e.tags[i]) e.g.remove(e.tags[i]);
-      const s = glowWord(o.g); if (s.scale.x > 2.35) s.scale.multiplyScalar(2.35 / s.scale.x); // a long word shrinks to fit its arch
+      const s = glowWord(o.g, true); if (s.scale.x > 2.35) s.scale.multiplyScalar(2.35 / s.scale.x); // a long word shrinks to fit its arch
       s.position.set((i - 1) * 2.6, 3.75, 0); e.g.add(s); e.tags[i] = s;
     });
     if (e.sign) e.g.remove(e.sign);

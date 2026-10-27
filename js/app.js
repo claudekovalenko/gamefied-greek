@@ -360,7 +360,7 @@
     main.innerHTML = `<div class="s3">${header()}<div class="s3tools">${tools}</div><div class="foot s3foot" id="foot">${foot}</div></div>`;
     ST().combo(P.combo);
     ST().ask(q, {
-      help: showSound(q), // lessons show how a Greek word sounds; bosses, reviews and the alphabet don't
+      help: showSound(q), // how the Greek sounds, under the word and the Greek answers (Profile → Greek help)
       pick: i => { if (P.answered) return; const ok = i === q.answer; ST().reveal(ok, i, q.answer); answer(ok, q); },
       matchDone: miss => answer(miss === 0, Object.assign({}, q, { explain: miss ? `${miss} mismatch${miss > 1 ? 'es' : ''}. Keep at it!` : 'All pairs matched perfectly!' })),
       orderChange: line => { const b = $('#checkbtn'); if (b) b.disabled = !line.length; },
@@ -368,7 +368,9 @@
     if (q.type === 'mc' && q.speak && q.big && S().settings.speech) speak(q.speak);
   }
   // the pronunciation line under a Greek word: only where it can't give the answer away
-  const showSound = q => P.mode === 'lesson' && P.node && ['vocab', 'grammar', 'reading'].includes(P.node.type) && !!q.big && /[\u0370-\u03ff\u1f00-\u1fff]/.test(q.big) && !/sound|read|letter|pronounce/i.test(q.prompt);
+  const isGreek = s => /[Ͱ-Ͽἀ-῿]/.test(String(s || ''));
+  const showSound = q => !!P && E.soundHelp(q, P.mode, P.node) && (isGreek(q.big) || q.greekOpts || q.greekLeft);
+  const tl = s => `<small class="tl">${esc(U.translit(String(s).replace(/<[^>]+>/g, '')))}</small>`;
   function renderQ() {
     const q = P.qs[P.i]; P.answered = false; P.q = q;
     if (q.type === 'teach') return renderTeach(q);
@@ -381,14 +383,14 @@
     let body = '';
     if (q.type === 'mc') {
       body = `<div class="prompt">${q.prompt}</div>
-        ${q.big ? `<div class="bigword"><span class="gk">${esc(q.big)}</span>${q.speak ? `<button class="say" data-act="say" data-arg="${esc(q.speak)}" aria-label="Listen">🔊</button>` : ''}</div>${showSound(q) ? `<div class="translit">${esc(U.translit(q.big))}</div>` : ''}` : ''}
+        ${q.big ? `<div class="bigword"><span class="gk">${esc(q.big)}</span>${q.speak ? `<button class="say" data-act="say" data-arg="${esc(q.speak)}" aria-label="Listen">🔊</button>` : ''}</div>${showSound(q) && isGreek(q.big) ? `<div class="translit">${esc(U.translit(q.big))}</div>` : ''}` : ''}
         ${q.sub ? `<div class="subword gk">${esc(q.sub)}</div>` : ''}
-        <div class="opts">${q.options.map((o, i) => `<button class="opt ${q.greekOpts ? 'gk' : ''}" data-act="pick" data-arg="${i}"><span class="k">${i + 1}</span>${q.greekOpts ? esc(o) : o}</button>`).join('')}</div>`;
+        <div class="opts">${q.options.map((o, i) => `<button class="opt ${q.greekOpts ? 'gk' : ''}" data-act="pick" data-arg="${i}"><span class="k">${i + 1}</span>${q.greekOpts ? `<span>${esc(o)}${showSound(q) ? tl(o) : ''}</span>` : o}</button>`).join('')}</div>`;
     } else if (q.type === 'match') {
       const L = shuffle(q.pairs.map((p, i) => ({ t: p[0], i }))), R = shuffle(q.pairs.map((p, i) => ({ t: p[1], i })));
       P.match = { sel: null, done: 0, miss: 0 };
       body = `<div class="prompt">${q.prompt}</div><div class="match">
-        <div class="col">${L.map(x => `<button class="mt ${q.greekLeft ? 'gk' : ''}" data-act="mt" data-arg="L${x.i}">${esc(x.t)}</button>`).join('')}</div>
+        <div class="col">${L.map(x => `<button class="mt ${q.greekLeft ? 'gk' : ''}" data-act="mt" data-arg="L${x.i}">${esc(x.t)}${q.greekLeft && showSound(q) ? tl(x.t) : ''}</button>`).join('')}</div>
         <div class="col">${R.map(x => `<button class="mt" data-act="mt" data-arg="R${x.i}">${esc(x.t)}</button>`).join('')}</div></div>`;
     } else if (q.type === 'order') {
       const R = KG.readings[q.reading]; readerReading = R;
@@ -688,12 +690,12 @@
     if (A.is3D) {
       main.innerHTML = `<div class="s3">${arcadeHead()}</div>`;
       A.lock = false;
-      ST().ask(q, { pick: i => arcadePick(i) });
+      ST().ask(q, { help: E.soundHelp(q, 'arcade'), pick: i => arcadePick(i) });
       return tickArcade();
     }
     main.innerHTML = `<div class="player arcade">${arcadeHead()}
-      <div class="qbody"><div class="prompt">${q.prompt}</div><div class="bigword"><span class="gk">${esc(q.big)}</span></div>
-      <div class="opts">${q.options.map((o, i) => `<button class="opt" data-act="apick" data-arg="${i}"><span class="k">${i + 1}</span>${esc(o)}</button>`).join('')}</div></div></div>`;
+      <div class="qbody"><div class="prompt">${q.prompt}</div><div class="bigword"><span class="gk">${esc(q.big)}</span></div>${E.soundHelp(q, 'arcade') && isGreek(q.big) ? `<div class="translit">${esc(U.translit(q.big))}</div>` : ''}
+      <div class="opts">${q.options.map((o, i) => `<button class="opt" data-act="apick" data-arg="${i}"><span class="k">${i + 1}</span><span>${esc(o)}${q.greekOpts && E.soundHelp(q, 'arcade') ? tl(o) : ''}</span></button>`).join('')}</div></div></div>`;
     tickArcade();
   }
   function arcadePick(i, el) {
@@ -835,6 +837,7 @@
         <label>Daily goal <select id="goalsel">${[20, 50, 100, 200].map(g => `<option value="${g}" ${g === s.dailyGoal ? 'selected' : ''}>${g} XP · ${{ 20: 'Casual', 50: 'Regular', 100: 'Serious', 200: 'Intense' }[g]}</option>`).join('')}</select></label>
         <label class="tg"><input type="checkbox" id="setsound" ${s.settings.sound ? 'checked' : ''}><span>Sound effects</span></label>
         <label class="tg"><input type="checkbox" id="setamb" ${s.settings.ambient !== false ? 'checked' : ''}><span>World sounds <span class="muted small">(birds, wind, water…)</span></span></label>
+        <label>Greek help <select id="helpsel">${[['full', 'Full: pronunciation under every Greek word'], ['some', 'Some: only on the main word in lessons'], ['off', 'Off: just the Greek']].map(([k, t]) => `<option value="${k}" ${E.greekHelp() === k ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
         <label class="tg"><input type="checkbox" id="setspeech" ${s.settings.speech ? 'checked' : ''}><span>Read Greek aloud <span class="muted small">(uses your device's Greek voice, modern pronunciation)</span></span></label>
         <label>After each answer <select id="autosel">${[['fast', 'Move on quickly'], ['normal', 'Move on automatically'], ['relaxed', 'Move on slowly (more time to read)'], ['off', 'Wait for me to tap Continue']].map(([k, t]) => `<option value="${k}" ${(s.settings.autoAdvance || 'normal') === k ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
         <label>Graphics <select id="gfxsel"><option value="high" ${(s.settings.gfx || 'high') === 'high' ? 'selected' : ''}>High (grass, shadows, effects)</option><option value="low" ${s.settings.gfx === 'low' ? 'selected' : ''}>Low (smoother on older phones)</option></select></label>
@@ -846,6 +849,7 @@
         <input type="file" id="importfile" accept="application/json" hidden></div>
       <p class="muted small center">Greek text: SBL Greek New Testament (SBLGNT). Progress is saved on this device only. Export it to move between devices.</p>`;
     $('#goalsel').onchange = e => { s.dailyGoal = +e.target.value; E.save(); renderTop(); };
+    $('#helpsel').onchange = e => { s.settings.greekHelp = e.target.value; E.save(); };
     $('#setsound').onchange = e => { s.settings.sound = e.target.checked; E.save(); if (!e.target.checked && KG.audio) KG.audio.stopAmbient(); };
     $('#setamb').onchange = e => { s.settings.ambient = e.target.checked; E.save(); if (!e.target.checked && KG.audio) KG.audio.stopAmbient(); };
     $('#setspeech').onchange = e => { s.settings.speech = e.target.checked; E.save(); if (e.target.checked) speak('Ἐν ἀρχῇ ἦν ὁ λόγος'); };

@@ -91,8 +91,10 @@ the wooden bridge, coins, letters that climb the scale, portals, a shade's hum a
 shattering tablets, the rain, march, anvil and clock of the mini-games, and combos that rise in pitch. Each world
 has a quiet background of its own (birds, wind, water, crickets, embers), which can be turned off.
 
-**Help with the Greek**: in vocabulary, grammar and reading lessons a Greek word shows how it sounds (ἀρχή →
-archē), and the forms in Declension Defense and Parsing Forge show their dictionary form and meaning.
+**Help with the Greek** (Profile → Settings → Greek help; Full by default): every Greek word shows how it sounds
+(ἀρχή → archē): the main word, Greek answers, matching stones, Word Rain, shade battles and the side quests the
+villagers give you (fishing, word gates, Rune Circle, Courier, Word Arches). It never shows where it would give the
+answer away (alphabet and letter-sound questions). The forms in Declension Defense and Parsing Forge show their dictionary form and meaning.
 
 Settings include auto-advance speed, **Graphics: High/Low** (Low drops grass, shadows and outlines and thins the
 trees; on any setting the resolution adapts when frames run slow), 2D lessons instead of 3D, sound,

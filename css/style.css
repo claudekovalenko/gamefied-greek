@@ -692,3 +692,7 @@ body.irisfx::after { content: ''; position: fixed; inset: 0; z-index: 60; pointe
 /* side-quest panels: the quiet button matches the parchment instead of plain white */
 .sq-panel .btn.ghost { background: #f3e3c0; border: 2px solid #b8935a; color: #5a3a1a; box-shadow: 0 2px 0 rgba(120,80,30,.25); }
 .translit { text-align: center; color: var(--muted); font-style: italic; margin: -6px 0 8px; }
+/* Greek help: the pronunciation under a Greek answer */
+.tl { display: block; font-family: var(--ui, Nunito, sans-serif); font-size: .72em; font-style: italic; font-weight: 700; color: var(--muted); margin-top: 2px; }
+.opt .tl, .wbt-opt .tl { font-size: .62em; }
+.sq-word + .translit, .wbt-big + .translit { margin-top: -4px; }

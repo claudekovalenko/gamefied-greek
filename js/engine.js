@@ -584,6 +584,19 @@ window.KG = window.KG || {};
     return null;
   }
   E.miniFor = miniFor;
+
+  // Greek help (Profile → Settings): how much reading support to show under Greek words.
+  // full: everywhere · some: on the main word in lessons · off: none.
+  E.greekHelp = () => (E.state.settings.greekHelp || 'full');
+  const HELP_SKIP = /sound|read|letter|pronounc|capital|lowercase|called|transliterat/i;
+  // whether a question may show pronunciations; never where they would give the answer away
+  E.soundHelp = (q, where, node) => {
+    const lv = E.greekHelp();
+    if (lv === 'off' || !q || q.type !== 'mc' && q.type !== 'match') return false;
+    if (node && ['alpha', 'marks', 'readwords'].includes(node.type)) return false;
+    if (HELP_SKIP.test(String(q.prompt || '').replace(/<[^>]+>/g, ''))) return false;
+    return lv === 'full' || where === 'lesson';
+  };
   // the meaning of a dictionary form, for helper captions under Greek forms
   const EXTRA_GLOSS = { 'λύω': 'I loose, untie', 'γραφή': 'writing, Scripture', 'ὅς': 'who, which', 'εἷς': 'one' };
   E.glossOf = lemma => {

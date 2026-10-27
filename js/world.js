@@ -1282,11 +1282,11 @@ function placeAt(where) {
 function travel(to, where) {
   if (traveling || to === WI) return;
   traveling = true; closeDialog();
-  root.classList.add('portalfx'); KG.app.sfx('level');
+  root.classList.add('portalfx'); snd('portal');
   setTimeout(() => {
     buildWorld(to); placeAt(where); snapCamera();
     const w = ws(); w.zone = to; savePos();
-    showBanner(to); traveling = false;
+    showBanner(to); traveling = false; if (KG.audio) KG.audio.ambient(to);
     setTimeout(arrive, 500);
   }, 320);
   setTimeout(() => root.classList.remove('portalfx'), 1000);
@@ -1320,6 +1320,7 @@ function nextShot() {
   $('wcine').innerHTML = `<button class="wc-skip" id="wcskip">Skip ⏭</button>${s.text ? `<div class="wc-box"><div class="wc-who">${s.who || ''}</div><div class="wc-text">${s.text}</div><div class="wc-tap">▸</div></div>` : ''}`;
   $('wcine').classList.add('on');
   $('wcskip').onclick = e => { e.stopPropagation(); endCutscene(); };
+  if (s.text && s.who) snd('talk');
   if (s.speak && E.state.settings.speech) KG.app.speak(s.speak);
 }
 function endCutscene() {
@@ -1382,7 +1383,7 @@ function guardianShots(i) {
       do: () => { const b = go.userData.body; let k = 0; anims.push(dt => { k = Math.min(1, k + dt); b.rotation.x = k * 0.5; b.position.y = -k * 0.6; return k < 1; }); } },
     { cam: orbitShot(gu.x, gu.z, 13, 6, gate.rotation.y + 2.2, gate.rotation.y + 1.2), look: () => portalPos, who: last ? '🏛 The Great Library' : '✨ The gate opens',
       text: last ? 'The great doors of the Library swing open. Every scroll inside waits for a reader.' : `A portal blazes to life in the gate. Step through it to reach <b>${esc(ZONES[i + 1].name)}</b>.`,
-      do: () => { refreshMarkers(); burst(portalPos, 0xffd166); KG.app.sfx('level'); } },
+      do: () => { refreshMarkers(); burst(portalPos, 0xffd166); snd('gateOpen'); } },
     { cam: behindPlayer(), look: () => V(player.position.x, player.position.y + 1.4, player.position.z), dur: 1.2, cut: false },
   ];
 }
@@ -1390,7 +1391,7 @@ function guardianShots(i) {
 // dialogue
 let dlgOpen = false;
 function dialog(name, html, buttons) {
-  dlgOpen = true;
+  dlgOpen = true; snd('talk');
   const d = $('wdlg');
   d.innerHTML = `<div class="wd-box"><div class="wd-name">${name}</div><div class="wd-text">${html}</div><div class="wd-btns">${buttons.map((b, i) => `<button class="btn ${b.cls || 'ghost'}" data-wb="${i}">${b.label}</button>`).join('')}</div></div>`;
   d.classList.add('on');
@@ -1472,7 +1473,7 @@ function shadeWords(w) {
 function startBattle(w) {
   battle = { w, words: shadeWords(w), i: 0, hp: 0, done: false };
   battle.hp = battle.words.length;
-  KG.app.sfx('bad'); S_SHAKE = 0.25;
+  snd('shade'); S_SHAKE = 0.25;
   // a rune circle glows on the ground around you and the foe
   const fp = w.obj.position, pp = player.position;
   ARENA.show({ x: (fp.x + pp.x) / 2, y: Math.min(fp.y, pp.y), z: (fp.z + pp.z) / 2 }, Math.max(3, Math.hypot(fp.x - pp.x, fp.z - pp.z) / 2 + 1.6), w.raider ? 0xff6a3a : w.elite ? 0xff4a5a : 0x9a6aff);
@@ -1492,10 +1493,10 @@ function battleQ() {
   $('wbthint').onclick = () => {
     if (battle.done || battle.hinted || !E.usePower('hint')) return;
     battle.hinted = true; $('wbthint').disabled = true;
-    U.sample(q.options.map((_, i) => i).filter(i => i !== q.answer), 2).forEach(i => { const el = b.querySelector(`[data-bo="${i}"]`); el.disabled = true; el.classList.add('gone'); });
+    snd('hint'); U.sample(q.options.map((_, i) => i).filter(i => i !== q.answer), 2).forEach(i => { const el = b.querySelector(`[data-bo="${i}"]`); el.disabled = true; el.classList.add('gone'); });
     updateHUD();
   };
-  $('wbtshield').onclick = () => { if (battle.done || P.shield || !E.usePower('shield')) return; P.shield = true; $('wbtshield').disabled = true; KG.app.sfx('combo'); updateHUD(); };
+  $('wbtshield').onclick = () => { if (battle.done || P.shield || !E.usePower('shield')) return; P.shield = true; $('wbtshield').disabled = true; snd('shield'); updateHUD(); };
   if (q.speak) KG.app.speak(q.speak);
 }
 // a bolt of light from the wand to a target
@@ -1542,7 +1543,7 @@ function answerBattle(i, el) {
     else battle.i++;
   } else {
     KG.app.sfx('bad');
-    if (P.shield) { P.shield = false; blocked = true; } else { P.hearts = Math.max(0, P.hearts - 1); P.hurtT = 1; }
+    if (P.shield) { P.shield = false; blocked = true; snd('block'); } else { P.hearts = Math.max(0, P.hearts - 1); P.hurtT = 1; snd('hurt'); }
     S_SHAKE = 0.4;
     const away = player.position.clone().sub(w.obj.position).setY(0).normalize(); P.vel.addScaledVector(away, 9); w.cool = 4;
     SPK.emit(player.position.clone().setY(player.position.y + 1.2), { color: 0x8a3aff, n: 30, speed: 4, size: 0.4 });
@@ -1625,6 +1626,16 @@ function tryTalk() { if (nearEnt && !dlgOpen && !battle && !cine) talk(nearEnt);
 // ── update loop ───────────────────────────────────────────────
 let active = false, raf = 0, saveT = 0;
 const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
+const snd = (k, a) => KG.audio && KG.audio.play(k, a);
+// what the hero is walking on, for the footstep sound
+function surface(x, z) {
+  if (INDOOR) return 'wood';
+  if (BR && Math.abs(z - BR.z) < BR.half && Math.abs(x - BR.x) < BR.w) return 'wood';
+  if (WI === 7 && groundAt(x, z) > (D.snowLine || 12)) return 'snow';
+  if (WI === 8 && Math.abs(x) < 11 && z > -32) return 'stone';
+  if (WI === 5) return 'sand';
+  return roadInfo(x, z).d < 2.2 ? 'dirt' : 'grass';
+}
 function step(dt) {
   const t = clock.elapsedTime, pos = player.position;
   const busy = dlgOpen || battle || cine || traveling || SQ.busy();
@@ -1660,7 +1671,7 @@ function step(dt) {
   if (mag <= 0.05) { P.vel.x *= Math.max(0, 1 - dt * 10); P.vel.z *= Math.max(0, 1 - dt * 10); }
   // forgiving jumps: a tap just before landing still counts, and so does one just after stepping off an edge
   if (input.jump) P.jumpBuf = 0.15; P.jumpBuf = Math.max(0, (P.jumpBuf || 0) - dt); P.coyote = P.onGround ? 0.12 : Math.max(0, (P.coyote || 0) - dt);
-  if (P.jumpBuf > 0 && P.coyote > 0 && P.vel.y <= 0.5 && !busy) { P.jumpBuf = P.coyote = 0; P.vel.y = 7.5; P.onGround = false; DUST.emit(pos, { color: 0xd8c8a8, n: 6, speed: 1.5, up: 0.2, gravity: 0, size: 0.5, size1: 1.1, life: 0.5 }); }
+  if (P.jumpBuf > 0 && P.coyote > 0 && P.vel.y <= 0.5 && !busy) { P.jumpBuf = P.coyote = 0; P.vel.y = 7.5; P.onGround = false; snd('jump'); DUST.emit(pos, { color: 0xd8c8a8, n: 6, speed: 1.5, up: 0.2, gravity: 0, size: 0.5, size1: 1.1, life: 0.5 }); }
   input.jump = false;
   P.vel.y -= 22 * dt;
   const ox = pos.x, oz = pos.z, g0 = groundAt(ox, oz);
@@ -1682,7 +1693,7 @@ function step(dt) {
   if (pos.y <= gy) { pos.y = gy; P.vel.y = 0; P.onGround = true; }
   const hs = Math.hypot(P.vel.x, P.vel.z);
   // a puff of dust on landing and from running feet; sparkles trail from the wand
-  if (wasAir && P.onGround && fall < -4) { P.landT = 0.18; DUST.emit(pos, { color: 0xd8c8a8, n: 10, speed: 2.4, up: 0.15, gravity: 0, drag: 3, size: 0.5, size1: 1.3, life: 0.6 }); }
+  if (wasAir && P.onGround && fall < -4) { P.landT = 0.18; snd('land'); DUST.emit(pos, { color: 0xd8c8a8, n: 10, speed: 2.4, up: 0.15, gravity: 0, drag: 3, size: 0.5, size1: 1.3, life: 0.6 }); }
   P.landT = Math.max(0, (P.landT || 0) - dt);
   // footprints in the dirt of the road
   if (P.onGround && hs > 1.5 && !INDOOR && (P.stepT = (P.stepT || 0) - dt * hs) <= 0) { P.stepT = 2.4; if (roadInfo(pos.x, pos.z).d < 2.6) PRINTS.step(pos, player.rotation.y, groundAt(pos.x, pos.z)); }
@@ -1826,7 +1837,7 @@ function step(dt) {
     if (Math.hypot(pos.x - l.x, pos.z - l.z) < 1.3 && Math.abs(pos.y + 1 - l.s.position.y) < 2) {
       l.s.visible = false; w.letters.push(l.i);
       const A = KG.alphabet[l.i];
-      KG.app.sfx('combo'); burst(l.s.position, 0xffd166);
+      snd('letter', w.letters.length); burst(l.s.position, 0xffd166);
       E.gainXP(5);
       KG.app.toast(`<span class="gk big">${A.U} ${A.l}</span> <b>${A.name}</b> · ${esc(A.say)} <span class="muted">(${w.letters.length}/24 letters)</span>`, 'gold');
       if (w.letters.length === 24) { KG.app.confetti(); E.checkAchievements(); }
@@ -1836,7 +1847,7 @@ function step(dt) {
     if (!sc.g.visible) continue;
     sc.g.rotation.y += dt * 1.5; sc.g.position.y = groundAt(sc.x, sc.z) + 1.2 + Math.sin(t * 2 + sc.x) * 0.15;
     if (Math.hypot(pos.x - sc.x, pos.z - sc.z) < 1.4) {
-      sc.g.visible = false; burst(sc.g.position, 0xffe9a8);
+      sc.g.visible = false; burst(sc.g.position, 0xffe9a8); snd('scroll');
       if (KG.reader) KG.reader.unlockScroll(sc.p.id); E.gainXP(10, 2);
     }
   }
@@ -1854,6 +1865,9 @@ function step(dt) {
   }
 
   // wisps
+  let near = 99;
+  for (const wi of wisps) if (!wi.dead) near = Math.min(near, Math.hypot(pos.x - wi.obj.position.x, pos.z - wi.obj.position.z));
+  if (KG.audio) KG.audio.menace(busy ? 0 : Math.max(0, 1 - near / 12));
   for (const wi of wisps) {
     if (wi.dead) { if (!wi.raider && (wi.respawn -= dt) <= 0) spawnWisp(wi); continue; }
     wi.t += dt; wi.cool = Math.max(0, (wi.cool || 0) - dt);
@@ -1982,6 +1996,7 @@ W.show = () => {
   for (const sc of scrolls) sc.g.visible = !(E.state.scrolls || {})[sc.p.id];
   snapCamera();
   startLoop();
+  if (KG.audio) KG.audio.ambient(WI);
   const todo = pending; pending = [];
   if (todo.length) todo.forEach(p => p());
   else setTimeout(arrive, 400);
@@ -1991,11 +2006,12 @@ W.hide = () => {
   if (cine) endCutscene();
   worldShown = false; mode = 'world'; if (stage) stage.exit(); SQ.stop();
   active = false; cancelAnimationFrame(raf); root.classList.remove('on', 'staging'); closeDialog();
+  if (KG.audio) { KG.audio.stopAmbient(); KG.audio.menace(0); }
 };
 // The 3D trial stage used by every lesson, boss, review and arcade game.
 W.stage = {
   get ok() { return !!stage; },
-  enter(kind, unit, nodeId) { if (mode === 'world' && worldShown) savePos(); if (cine) endCutscene(); closeDialog(); mode = 'stage'; root.classList.add('on', 'staging'); document.body.classList.remove('irisfx'); void document.body.offsetWidth; document.body.classList.add('irisfx'); setTimeout(() => document.body.classList.remove('irisfx'), 900); resize(); stage.enter(kind, unit, nodeId); startLoop(); },
+  enter(kind, unit, nodeId) { if (mode === 'world' && worldShown) savePos(); if (cine) endCutscene(); closeDialog(); if (KG.audio) { KG.audio.stopAmbient(); KG.audio.menace(0); } mode = 'stage'; root.classList.add('on', 'staging'); document.body.classList.remove('irisfx'); void document.body.offsetWidth; document.body.classList.add('irisfx'); setTimeout(() => document.body.classList.remove('irisfx'), 900); resize(); stage.enter(kind, unit, nodeId); startLoop(); },
   ask: (q, h) => stage.ask(q, h), reveal: (ok, c, r) => stage.reveal(ok, c, r), result: ok => stage.result(ok),
   teach: item => stage.teach(item), trial: foe => stage.trial(foe), mini: (q, done) => stage.mini(q, done),
   hp: f => stage.hp(f), combo: n => stage.combo(n), celebrate: w => stage.celebrate(w), orderLine: () => stage.orderLine(), lock: () => stage.lock(),

@@ -230,6 +230,16 @@ export function createStage(ctx) {
     return g;
   }
 
+  // a small helper line under a Greek word: its pronunciation, or its dictionary form and meaning
+  function caption(text, w, h) {
+    const tex = textCanvas(text, { W: 1024, H: Math.round(1024 * h / w), maxSize: 64, minSize: 18, color: '#fff8e0', weight: 700 });
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
+    const bg = new THREE.Mesh(new THREE.PlaneGeometry(w * 0.9, h * 0.9), new THREE.MeshBasicMaterial({ color: 0x1a1408, transparent: true, opacity: 0.55, depthWrite: false }));
+    bg.position.z = -0.01; m.add(bg);
+    return m;
+  }
+  const helpFor = lemma => { const gl = KG.engine.glossOf(lemma); return `from ${lemma}${gl ? ' · ' + gl : ''}`; };
+
   // ── layout in camera space (always framed, any screen shape) ──
   // Questions live in their own scene, drawn after the island so tablets are
   // never hidden behind the hero; it follows the camera every frame.
@@ -264,16 +274,18 @@ export function createStage(ctx) {
       o.scale.setScalar(1 + Math.sin(t * Math.PI) * 0.6);
     }, () => { scene.remove(o); particles(to, color, 30, 4); onHit && onHit(); });
   }
+  const snd = (k, a) => KG.audio && KG.audio.play(k, a);
   const heroHand = () => worldPos(hero).add(new THREE.Vector3(0.4, 1.4, -0.3));
   function heroCast() {
     const arm = hero.userData.arms[1];
+    snd('cast');
     tween(0.35, t => { arm.rotation.x = -Math.sin(t * Math.PI) * 2.2; });
   }
   // a tablet breaks where it stands: parchment-faced shards tumble down in front of the camera and fade away
   const shardGeo = new THREE.BoxGeometry(1, 1, 0.12);
   function shatter(g) {
     const w = g.userData.w, h = g.userData.h, at = g.position.clone();
-    g.visible = false;
+    g.visible = false; snd('shatter');
     for (let i = 0; i < 10; i++) {
       const mat = new THREE.MeshStandardMaterial({ color: i % 3 ? 0xf3e7c8 : 0xd8ccb0, roughness: 0.9, transparent: true });
       const f = new THREE.Mesh(shardGeo, mat); f.scale.set(w / 4 * (0.6 + Math.random() * 0.5), h / 3 * (0.6 + Math.random() * 0.5), 1);
@@ -286,8 +298,9 @@ export function createStage(ctx) {
   }
   function glow(g, color = 0x3fdc7a) {
     const fm = g.userData.front;
-    fm.emissive.setHex(color);
-    tween(0.6, t => { fm.emissiveIntensity = 0.9 * (1 - t) + 0.25; g.scale.setScalar(1 + Math.sin(t * Math.PI) * 0.12); });
+    fm.emissive.setHex(color); snd('chime');
+    // the glow fades out completely, so no tablet stays lit and gives away a later answer
+    tween(0.6, t => { fm.emissiveIntensity = 1.15 * (1 - t); g.scale.setScalar(1 + Math.sin(t * Math.PI) * 0.12); }, () => { fm.emissive.setHex(0x000000); fm.emissiveIntensity = 0; });
     particles(worldPos(g), 0xffd166, 36, 5);
   }
   // floating numbers and words over the action
@@ -330,9 +343,10 @@ export function createStage(ctx) {
       tween(0.4, t => { opp.position.z = oppPos.z - Math.sin(t * Math.PI) * 0.8; opp.rotation.x = -Math.sin(t * Math.PI) * 0.15; });
     } else {
       // opponent strikes back
+      snd('strike');
       tween(0.25, t => { opp.position.z = oppPos.z + Math.sin(t * Math.PI) * 1.2; }, () => {
         orb(worldPos(opp).add(new THREE.Vector3(0, 2.5, 0)), worldPos(hero).add(new THREE.Vector3(0, 1.2, 0)), S.oppKind === 'mentor' || S.oppKind === 'scroll' ? 0xff9f6a : 0x8a3aff, () => {
-          S.shake = 0.35; heroFlinch();
+          S.shake = 0.35; heroFlinch(); snd(S.shielded ? 'block' : 'hurt');
         }, 0.4);
       });
     }
@@ -360,6 +374,7 @@ export function createStage(ctx) {
       const big = new THREE.Mesh(new THREE.PlaneGeometry(bigW, bigH), new THREE.MeshBasicMaterial({ map: textCanvas(txt, { W: 1024, H: BH, greek: true, maxSize: Math.round(BH * (txt.length <= 2 ? 1 : 0.78)), minSize: 40, color: '#fff7e0', glass: true, pad: Math.round(BH * (txt.length <= 2 ? 0.03 : 0.1)) }), transparent: true, depthWrite: false }));
       const bg = new THREE.Group(); bg.add(big); bg.userData = { base: new THREE.Vector3() };
       place(bg, 0, portrait ? hh * 0.2 : hh * 0.18); introAnim(bg, 0.05);
+      if (S.h && S.h.help) { const c = caption(U.translit(strip(q.big)), bigW * 0.7, bigH * 0.22); c.position.set(0, -bigH * 0.5, 0.02); bg.add(c); }
       S.big = bg;
     }
     const n = q.options.length;
@@ -547,6 +562,7 @@ export function createStage(ctx) {
   S.teach = item => {
     clearUI(); S.q = null; S.answered = true;
     const want = item.reading ? 'scroll' : 'mentor';
+    snd('page');
     if (S.oppKind !== want) { setOpponent(want, S.unit); poof(); }
     // the master raises a staff and the lesson glows in the air
     if (opp && opp.userData.arms) { const arm = opp.userData.arms[1]; tween(0.6, t => { arm.rotation.x = -Math.sin(t * Math.PI / 2) * 2.4; }); }
@@ -560,10 +576,11 @@ export function createStage(ctx) {
     S.big = g;
     particles(worldPos(opp || hero).add(new THREE.Vector3(0, 3.5, 0)), 0xffd166, 50, 6);
   };
-  function poof() { particles(oppPos.clone().add(new THREE.Vector3(0, 1.5, 0)), 0xffffff, 60, 7); }
+  function poof() { snd('poof'); particles(oppPos.clone().add(new THREE.Vector3(0, 1.5, 0)), 0xffffff, 60, 7); }
   S.trial = foe => {
     clearUI(); S.q = null;
     setOpponent(foe, S.unit); poof();
+    if (['guardian', 'beast', 'rival', 'shade'].includes(foe)) setTimeout(() => snd(foe === 'shade' ? 'shade' : 'roar'), 350);
     if (opp) { const y0 = opp.position.y; tween(0.6, t => { opp.position.y = y0 + (1 - ease(t)) * 8; }); }
     S.shake = 0.25;
   };
@@ -610,13 +627,15 @@ export function createStage(ctx) {
     const gold = MG.q.arcade && MG.round % 5 === 0;
     MG.gold = gold;
     words.forEach((g, i) => {
-      const st = slab(g, tw, th, { greek: true, face: gold && g === tgt.g ? '#ffe08a' : '#f3e7c8' });
+      const st = slab(g, tw, th, { greek: true, face: gold ? '#ffe08a' : '#f3e7c8' }); // a golden round gilds every stone, so the colour never points at the answer
+      if (!MG.q.arcade) { const c = caption(U.translit(g), tw * 0.8, th * 0.4); c.position.set(0, -th * 0.68, 0.1); st.add(c); }
       const col = i % 2, x = (col ? 1 : -1) * hw * 0.48 + (Math.random() - 0.5) * hw * 0.1;
       place(st, x, hh * 0.62 + i * hh * 0.16);
       st.userData.pick = { type: 'mini', ok: g === tgt.g };
       st.userData.vy = hh * (0.22 + MG.round * 0.025 + Math.random() * 0.05);
       S.picks.push(st); MG.items.push(st);
     });
+    for (let i = 0; i < 3; i++) setTimeout(() => snd('rainDrop'), i * 120);
     MG.wait = false;
   }
   function rainUpdate(dt) {
@@ -627,18 +646,18 @@ export function createStage(ctx) {
       g.position.y -= g.userData.vy * dt; g.userData.base.y = g.position.y; g.rotation.z = Math.sin(MG.t * 3 + g.position.x) * 0.06;
       if (g.position.y < -hh * 0.95) {
         g.visible = false;
-        if (g.userData.pick.ok) { MG.wait = true; KG.app.sfx('bad'); oppReact(false); miss(); word(MG.tgt, false); setTimeout(rainRound, 700); }
+        if (g.userData.pick.ok) { MG.wait = true; snd('thud'); KG.app.sfx('bad'); oppReact(false); miss(); word(MG.tgt, false); setTimeout(rainRound, 700); }
       }
     }
   }
   function rainTap(g) {
     if (MG.wait || !g.visible) return;
     if (g.userData.pick.ok) {
-      MG.hits++; hit(MG.gold ? 3 : 1); MG.wait = true; KG.app.sfx('good'); heroCast(); word(MG.tgt, !MG.slip);
+      MG.hits++; hit(MG.gold ? 3 : 1); MG.wait = true; snd('catch', MG.streak = (MG.streak || 0) + 1); heroCast(); word(MG.tgt, !MG.slip);
       if (MG.gold) popText(worldPos(g).add(new THREE.Vector3(0, 0.5, 0)), '★ ×3', '#ffd166', 1.2);
       orb(heroHand(), worldPos(g), 0xffd166, () => { glow(g); oppReact(true); });
       setTimeout(rainRound, 800);
-    } else { KG.app.sfx('bad'); shatter(g); miss(); MG.slip = true; }
+    } else { MG.streak = 0; KG.app.sfx('bad'); shatter(g); miss(); MG.slip = true; }
   }
 
   // Declension Defense: strike each marching form with its case
@@ -658,16 +677,20 @@ export function createStage(ctx) {
   function defenseNext() {
     if (MG.cur) { removePick(MG.cur); MG.cur = null; }
     if (MG.idx >= MG.q.stones.length) return miniEnd(MG.hits >= MG.total - 2, `You defended against ${MG.hits} of ${MG.total} forms.`);
+    // a new form: no case tile may still be glowing from the last one
+    for (const gt of MG.gates) { gt.userData.front.emissive.setHex(0x000000); gt.userData.front.emissiveIntensity = 0; gt.scale.setScalar(1); }
     const st = MG.q.stones[MG.idx++], { hh, hw } = frame();
     const g = slab(st.form, hw * 0.9, hh * 0.16, { greek: true, face: '#f3e7c8' });
+    { const c = caption(helpFor(st.lemma), hw * 0.9, hh * 0.07); c.position.set(0, -hh * 0.12, 0.1); g.add(c); }
     place(g, 0, hh * 0.55); introAnim(g, 0);
     g.userData.stone = st; g.userData.vy = hh * (0.13 + MG.idx * 0.012);
-    MG.cur = g; MG.lock = false;
+    MG.cur = g; MG.lock = false; snd('thud');
   }
   function defenseUpdate(dt) {
     const g = MG.cur, { hh } = frame();
     if (!g || MG.lock) return;
     g.position.y -= g.userData.vy * dt; g.userData.base.y = g.position.y;
+    if ((MG.marchT = (MG.marchT || 0) + dt) > 0.55) { MG.marchT = 0; snd('march'); }
     if (g.position.y < -hh * 0.42) { MG.lock = true; KG.app.sfx('bad'); oppReact(false); shatter(g); miss(); setTimeout(defenseNext, 700); }
   }
   function defenseTap(gate) {
@@ -698,6 +721,7 @@ export function createStage(ctx) {
     miniBanner(MG.step === 0 ? `Parsing Forge: which TENSE is ${it.form}?` : `Now the PERSON and NUMBER of ${it.form}`);
     if (!MG.big) {
       const big = slab(it.form, hw * 1.2, hh * 0.2, { greek: true, face: '#3a3a44', color: '#ffd166' });
+      { const c = caption(helpFor(it.lemma), hw * 1.1, hh * 0.07); c.position.set(0, -hh * 0.14, 0.1); big.add(c); }
       place(big, 0, hh * 0.42); introAnim(big, 0); MG.big = big;
     }
     const opts = MG.step === 0 ? MG.q.tenses : PNS;
@@ -717,7 +741,7 @@ export function createStage(ctx) {
     if (fits) {
       KG.app.sfx('good'); glow(g);
       if (MG.step === 0) { MG.tense = v; MG.step = 1; MG.lock = true; setTimeout(() => { MG.lock = false; forgeStep(); }, 500); }
-      else { MG.hits++; hit(); MG.lock = true; S.shake = 0.15; orb(heroHand(), worldPos(MG.big), 0xff9f40, () => { glow(MG.big, 0xff9f40); particles(worldPos(MG.big), 0xff9f40, 60, 6); }); setTimeout(() => { MG.big = null; forgeNext(); }, 1000); }
+      else { MG.hits++; hit(); MG.lock = true; S.shake = 0.15; orb(heroHand(), worldPos(MG.big), 0xff9f40, () => { snd('anvil'); glow(MG.big, 0xff9f40); particles(worldPos(MG.big), 0xff9f40, 60, 6); }); setTimeout(() => { MG.big = null; forgeNext(); }, 1000); }
     } else {
       KG.app.sfx('bad'); shatter(g); oppReact(false); MG.lock = true; miss();
       const r = it.reads[0];
@@ -760,7 +784,9 @@ export function createStage(ctx) {
     MG.lock = false;
   }
   function raceUpdate(dt) {
-    MG.left -= dt;
+    const before = Math.ceil(MG.left); MG.left -= dt;
+    // the clock ticks out loud in the last five seconds
+    if (!MG.q.arcade && MG.left > 0 && MG.left < 5 && Math.ceil(MG.left) !== before) snd('tick');
     if (MG.bar) { const f = Math.max(0, MG.left / MG.time); MG.bar.scale.x = Math.max(0.001, f); MG.bar.position.x = -MG.barW / 2 * (1 - f); MG.bar.material.color.setHex(f > 0.35 ? 0xffd166 : 0xe0453a); }
     hero.position.z = 5.2 - (MG.idx / MG.total) * 6;
     if (MG.left <= 0 && !MG.q.arcade) miniEnd(false, `Time ran out after ${MG.idx} of ${MG.total} pieces. Read the verse again, then race once more!`);
@@ -812,6 +838,7 @@ export function createStage(ctx) {
   S.celebrate = win => {
     clearUI();
     if (win) {
+      if (opp && FOES.includes(S.oppKind)) snd('defeat');
       for (let i = 0; i < 4; i++) setTimeout(() => particles(new THREE.Vector3((Math.random() - 0.5) * 10, 4 + Math.random() * 3, -2 + Math.random() * 4), U.pick([0xffd166, 0x7fd0ff, 0xff8fab, 0x7ed58f]), 60, 8), i * 220);
       if (opp && FOES.includes(S.oppKind)) { const p = worldPos(opp).add(new THREE.Vector3(0, 2, 0)); shock(p, 0xffffff, 7); setTimeout(() => { if (!S.active) return; particles(p, 0xffd166, 80, 9); shock(p, 0xffd166, 10); popText(p.clone().add(new THREE.Vector3(0, 2, 0)), 'K.O.!', '#ffd166', 1.5); }, 500); }
       if (opp && FOES.includes(S.oppKind)) tween(1.2, t => { opp.rotation.x = -t * 0.5; opp.position.y = oppPos.y - t * 2; opp.scale.setScalar((S.oppKind === 'shade' ? 2.6 : S.oppKind === 'guardian' ? 1.25 : 1) * (1 - t * 0.5)); });

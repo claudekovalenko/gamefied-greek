@@ -9,41 +9,8 @@
   const main = $('#main');
 
   // ── effects ─────────────────────────────────────────────────
-  let actx;
-  function tone(freq, start, dur, type = 'sine', vol = 0.12) {
-    const o = actx.createOscillator(), g = actx.createGain();
-    o.type = type; o.frequency.value = freq;
-    g.gain.setValueAtTime(vol, actx.currentTime + start);
-    g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + start + dur);
-    o.connect(g).connect(actx.destination);
-    o.start(actx.currentTime + start); o.stop(actx.currentTime + start + dur + 0.05);
-  }
-  // a short burst of filtered noise: splashes and whooshes
-  function noise(dur, vol, freq) {
-    const n = actx.sampleRate * dur, buf = actx.createBuffer(1, n, actx.sampleRate), d = buf.getChannelData(0);
-    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
-    const src = actx.createBufferSource(), f = actx.createBiquadFilter(), g = actx.createGain();
-    src.buffer = buf; f.type = 'bandpass'; f.frequency.value = freq; g.gain.value = vol;
-    src.connect(f).connect(g).connect(actx.destination); src.start();
-  }
-  function sfx(kind) {
-    if (!S().settings.sound) return;
-    try {
-      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
-      if (kind === 'good') { tone(660, 0, 0.12); tone(990, 0.08, 0.18); }
-      else if (kind === 'bad') { tone(180, 0, 0.25, 'sawtooth', 0.06); }
-      else if (kind === 'combo') { tone(880, 0, 0.1); tone(1175, 0.07, 0.1); tone(1568, 0.14, 0.2); }
-      else if (kind === 'win') [523, 659, 784, 1047].forEach((f, i) => tone(f, i * 0.11, 0.3, 'triangle'));
-      else if (kind === 'tap') tone(440, 0, 0.05, 'triangle', 0.05);
-      else if (kind === 'coin') { tone(1319, 0, 0.07, 'square', 0.035); tone(1760, 0.06, 0.16, 'square', 0.03); }
-      else if (kind === 'hit') { tone(220, 0, 0.08, 'square', 0.06); tone(110, 0.02, 0.18, 'sawtooth', 0.05); }
-      else if (kind === 'splash') { noise(0.35, 0.08, 1800); tone(520, 0, 0.12, 'sine', 0.05); }
-      else if (kind === 'reel') [660, 740, 830, 990].forEach((f, i) => tone(f, i * 0.05, 0.08, 'triangle', 0.06));
-      else if (kind === 'whoosh') noise(0.25, 0.06, 900);
-      else if (kind === 'step') tone(300 + Math.random() * 80, 0, 0.05, 'triangle', 0.04);
-      else if (kind === 'level') [392, 523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, i * 0.09, 0.35, 'triangle'));
-    } catch (e) { /* audio unavailable */ }
-  }
+  // sound effects live in js/audio.js; each moment of play has its own
+  const sfx = (kind, arg) => { if (KG.audio) KG.audio.play(kind, arg); };
   // Greek voices read modern monotonic Greek, so strip breathings/extra accents first.
   function monotonic(s) {
     return s.normalize('NFD').replace(/[̓̔̈ͅ]/g, '').replace(/[̀͂]/g, '́')
@@ -316,15 +283,15 @@
       const gone = sample(q.options.map((_, i) => i).filter(i => i !== q.answer), 2);
       if (S3) ST().hint(gone);
       document.querySelectorAll('.opt').forEach((b, i) => { if (gone.includes(i)) { b.disabled = true; b.classList.add('gone'); } });
-      sfx('combo');
+      sfx('hint');
     } else if (k === 'shield') {
       if (!P || P.mode !== 'boss' || P.shield || !E.usePower('shield')) return;
-      P.shield = true; if (S3) ST().shield(true); sfx('combo');
+      P.shield = true; if (S3) ST().shield(true); sfx('shield');
       const h = $('.hearts'); if (h) h.innerHTML = heartsHTML();
     } else if (k === 'slow') {
       if (A) { if (A.slowUntil > performance.now() || !E.usePower('slow')) return; A.slowUntil = performance.now() + 10000; if (A.is3D) ST().slow(10); toast('⏳ <b>Time slows…</b> (10 seconds)'); }
       else { if (q.type !== 'mini' || P.slowed === q || !E.usePower('slow')) return; P.slowed = q; ST().slow(10); toast('⏳ <b>Time slows…</b> (10 seconds)'); }
-      sfx('combo');
+      sfx('slow');
     }
     refreshPowers();
   }
@@ -393,12 +360,15 @@
     main.innerHTML = `<div class="s3">${header()}<div class="s3tools">${tools}</div><div class="foot s3foot" id="foot">${foot}</div></div>`;
     ST().combo(P.combo);
     ST().ask(q, {
+      help: showSound(q), // lessons show how a Greek word sounds; bosses, reviews and the alphabet don't
       pick: i => { if (P.answered) return; const ok = i === q.answer; ST().reveal(ok, i, q.answer); answer(ok, q); },
       matchDone: miss => answer(miss === 0, Object.assign({}, q, { explain: miss ? `${miss} mismatch${miss > 1 ? 'es' : ''}. Keep at it!` : 'All pairs matched perfectly!' })),
       orderChange: line => { const b = $('#checkbtn'); if (b) b.disabled = !line.length; },
     });
     if (q.type === 'mc' && q.speak && q.big && S().settings.speech) speak(q.speak);
   }
+  // the pronunciation line under a Greek word: only where it can't give the answer away
+  const showSound = q => P.mode === 'lesson' && P.node && ['vocab', 'grammar', 'reading'].includes(P.node.type) && !!q.big && /[\u0370-\u03ff\u1f00-\u1fff]/.test(q.big) && !/sound|read|letter|pronounce/i.test(q.prompt);
   function renderQ() {
     const q = P.qs[P.i]; P.answered = false; P.q = q;
     if (q.type === 'teach') return renderTeach(q);
@@ -411,7 +381,7 @@
     let body = '';
     if (q.type === 'mc') {
       body = `<div class="prompt">${q.prompt}</div>
-        ${q.big ? `<div class="bigword"><span class="gk">${esc(q.big)}</span>${q.speak ? `<button class="say" data-act="say" data-arg="${esc(q.speak)}" aria-label="Listen">🔊</button>` : ''}</div>` : ''}
+        ${q.big ? `<div class="bigword"><span class="gk">${esc(q.big)}</span>${q.speak ? `<button class="say" data-act="say" data-arg="${esc(q.speak)}" aria-label="Listen">🔊</button>` : ''}</div>${showSound(q) ? `<div class="translit">${esc(U.translit(q.big))}</div>` : ''}` : ''}
         ${q.sub ? `<div class="subword gk">${esc(q.sub)}</div>` : ''}
         <div class="opts">${q.options.map((o, i) => `<button class="opt ${q.greekOpts ? 'gk' : ''}" data-act="pick" data-arg="${i}"><span class="k">${i + 1}</span>${q.greekOpts ? esc(o) : o}</button>`).join('')}</div>`;
     } else if (q.type === 'match') {
@@ -469,14 +439,14 @@
         const bonus = P.combo >= 10 ? 10 : P.combo >= 5 ? 5 : 0;
         P.xp += base + bonus;
         floatXP(`+${base + bonus} XP`, $('.prompt'));
-        sfx(P.combo > 0 && P.combo % 5 === 0 ? 'combo' : 'good');
+        sfx(P.combo > 0 && P.combo % 5 === 0 ? 'combo' : 'good', P.combo - 1);
         if (P.combo > 0 && P.combo % 5 === 0) toast(`⚡ ${P.combo}× combo! Bonus XP`);
         if (P.combo === 8 && !P.comboPower) { P.comboPower = true; E.grantPower('hint', 1, 'combo'); }
       } else {
         P.wrong++; P.combo = 0; sfx('bad');
         if (P.mode === 'boss') {
-          if (P.shield) { P.shield = false; if (P.is3D) ST().shield(false); toast('🛡 <b>Your shield took the blow!</b> No heart lost.'); }
-          else P.hearts--;
+          if (P.shield) { P.shield = false; if (P.is3D) ST().shield(false); sfx('block'); toast('🛡 <b>Your shield took the blow!</b> No heart lost.'); }
+          else { P.hearts--; setTimeout(() => sfx('heartLost'), 250); }
         }
         // Spaced retries: a missed question comes back a few questions later, and if
         // it's missed again, once more at the end (retrieval after a growing gap).
@@ -551,6 +521,7 @@
       title = P.mode === 'mistakes' ? '📝 Mistakes reviewed' : '🔁 Review complete!';
     }
     if (r.passed) { sfx('win'); confetti(r.perfect ? 200 : 110); }
+    if (r.chest) setTimeout(() => sfx('chest'), 900);
     const node = P.node;
     if (P.is3D) ST().celebrate(r.passed);
     main.innerHTML = `<div class="results ${P.is3D ? 's3card' : ''}">
@@ -679,9 +650,9 @@
   function arcadeHit(times = 1) {
     const before = mult(); A.combo++;
     const pts = mult() * times; A.score += pts;
-    if (mult() > before) { sfx('combo'); toast(`🔥 <b>×${mult()} multiplier!</b>`); }
+    if (mult() > before) { sfx('combo', A.combo); toast(`🔥 <b>×${mult()} multiplier!</b>`); }
     const before2 = medalOf(A.kind, A.score - pts), now = medalOf(A.kind, A.score);
-    if (now > before2) { sfx('win'); toast(`${MEDALS[now - 1]} <b>${['Bronze', 'Silver', 'Gold'][now - 1]} medal score!</b>`, 'gold'); }
+    if (now > before2) { sfx('medal'); toast(`${MEDALS[now - 1]} <b>${['Bronze', 'Silver', 'Gold'][now - 1]} medal score!</b>`, 'gold'); }
     if (A.best && A.score > A.best && A.score - pts <= A.best) toast('🏅 <b>New best!</b> Keep going!', 'gold');
     floatXP(`+${pts}`, $('.ascore'));
     arcadeScore();
@@ -734,7 +705,7 @@
       el.classList.add(ok ? 'right' : 'wrong');
       if (!ok) document.querySelectorAll('.opt')[A.q.answer].classList.add('right');
     }
-    if (!ok) { arcadeMiss(3); sfx('bad'); } else { arcadeHit(); sfx('good'); }
+    if (!ok) { arcadeMiss(3); sfx('bad'); } else { arcadeHit(); sfx('good', A.combo - 1); }
     if (A.q.vkey) E.srsAnswer(A.q.vkey, ok);
     setTimeout(() => { if (A) { A.lock = false; arcadeNext(); } }, A.is3D ? (ok ? 700 : 1100) : (ok ? 250 : 700));
   }
@@ -863,6 +834,7 @@
       <div class="card settings"><h3>Settings</h3>
         <label>Daily goal <select id="goalsel">${[20, 50, 100, 200].map(g => `<option value="${g}" ${g === s.dailyGoal ? 'selected' : ''}>${g} XP · ${{ 20: 'Casual', 50: 'Regular', 100: 'Serious', 200: 'Intense' }[g]}</option>`).join('')}</select></label>
         <label class="tg"><input type="checkbox" id="setsound" ${s.settings.sound ? 'checked' : ''}><span>Sound effects</span></label>
+        <label class="tg"><input type="checkbox" id="setamb" ${s.settings.ambient !== false ? 'checked' : ''}><span>World sounds <span class="muted small">(birds, wind, water…)</span></span></label>
         <label class="tg"><input type="checkbox" id="setspeech" ${s.settings.speech ? 'checked' : ''}><span>Read Greek aloud <span class="muted small">(uses your device's Greek voice, modern pronunciation)</span></span></label>
         <label>After each answer <select id="autosel">${[['fast', 'Move on quickly'], ['normal', 'Move on automatically'], ['relaxed', 'Move on slowly (more time to read)'], ['off', 'Wait for me to tap Continue']].map(([k, t]) => `<option value="${k}" ${(s.settings.autoAdvance || 'normal') === k ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
         <label>Graphics <select id="gfxsel"><option value="high" ${(s.settings.gfx || 'high') === 'high' ? 'selected' : ''}>High (grass, shadows, effects)</option><option value="low" ${s.settings.gfx === 'low' ? 'selected' : ''}>Low (smoother on older phones)</option></select></label>
@@ -874,7 +846,8 @@
         <input type="file" id="importfile" accept="application/json" hidden></div>
       <p class="muted small center">Greek text: SBL Greek New Testament (SBLGNT). Progress is saved on this device only. Export it to move between devices.</p>`;
     $('#goalsel').onchange = e => { s.dailyGoal = +e.target.value; E.save(); renderTop(); };
-    $('#setsound').onchange = e => { s.settings.sound = e.target.checked; E.save(); };
+    $('#setsound').onchange = e => { s.settings.sound = e.target.checked; E.save(); if (!e.target.checked && KG.audio) KG.audio.stopAmbient(); };
+    $('#setamb').onchange = e => { s.settings.ambient = e.target.checked; E.save(); if (!e.target.checked && KG.audio) KG.audio.stopAmbient(); };
     $('#setspeech').onchange = e => { s.settings.speech = e.target.checked; E.save(); if (e.target.checked) speak('Ἐν ἀρχῇ ἦν ὁ λόγος'); };
     $('#gfxsel').onchange = e => { s.settings.gfx = e.target.value; E.save(); toast('Graphics setting saved. It applies the next time the app opens.'); };
     $('#raidsel').onchange = e => { s.settings.raiders = e.target.value; if (e.target.value === 'off' && s.raiders) s.raiders.count = 0; E.save(); };

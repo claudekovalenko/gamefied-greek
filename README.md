@@ -86,6 +86,14 @@ Twenty passages, from John 1:1–5 to Revelation 21, are collected as scrolls on
 | 🔁 **Review** | Spaced-repetition deck for every word you study, plus a notebook of your mistakes. |
 | 📖 **Library** | Reading Room, scroll collection, reading-readiness score, Spellbook and lexicon. |
 
+**Sound** follows the play, all synthesized in the browser (no sound files): footsteps on grass, stone, snow or
+the wooden bridge, coins, letters that climb the scale, portals, a shade's hum as it closes in, spells, hits and
+shattering tablets, the rain, march, anvil and clock of the mini-games, and combos that rise in pitch. Each world
+has a quiet background of its own (birds, wind, water, crickets, embers), which can be turned off.
+
+**Help with the Greek**: in vocabulary, grammar and reading lessons a Greek word shows how it sounds (ἀρχή →
+archē), and the forms in Declension Defense and Parsing Forge show their dictionary form and meaning.
+
 Settings include auto-advance speed, **Graphics: High/Low** (Low drops grass, shadows and outlines and thins the
 trees; on any setting the resolution adapts when frames run slow), 2D lessons instead of 3D, sound,
 read-aloud, and unlocking all lessons if you already know some Greek.
@@ -172,6 +180,7 @@ npm run make-icons   # re-render icons/*.png from the SVGs (needs Playwright)
 | `js/world.js` | the 3D world engine: terrain, portals, cutscenes, characters (Three.js, vendored in `js/vendor/` under the MIT license) |
 | `js/worlds.js`, `js/props.js` | the nine worlds' roads, ground shapes and landmarks |
 | `js/stage.js` | the 3D lesson stage: tablets, challengers, mini-games, power-ups |
+| `js/audio.js` | every sound effect and each world's background sound (Web Audio) |
 | `js/stagesets.js` | the trial places for each world and each world's creature |
 | `js/fx.js` | shared look: painted sky with sun, moon, clouds, stars, aurora and rainbow; far hills; water with ripples, fish and shore foam; painterly ground with cloud shadows, rock ledges and rain puddles; wind in trees, grass and flowers; birds, butterflies and leaf gusts; sunbeams, bloom, rim light and sky reflections; battle rune circle, light pillars, portal vortex, footprints; moss on rocks, lantern heads, painted sign boards; colour grade with a soft vignette; the parchment world map; the hero's body language |
 | `js/venues.js` | the teachers' places: cottage (a room of its own; step back out and the day has moved on: sunset, night, dawn, storm), island, word-gate garden, lookout, campfire, stall |

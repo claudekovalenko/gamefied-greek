@@ -20,6 +20,22 @@ window.KG = window.KG || {};
     },
     // strip accents/breathings for lenient matching and for speech
     bare(s) { return s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ς/g, 'σ').toLowerCase(); },
+    // a simple reading aid: Greek letters in Latin letters (ἀρχή → archē, οὐρανός → ouranos)
+    translit(s) {
+      const D = { α: 'a', β: 'b', γ: 'g', δ: 'd', ε: 'e', ζ: 'z', η: 'ē', θ: 'th', ι: 'i', κ: 'k', λ: 'l', μ: 'm', ν: 'n', ξ: 'x', ο: 'o', π: 'p', ρ: 'r', σ: 's', ς: 's', τ: 't', υ: 'y', φ: 'ph', χ: 'ch', ψ: 'ps', ω: 'ō' };
+      return s.normalize('NFD').split(/(\s+)/).map(w => {
+        const rough = /̔/.test(w.slice(0, 4)), b = w.replace(/[̀-ͯ]/g, '').toLowerCase();
+        let out = '';
+        for (let i = 0; i < b.length; i++) {
+          const c = b[i], n = b[i + 1];
+          if (c === 'γ' && 'γκξχ'.includes(n || '')) out += 'n';
+          else if (c === 'υ' && 'αεηο'.includes(b[i - 1] || '')) out += 'u';
+          else out += D[c] !== undefined ? D[c] : c;
+        }
+        if (rough) out = (out[0] === 'r' ? 'rh' + out.slice(1) : 'h' + out);
+        return out;
+      }).join('');
+    },
   };
   const { shuffle, sample, uniq } = U;
   const gk = s => `<span class="gk">${U.esc(s)}</span>`;
@@ -568,6 +584,14 @@ window.KG = window.KG || {};
     return null;
   }
   E.miniFor = miniFor;
+  // the meaning of a dictionary form, for helper captions under Greek forms
+  const EXTRA_GLOSS = { 'λύω': 'I loose, untie', 'γραφή': 'writing, Scripture', 'ὅς': 'who, which', 'εἷς': 'one' };
+  E.glossOf = lemma => {
+    if (EXTRA_GLOSS[lemma]) return EXTRA_GLOSS[lemma];
+    const first = v => v.lex.split(/[ ,]/)[0], b = U.bare(lemma);
+    const w = KG.vocab.find(v => v.g === lemma || first(v) === lemma) || KG.vocab.find(v => U.bare(v.g) === b || U.bare(first(v)) === b);
+    return w ? w.en : '';
+  };
 
   // Endless versions of the mini-games for the Arcade, drawn from what the learner has unlocked
   const doneLessons = list => list.filter(k => { const n = E.nodes.find(x => x.lesson === k); return n && E.stars(n.id) > 0; });

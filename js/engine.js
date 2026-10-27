@@ -585,9 +585,10 @@ window.KG = window.KG || {};
   }
   E.miniFor = miniFor;
 
-  // Greek help (Profile → Settings): how much reading support to show under Greek words.
-  // full: everywhere · some: on the main word in lessons · off: none.
-  E.greekHelp = () => (E.state.settings.greekHelp || 'full');
+  // Greek help (Profile → Settings): how much support to show under Greek words.
+  // english: sound and English meaning (meaning hidden behind 👁 Peek where it is the answer)
+  // full: sound under every Greek word · some: on the main word in lessons · off: none.
+  E.greekHelp = () => (E.state.settings.greekHelp || 'english');
   const HELP_SKIP = /sound|read|letter|pronounc|capital|lowercase|called|transliterat/i;
   // whether a question may show pronunciations; never where they would give the answer away
   E.soundHelp = (q, where, node) => {
@@ -595,8 +596,13 @@ window.KG = window.KG || {};
     if (lv === 'off' || !q || q.type !== 'mc' && q.type !== 'match') return false;
     if (node && ['alpha', 'marks', 'readwords'].includes(node.type)) return false;
     if (HELP_SKIP.test(String(q.prompt || '').replace(/<[^>]+>/g, ''))) return false;
-    return lv === 'full' || where === 'lesson';
+    return lv === 'full' || lv === 'english' || where === 'lesson';
   };
+  // whether English meanings may show under a question's Greek without giving its answer away
+  // (a meaning question, a "which word means…" or a matching board can only be peeked)
+  const MEANING_ASKED = /mean|word for|translat|say "|english/i;
+  E.meaningSafe = q => !!q && !q.vkey && q.type !== 'match' && !(q.type === 'mini' && q.game === 'rain') && !MEANING_ASKED.test(String(q.prompt || '').replace(/<[^>]+>/g, '')) && !HELP_SKIP.test(String(q.prompt || '').replace(/<[^>]+>/g, ''));
+  E.showMeaning = q => !!q && (q.peek || (E.greekHelp() === 'english' && E.meaningSafe(q)));
   // the meaning of a dictionary form, for helper captions under Greek forms
   const EXTRA_GLOSS = { 'λύω': 'I loose, untie', 'γραφή': 'writing, Scripture', 'ὅς': 'who, which', 'εἷς': 'one' };
   E.glossOf = lemma => {
@@ -605,6 +611,26 @@ window.KG = window.KG || {};
     const w = KG.vocab.find(v => v.g === lemma || first(v) === lemma) || KG.vocab.find(v => U.bare(v.g) === b || U.bare(first(v)) === b);
     return w ? w.en : '';
   };
+
+  // the English for any Greek word on screen: a vocabulary word, a word from a reading, or a form from a paradigm
+  let MEAN = null;
+  const norm = g => String(g || '').replace(/<[^>]+>/g, '').replace(/\((\p{L})\)/gu, '$1').replace(/[.,;·:!?“”"'’()\[\]]/g, '').trim();
+  E.meaning = greek => {
+    if (!MEAN) {
+      MEAN = new Map();
+      const put = (k, v) => { k = norm(k); if (k && v && !MEAN.has(k)) MEAN.set(k, v); };
+      for (const v of KG.vocab) { put(v.g, v.en); put(v.lex.split(/[ ,]/)[0], v.en); }
+      for (const R of Object.values(KG.readings)) for (const w of R.words) put(w.w, w.gloss);
+      for (const k of Object.keys(KG.grammar)) for (const c of cells(KG.grammar[k])) put(c.form, E.glossOf(c.lemma));
+      for (const [k, v] of [...MEAN]) put(U.bare(k), v);
+    }
+    const w = norm(greek);
+    if (!w) return '';
+    if (/\s/.test(w)) return w.split(/\s+/).map(x => E.meaning(x) || '…').join(' ');
+    return MEAN.get(w) || MEAN.get(U.bare(w)) || '';
+  };
+  // the helper line under a Greek word: how it sounds, and (when allowed) what it means
+  E.helpLine = (greek, withMeaning) => { const s = U.translit(String(greek).replace(/<[^>]+>/g, '')), m = withMeaning ? E.meaning(greek) : ''; return m ? `${s} · ${m}` : s; };
 
   // Endless versions of the mini-games for the Arcade, drawn from what the learner has unlocked
   const doneLessons = list => list.filter(k => { const n = E.nodes.find(x => x.lesson === k); return n && E.stars(n.id) > 0; });

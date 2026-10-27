@@ -21,7 +21,7 @@ const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { c
 //   pool(n) → [{ g, en, key }] words to review, due first;  others(word, n) → wrong English glosses,
 //   record(word, ok), reward(xp, coins, questId), sfx(kind), speak(greek), toast(html, cls),
 //   dialog(name, html, buttons), colliders (array of {x, z, r}), free(x, z) → true if a spot is open ground,
-//   helpSound(greek) → how the word sounds ('' to show only the Greek; optional)
+//   helpSound(greek) → how the word sounds ('' to show only the Greek; optional), meaning(greek) → its English (optional)
 // }
 export function makeSideQuests(ctx) {
   const { THREE } = ctx;
@@ -40,8 +40,11 @@ export function makeSideQuests(ctx) {
   const runeGlyph = ch => ctx.textSprite(ch, { size: 64, bg: null, color: '#fff6d8', font: `700 64px ${ctx.GREEK}`, scale: 0.012 });
   // a word to find out in the world: dark ink on a bright parchment tag with a gold rim, readable from across a field
   const sound = g => (ctx.helpSound ? ctx.helpSound(g) : '');
-  function glowWord(text, withSound = false) {
-    const sub = withSound ? sound(text) : '';
+  // 👁 Peek: the English for the word in play; a peeked word isn't counted as remembered
+  const peekLink = '<button class="sq-link sq-peek" data-sq="peek">👁 Peek at the English</button>';
+  const record = (w, ok) => { if (!run || !run.peek) ctx.record(w, ok); };
+  function glowWord(text, withSound = false, mean = '') {
+    const sub = [withSound ? sound(text) : '', mean].filter(Boolean).join(' · ');
     const size = 72, font = `700 ${size}px ${ctx.GREEK}`, subFont = `italic 700 ${size * 0.5}px Nunito, sans-serif`, c = document.createElement('canvas'), x = c.getContext('2d');
     x.font = font; const tw = x.measureText(text).width; x.font = subFont; const sw = sub ? x.measureText(sub).width : 0;
     const w = Math.ceil(Math.max(tw, sw) + size * 1.1), h = Math.ceil(size * (sub ? 2.2 : 1.65)), r = Math.min(h, size * 1.65) / 2.4;
@@ -118,13 +121,13 @@ export function makeSideQuests(ctx) {
   }
   function bite() {
     const r = run, w = r.list[r.i];
-    r.phase = 'bite'; r.left = r.max = 7;
+    r.phase = 'bite'; r.left = r.max = 7; r.peek = false;
     ctx.sfx('splash'); ctx.SPK.emit(r.at, { color: 0xffffff, n: 20, speed: 2.5, up: 1.2, gravity: -9, size: 0.3, life: 0.7 });
     const opts = shuffle([w.en, ...ctx.others(w, 6).map(clean).filter((o, k, a) => o !== w.en && a.indexOf(o) === k).slice(0, 2)]);
     r.opts = opts; r.ans = opts.indexOf(w.en);
     ctx.speak(w.g);
     show(`<div class="sq-h">🎣 A bite! <span class="sq-n">${r.i + 1}/${r.list.length}</span></div>
-      <div class="sq-word gk">${esc(w.g)}</div>${sound(w.g) ? `<div class="translit">${esc(sound(w.g))}</div>` : ''}<div class="sq-timer"><i id="sqtime"></i></div>
+      <div class="sq-word gk">${esc(w.g)}</div>${sound(w.g) ? `<div class="translit">${esc(sound(w.g))}</div>` : ''}<div class="sq-tip small center" id="sqpeek">${peekLink}</div><div class="sq-timer"><i id="sqtime"></i></div>
       <div class="sq-opts">${opts.map((o, k) => `<button class="sq-opt" data-sq="fish" data-k="${k}"><span class="k">${k + 1}</span>${esc(o)}</button>`).join('')}</div>`);
   }
   function reel(k) {
@@ -132,7 +135,7 @@ export function makeSideQuests(ctx) {
     const w = r.list[r.i], ok = k === r.ans, e = r.e;
     r.phase = 'done';
     panel.querySelectorAll('.sq-opt').forEach((b, j) => { b.disabled = true; if (j === r.ans) b.classList.add('right'); else if (j === k) b.classList.add('wrong'); });
-    ctx.record(w, ok);
+    record(w, ok);
     if (ok) {
       r.caught++;
       const kind = w.box >= 4 ? 'gold' : Math.random() < 0.35 ? 'blue' : 'silver';
@@ -202,7 +205,7 @@ export function makeSideQuests(ctx) {
   }
   function runeWord() {
     const r = run, w = r.list[r.i], e = r.e, b = bare(w.g);
-    r.b = b; r.at = 0; r.miss = 0; r.last = -1;
+    r.b = b; r.at = 0; r.miss = 0; r.last = -1; r.peek = false;
     const need = [...new Set(b)], decoys = shuffle(ALPHA.split('').filter(c => !need.includes(c))).slice(0, 12 - need.length);
     const letters = shuffle(need.concat(decoys));
     e.tiles.forEach((tl, i) => { setTileLetter(tl, letters[i]); tl.m.material.emissive.setHex(0); });
@@ -210,10 +213,10 @@ export function makeSideQuests(ctx) {
   }
   function runePanel(msg = '') {
     const r = run, w = r.list[r.i];
-    const slots = r.b.split('').map((c, i) => `<span class="${i < r.at ? 'on' : ''}">${i < r.at ? c : '_'}</span>`).join('');
+    const slots = r.b.split('').map((c, i) => `<span class="${i < r.at ? 'on' : r.peek ? 'ghost' : ''}">${i < r.at || r.peek ? c : '_'}</span>`).join('');
     show(`<div class="sq-h">🔤 Rune Circle <span class="sq-n">${r.i + 1}/${r.list.length}</span><button class="sq-x" data-sq="quit">✕</button></div>
       <div class="sq-tip">Walk onto the stones to spell the Greek for <b>“${esc(w.en)}”</b></div><div class="sq-slots gk">${slots}</div>${sound(w.g) ? `<div class="translit">it sounds like <b>${esc(sound(w.g))}</b></div>` : ''}
-      ${msg ? `<div class="sq-fb">${msg}</div>` : `<div class="sq-tip small">Same letter twice? Hop on the stone again. <button class="sq-link" data-sq="hint">💡 Show me the next one</button></div>`}`);
+      ${msg ? `<div class="sq-fb">${msg}</div>` : `<div class="sq-tip small">Same letter twice? Hop on the stone again. <button class="sq-link" data-sq="hint">💡 Show me the next one</button>${r.peek ? '' : ` · <button class="sq-link" data-sq="peek">👁 Show the whole word</button>`}</div>`}`);
   }
   function stepTile(i) {
     const r = run, e = r.e, tl = e.tiles[i], want = r.b[r.at];
@@ -235,7 +238,7 @@ export function makeSideQuests(ctx) {
   }
   function runeDone() {
     const r = run, w = r.list[r.i], e = r.e, ok = r.miss <= 1;
-    ctx.record(w, ok); if (ok) r.good++;
+    record(w, ok); if (ok) r.good++;
     ctx.speak(w.g); ctx.sfx('combo');
     const s = glowWord(w.g); s.scale.multiplyScalar(1.8); s.position.set(e.x, ctx.groundAt(e.x, e.z) + 3.4, e.z); ctx.add(s);
     tween(2.2, t => { s.position.y += 0.012; s.material.opacity = 1 - Math.max(0, t - 0.6) / 0.4; }, () => s.parent.remove(s));
@@ -296,7 +299,7 @@ export function makeSideQuests(ctx) {
     for (const o of r.orbs) if (o.s.parent) o.s.parent.remove(o.s);
     const decoys = ctx.pool(12).filter(x => x.g !== w.g && clean(x.en) !== w.en).map(x => Object.assign({}, x, { en: clean(x.en) }));
     const pick = shuffle([w, ...shuffle(decoys).slice(0, 2)]);
-    r.orbs = []; r.carry = null; r.miss = 0;
+    r.orbs = []; r.carry = null; r.miss = 0; r.peek = false;
     pick.forEach((wd, k) => {
       let ox = e.x, oz = e.z;
       for (let tries = 0; tries < 40; tries++) {
@@ -309,7 +312,7 @@ export function makeSideQuests(ctx) {
       r.orbs.push({ s, w: wd, x: ox, z: oz, ok: wd.g === w.g, ph: k });
     });
     show(`<div class="sq-h">📦 ${esc(e.name)} <span class="sq-n">${r.i + 1}/${r.list.length}</span><button class="sq-x" data-sq="quit">✕</button></div>
-      <div class="sq-tip">“Please bring me the word for <b>${esc(w.en)}</b>.”</div><div class="sq-tip small">Three glowing words lie nearby. Walk into the right one and carry it back.</div>`);
+      <div class="sq-tip">“Please bring me the word for <b>${esc(w.en)}</b>.”</div><div class="sq-tip small">Three glowing words lie nearby. Walk into the right one and carry it back.</div><div class="sq-tip small" id="sqpeek">${peekLink}</div>`);
   }
   function courierUpdate(pos, dt, t) {
     const r = run, e = r.e, w = r.list[r.i];
@@ -329,7 +332,7 @@ export function makeSideQuests(ctx) {
     }
     if (r.carry && Math.hypot(pos.x - e.x, pos.z - e.z) < 2.6) {
       const ok = r.miss === 0;
-      ctx.record(w, ok); if (ok) r.good++;
+      record(w, ok); if (ok) r.good++;
       r.carry.s.parent.remove(r.carry.s); r.carry = null;
       ctx.speak(w.g); ctx.sfx('win');
       ctx.SPK.emit(V(e.x, ctx.groundAt(e.x, e.z) + 2, e.z), { colors: [0xffd166, 0xff8fab, 0x7ed58f], n: 40, speed: 4, size: 0.4 });
@@ -355,7 +358,7 @@ export function makeSideQuests(ctx) {
     run = { kind: 'quiz', w, opts, ans: opts.indexOf(w.en), done, title, answered: false };
     ctx.speak(w.g);
     show(`<div class="sq-h">${esc(title)}<button class="sq-x" data-sq="quit">✕</button></div><div class="sq-tip">The gate whispers a word. What does it mean?</div>
-      <div class="sq-word gk">${esc(w.g)}</div>${sound(w.g) ? `<div class="translit">${esc(sound(w.g))}</div>` : ''}
+      <div class="sq-word gk">${esc(w.g)}</div>${sound(w.g) ? `<div class="translit">${esc(sound(w.g))}</div>` : ''}<div class="sq-tip small center" id="sqpeek">${peekLink}</div>
       <div class="sq-opts">${opts.map((o, k) => `<button class="sq-opt" data-sq="qz" data-k="${k}"><span class="k">${k + 1}</span>${esc(o)}</button>`).join('')}</div>`);
   }
   function quizAnswer(k) {
@@ -363,7 +366,7 @@ export function makeSideQuests(ctx) {
     r.answered = true;
     const ok = k === r.ans;
     panel.querySelectorAll('.sq-opt').forEach((b, j) => { b.disabled = true; if (j === r.ans) b.classList.add('right'); else if (j === k) b.classList.add('wrong'); });
-    ctx.record(r.w, ok); ctx.sfx(ok ? 'win' : 'bad');
+    record(r.w, ok); ctx.sfx(ok ? 'win' : 'bad');
     if (ok) {
       panel.insertAdjacentHTML('beforeend', `<div class="sq-fb ok">✨ <b class="gk">${esc(r.w.g)}</b> = ${esc(r.w.en)}. The gate swings open!</div>`);
       setTimeout(() => { if (run === r) { run = null; hide(); } r.done(true); }, 1100);
@@ -379,6 +382,24 @@ export function makeSideQuests(ctx) {
     if (r.kind === 'courier') for (const o of r.orbs) if (o.s.parent) o.s.parent.remove(o.s);
     hide();
   }
+  function peekRun() {
+    const r = run; if (!r || r.peek) return;
+    r.peek = true; ctx.sfx('tap');
+    const box = panel.querySelector('#sqpeek');
+    if (r.kind === 'fish' || r.kind === 'quiz') {
+      const w = r.kind === 'quiz' ? r.w : r.list[r.i];
+      if (box) box.innerHTML = `<b class="gk">${esc(w.g)}</b> = <b>${esc(w.en)}</b>`;
+    } else if (r.kind === 'runes') runePanel();
+    else if (r.kind === 'courier') {
+      // every glowing word now shows its English too
+      for (const o of r.orbs) {
+        if (!o.s.parent || o === r.carry) continue;
+        const s = glowWord(o.w.g, true, clean(o.w.en)); s.scale.multiplyScalar(1.3); s.position.copy(o.s.position);
+        o.s.parent.add(s); o.s.parent.remove(o.s); o.s = s;
+      }
+      if (box) box.textContent = 'Each word now shows its English.';
+    }
+  }
   function start(e) {
     stop();
     ({ fish: startFishing, runes: startRunes, courier: startCourier })[e.sq](e);
@@ -392,6 +413,7 @@ export function makeSideQuests(ctx) {
     else if (a === 'cast' && run && run.phase === 'ready') cast();
     else if (a === 'fish') reel(+b.dataset.k);
     else if (a === 'hint') runeHint();
+    else if (a === 'peek') peekRun();
     else if (a === 'qz') quizAnswer(+b.dataset.k);
     else if (a === 'qagain' && run && run.kind === 'quiz') quiz(run.title, run.done);
   });

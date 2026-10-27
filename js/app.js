@@ -182,6 +182,8 @@
       ${p.rows.map((r, i) => `<tr><th>${esc(r)}</th>${p.forms[i].map(f => `<td class="gk" data-act="say" data-arg="${esc(f)}">${esc(f)}</td>`).join('')}</tr>`).join('')}</table>`;
   }
   function verseHTML(R, cls = '') {
+    // with Sound + English help, each word carries its sound and meaning beneath it (interlinear)
+    if (E.greekHelp() === 'english') return `<p class="verse il ${cls}">${R.words.map((w, i) => `<span class="w" data-act="word" data-arg="${i}">${esc(w.w)}${esc(w.p)}<small>${esc(U.translit(w.w))}</small><em>${esc(w.gloss || E.meaning(w.w))}</em></span>`).join(' ')}</p>`;
     return `<p class="verse ${cls}">${R.words.map((w, i) => `<span class="w" data-act="word" data-arg="${i}">${esc(w.w)}</span>${esc(w.p)}`).join(' ')}</p>`;
   }
   function learnHTML(n) {
@@ -269,8 +271,9 @@
     if (q.type === 'mc' && q.options.length > 2) on.push('hint');
     if (P && P.mode === 'boss') on.push('shield');
     if (A || (q.type === 'mini' && TIMED.includes(q.game))) on.push('slow');
-    if (!on.length) return '';
-    return `<div class="pwbar">${on.map(k => `<button class="pw ${k === 'shield' && P && P.shield ? 'on' : ''}" data-act="power" data-arg="${k}" ${pw[k] ? '' : 'disabled'} title="${E.POWERS[k][2]}">${E.POWERS[k][0]} ${E.POWERS[k][1]} <b>${pw[k]}</b></button>`).join('')}</div>`;
+    const pk = canPeek(q) ? `<button class="pw peek" data-act="peek" title="Show the English (this answer won't count as known)">👁 Peek</button>` : '';
+    if (!on.length) return pk ? `<div class="pwbar">${pk}</div>` : '';
+    return `<div class="pwbar">${pk}${on.map(k => `<button class="pw ${k === 'shield' && P && P.shield ? 'on' : ''}" data-act="power" data-arg="${k}" ${pw[k] ? '' : 'disabled'} title="${E.POWERS[k][2]}">${E.POWERS[k][0]} ${E.POWERS[k][1]} <b>${pw[k]}</b></button>`).join('')}</div>`;
   }
   function refreshPowers() { const b = $('.pwbar'); if (b) b.outerHTML = powerBar() || '<div class="pwbar"></div>'; }
   function usePower(k) {
@@ -280,7 +283,7 @@
       if (q.type !== 'mc' || q.hinted || (A ? A.lock : P.answered)) return;
       if (!E.usePower('hint')) return;
       q.hinted = true;
-      const gone = sample(q.options.map((_, i) => i).filter(i => i !== q.answer), 2);
+      const gone = q.hintGone = sample(q.options.map((_, i) => i).filter(i => i !== q.answer), 2);
       if (S3) ST().hint(gone);
       document.querySelectorAll('.opt').forEach((b, i) => { if (gone.includes(i)) { b.disabled = true; b.classList.add('gone'); } });
       sfx('hint');
@@ -340,7 +343,7 @@
     let streak = 0;
     q.onHit = () => { if (!P || P.q !== q) return; streak++; floatXP(streak >= 3 ? `🔥${streak} +3 XP` : '+3 XP', $('.prog')); };
     q.onMiss = () => { streak = 0; };
-    q.onWord = (g, ok) => { if (S().vocab[g]) E.srsAnswer(g, ok); };
+    q.onWord = (g, ok) => { if (S().vocab[g] && !q.peek) E.srsAnswer(g, ok); };
     ST().mini(q, res => {
       if (!P || P.q !== q) return;
       P.xp += res.hits * 3;
@@ -361,6 +364,7 @@
     ST().combo(P.combo);
     ST().ask(q, {
       help: showSound(q), // how the Greek sounds, under the word and the Greek answers (Profile → Greek help)
+      meaning: E.showMeaning(q), // and its English, where that doesn't give the answer away (or after 👁 Peek)
       pick: i => { if (P.answered) return; const ok = i === q.answer; ST().reveal(ok, i, q.answer); answer(ok, q); },
       matchDone: miss => answer(miss === 0, Object.assign({}, q, { explain: miss ? `${miss} mismatch${miss > 1 ? 'es' : ''}. Keep at it!` : 'All pairs matched perfectly!' })),
       orderChange: line => { const b = $('#checkbtn'); if (b) b.disabled = !line.length; },
@@ -370,7 +374,20 @@
   // the pronunciation line under a Greek word: only where it can't give the answer away
   const isGreek = s => /[Ͱ-Ͽἀ-῿]/.test(String(s || ''));
   const showSound = q => !!P && E.soundHelp(q, P.mode, P.node) && (isGreek(q.big) || q.greekOpts || q.greekLeft);
-  const tl = s => `<small class="tl">${esc(U.translit(String(s).replace(/<[^>]+>/g, '')))}</small>`;
+  const tl = (s, q) => `<small class="tl">${esc(E.helpLine(String(s).replace(/<[^>]+>/g, ''), E.showMeaning(q)))}</small>`;
+  const helpOn = q => showSound(q) || E.showMeaning(q);
+  // 👁 Peek: free English for the Greek on screen; a peeked answer isn't counted as known
+  const hasGreek = q => !!q && (isGreek(q.big) || q.greekOpts || q.greekLeft || (q.type === 'mini' && q.game === 'rain'));
+  const canPeek = q => hasGreek(q) && !q.peek && !E.showMeaning(q) && ['mc', 'match', 'mini'].includes(q.type) && !(q.type === 'mini' && q.game !== 'rain');
+  function peek() {
+    const q = (A || P || {}).q;
+    if (!q || !canPeek(q) || (A ? A.lock : P.answered && q.type !== 'mini')) return;
+    q.peek = true; sfx('page');
+    if (q.type === 'mini') { ST().peekMini(); refreshPowers(); return; }
+    if (A) { arcadeNext(q); if (q.hintGone) { if (A.is3D) ST().hint(q.hintGone); document.querySelectorAll('.opt').forEach((b, i) => { if (q.hintGone.includes(i)) { b.disabled = true; b.classList.add('gone'); } }); } return; }
+    renderQ();
+    if (q.hintGone) { if (P.is3D) ST().hint(q.hintGone); document.querySelectorAll('.opt').forEach((b, i) => { if (q.hintGone.includes(i)) { b.disabled = true; b.classList.add('gone'); } }); }
+  }
   function renderQ() {
     const q = P.qs[P.i]; P.answered = false; P.q = q;
     if (q.type === 'teach') return renderTeach(q);
@@ -383,14 +400,14 @@
     let body = '';
     if (q.type === 'mc') {
       body = `<div class="prompt">${q.prompt}</div>
-        ${q.big ? `<div class="bigword"><span class="gk">${esc(q.big)}</span>${q.speak ? `<button class="say" data-act="say" data-arg="${esc(q.speak)}" aria-label="Listen">🔊</button>` : ''}</div>${showSound(q) && isGreek(q.big) ? `<div class="translit">${esc(U.translit(q.big))}</div>` : ''}` : ''}
+        ${q.big ? `<div class="bigword"><span class="gk">${esc(q.big)}</span>${q.speak ? `<button class="say" data-act="say" data-arg="${esc(q.speak)}" aria-label="Listen">🔊</button>` : ''}</div>${helpOn(q) && isGreek(q.big) ? `<div class="translit">${esc(E.helpLine(q.big, E.showMeaning(q)))}</div>` : ''}` : ''}
         ${q.sub ? `<div class="subword gk">${esc(q.sub)}</div>` : ''}
-        <div class="opts">${q.options.map((o, i) => `<button class="opt ${q.greekOpts ? 'gk' : ''}" data-act="pick" data-arg="${i}"><span class="k">${i + 1}</span>${q.greekOpts ? `<span>${esc(o)}${showSound(q) ? tl(o) : ''}</span>` : o}</button>`).join('')}</div>`;
+        <div class="opts">${q.options.map((o, i) => `<button class="opt ${q.greekOpts ? 'gk' : ''}" data-act="pick" data-arg="${i}"><span class="k">${i + 1}</span>${q.greekOpts ? `<span>${esc(o)}${helpOn(q) ? tl(o, q) : ''}</span>` : o}</button>`).join('')}</div>`;
     } else if (q.type === 'match') {
       const L = shuffle(q.pairs.map((p, i) => ({ t: p[0], i }))), R = shuffle(q.pairs.map((p, i) => ({ t: p[1], i })));
       P.match = { sel: null, done: 0, miss: 0 };
       body = `<div class="prompt">${q.prompt}</div><div class="match">
-        <div class="col">${L.map(x => `<button class="mt ${q.greekLeft ? 'gk' : ''}" data-act="mt" data-arg="L${x.i}">${esc(x.t)}${q.greekLeft && showSound(q) ? tl(x.t) : ''}</button>`).join('')}</div>
+        <div class="col">${L.map(x => `<button class="mt ${q.greekLeft ? 'gk' : ''}" data-act="mt" data-arg="L${x.i}">${esc(x.t)}${q.greekLeft && helpOn(q) ? tl(x.t, q) : ''}</button>`).join('')}</div>
         <div class="col">${R.map(x => `<button class="mt" data-act="mt" data-arg="R${x.i}">${esc(x.t)}</button>`).join('')}</div></div>`;
     } else if (q.type === 'order') {
       const R = KG.readings[q.reading]; readerReading = R;
@@ -433,11 +450,11 @@
       P.qs.splice(P.i + 1, 0, again);
     }
     if (graded) {
-      E.recordAnswer(q, ok, P.mode === 'review' || P.mode === 'mistakes');
+      E.recordAnswer(q.peek ? Object.assign({}, q, { vkey: null, skey: null }) : q, ok, P.mode === 'review' || P.mode === 'mistakes');
       if (ok) {
-        P.correct++; P.combo++; P.maxCombo = Math.max(P.maxCombo, P.combo);
+        P.correct++; if (!q.peek) P.combo++; P.maxCombo = Math.max(P.maxCombo, P.combo);
         if (P.trial && !q.guided) P.trial.correct++;
-        const base = P.mode === 'review' || P.mode === 'mistakes' ? 5 : 10;
+        const base = (P.mode === 'review' || P.mode === 'mistakes' ? 5 : 10) / (q.peek ? 2 : 1);
         const bonus = P.combo >= 10 ? 10 : P.combo >= 5 ? 5 : 0;
         P.xp += base + bonus;
         floatXP(`+${base + bonus} XP`, $('.prompt'));
@@ -684,18 +701,18 @@
     ST().mini(q, () => { if (A && A.q === q) arcadeMini(); });
     tickArcade();
   }
-  function arcadeNext() {
-    A.q = arcadeQ(A.kind);
+  function arcadeNext(same) {
+    A.q = same || arcadeQ(A.kind);
     const q = A.q;
     if (A.is3D) {
       main.innerHTML = `<div class="s3">${arcadeHead()}</div>`;
       A.lock = false;
-      ST().ask(q, { help: E.soundHelp(q, 'arcade'), pick: i => arcadePick(i) });
+      ST().ask(q, { help: E.soundHelp(q, 'arcade'), meaning: E.showMeaning(q), pick: i => arcadePick(i) });
       return tickArcade();
     }
     main.innerHTML = `<div class="player arcade">${arcadeHead()}
-      <div class="qbody"><div class="prompt">${q.prompt}</div><div class="bigword"><span class="gk">${esc(q.big)}</span></div>${E.soundHelp(q, 'arcade') && isGreek(q.big) ? `<div class="translit">${esc(U.translit(q.big))}</div>` : ''}
-      <div class="opts">${q.options.map((o, i) => `<button class="opt" data-act="apick" data-arg="${i}"><span class="k">${i + 1}</span><span>${esc(o)}${q.greekOpts && E.soundHelp(q, 'arcade') ? tl(o) : ''}</span></button>`).join('')}</div></div></div>`;
+      <div class="qbody"><div class="prompt">${q.prompt}</div><div class="bigword"><span class="gk">${esc(q.big)}</span></div>${(E.soundHelp(q, 'arcade') || E.showMeaning(q)) && isGreek(q.big) ? `<div class="translit">${esc(E.helpLine(q.big, E.showMeaning(q)))}</div>` : ''}
+      <div class="opts">${q.options.map((o, i) => `<button class="opt" data-act="apick" data-arg="${i}"><span class="k">${i + 1}</span><span>${esc(o)}${q.greekOpts && (E.soundHelp(q, 'arcade') || E.showMeaning(q)) ? tl(o, q) : ''}</span></button>`).join('')}</div></div></div>`;
     tickArcade();
   }
   function arcadePick(i, el) {
@@ -707,8 +724,9 @@
       el.classList.add(ok ? 'right' : 'wrong');
       if (!ok) document.querySelectorAll('.opt')[A.q.answer].classList.add('right');
     }
-    if (!ok) { arcadeMiss(3); sfx('bad'); } else { arcadeHit(); sfx('good', A.combo - 1); }
-    if (A.q.vkey) E.srsAnswer(A.q.vkey, ok);
+    // a peeked answer scores nothing and costs no time
+    if (!ok) { arcadeMiss(3); sfx('bad'); } else if (A.q.peek) { A.combo = 0; arcadeScore(); sfx('good'); } else { arcadeHit(); sfx('good', A.combo - 1); }
+    if (A.q.vkey && !A.q.peek) E.srsAnswer(A.q.vkey, ok);
     setTimeout(() => { if (A) { A.lock = false; arcadeNext(); } }, A.is3D ? (ok ? 700 : 1100) : (ok ? 250 : 700));
   }
   function endArcade() {
@@ -837,7 +855,7 @@
         <label>Daily goal <select id="goalsel">${[20, 50, 100, 200].map(g => `<option value="${g}" ${g === s.dailyGoal ? 'selected' : ''}>${g} XP · ${{ 20: 'Casual', 50: 'Regular', 100: 'Serious', 200: 'Intense' }[g]}</option>`).join('')}</select></label>
         <label class="tg"><input type="checkbox" id="setsound" ${s.settings.sound ? 'checked' : ''}><span>Sound effects</span></label>
         <label class="tg"><input type="checkbox" id="setamb" ${s.settings.ambient !== false ? 'checked' : ''}><span>World sounds <span class="muted small">(birds, wind, water…)</span></span></label>
-        <label>Greek help <select id="helpsel">${[['full', 'Full: pronunciation under every Greek word'], ['some', 'Some: only on the main word in lessons'], ['off', 'Off: just the Greek']].map(([k, t]) => `<option value="${k}" ${E.greekHelp() === k ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+        <label>Greek help <select id="helpsel">${[['english', 'Sound + English: pronunciation and meaning (👁 Peek where the meaning is the answer)'], ['full', 'Sound: pronunciation under every Greek word'], ['some', 'Some: only on the main word in lessons'], ['off', 'Off: just the Greek']].map(([k, t]) => `<option value="${k}" ${E.greekHelp() === k ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
         <label class="tg"><input type="checkbox" id="setspeech" ${s.settings.speech ? 'checked' : ''}><span>Read Greek aloud <span class="muted small">(uses your device's Greek voice, modern pronunciation)</span></span></label>
         <label>After each answer <select id="autosel">${[['fast', 'Move on quickly'], ['normal', 'Move on automatically'], ['relaxed', 'Move on slowly (more time to read)'], ['off', 'Wait for me to tap Continue']].map(([k, t]) => `<option value="${k}" ${(s.settings.autoAdvance || 'normal') === k ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
         <label>Graphics <select id="gfxsel"><option value="high" ${(s.settings.gfx || 'high') === 'high' ? 'selected' : ''}>High (grass, shadows, effects)</option><option value="low" ${s.settings.gfx === 'low' ? 'selected' : ''}>Low (smoother on older phones)</option></select></label>
@@ -922,7 +940,7 @@
     review: () => startReview('review'), mistakes: () => startReview('mistakes'), weak: () => startReview('weak'),
     arcade: k => startArcade(k), apick: (i, el) => arcadePick(i, el),
     quitArcade: () => { if (A) { clearInterval(A.timer); if (A.mini && A.is3D) ST().stopMini(); } A = null; go('arcade'); },
-    power: k => usePower(k),
+    power: k => usePower(k), peek: () => peek(),
     readVerse,
     equip: a => { const [sl, id] = a.split(':'); if (E.equip(sl, id)) { sfx('tap'); renderProfile(); } },
     buyItem: a => {

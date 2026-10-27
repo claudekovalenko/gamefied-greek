@@ -696,3 +696,11 @@ body.irisfx::after { content: ''; position: fixed; inset: 0; z-index: 60; pointe
 .tl { display: block; font-family: var(--ui, Nunito, sans-serif); font-size: .72em; font-style: italic; font-weight: 700; color: var(--muted); margin-top: 2px; }
 .opt .tl, .wbt-opt .tl { font-size: .62em; }
 .sq-word + .translit, .wbt-big + .translit { margin-top: -4px; }
+/* interlinear verses: sound and meaning under each Greek word */
+.verse.il { display: flex; flex-wrap: wrap; gap: 6px 10px; line-height: 1.2; }
+.verse.il .w { display: inline-flex; flex-direction: column; align-items: center; }
+.verse.il .w small { font-family: var(--ui, Nunito, sans-serif); font-size: .5em; font-style: italic; color: var(--muted); }
+.verse.il .w em { font-family: var(--ui, Nunito, sans-serif); font-size: .5em; font-style: normal; font-weight: 700; color: #2f5f8f; max-width: 9em; text-align: center; }
+.pw.peek { background: #eaf2fb; border-color: #9ab8d8; }
+.sq-slots span.ghost { color: rgba(31,59,92,.35); border-color: #b8935a; }
+.sq-tip.center { text-align: center; }

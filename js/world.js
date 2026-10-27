@@ -1188,7 +1188,7 @@ const SQ = makeSideQuests({
     E.save(); updateHUD();
   },
   reward: (xp, coins, q) => { const st = E.state.stats; st[q] = (st[q] || 0) + 1; E.gainXP(xp, coins); E.questProgress(q); E.checkAchievements(); updateHUD(); },
-  helpSound: g => (E.greekHelp() === 'full' ? U.translit(g) : ''),
+  helpSound: g => (['full', 'english'].includes(E.greekHelp()) ? U.translit(g) : ''), meaning: g => E.meaning(g),
   sfx: k => KG.app.sfx(k), speak: g => KG.app.speak(g), toast: (h, c) => KG.app.toast(h, c),
   dialog: (n, h, b) => dialog(n, h, b), free: (x, z) => openGround(x, z, 1.2),
   face: (x, z, tx, tz) => { player.position.set(x, groundAt(x, z), z); player.rotation.y = Math.atan2(tx - x, tz - z); cam.yaw = player.rotation.y + Math.PI; cam.pitch = 0.32; },
@@ -1483,12 +1483,14 @@ function startBattle(w) {
 function battleQ() {
   const { w } = battle, word = battle.words[battle.i], q = battle.q = shadeQuestion(w, word);
   battle.done = false; battle.hinted = false;
-  const b = $('wbattle'), pw = E.powers(), help = E.soundHelp(q, 'battle');
+  const b = $('wbattle'), pw = E.powers(), help = E.soundHelp(q, 'battle') || E.showMeaning(q);
+  // the helper line under Greek (sound, and meaning when allowed or after 👁 Peek)
+  const line = g => esc(E.helpLine(g, E.showMeaning(q)));
   const hp = battle.words.length > 1 ? `<div class="wbt-hp">${battle.words.map((_, k) => `<i class="${k < battle.hp ? 'on' : ''}"></i>`).join('')}</div>` : '';
   b.innerHTML = `<div class="wbt-box ${w.elite || w.raider ? 'elite' : ''}"><div class="wbt-h">${w.raider ? '⚔️ A Raider of Forgetting! It came while you were away and carries off the words you haven\'t reviewed…' : w.elite ? '🔥 An ELITE Shade! It feeds on your weakest words…' : '👻 A Shade of Forgetting!'}</div>${hp}<div class="muted small">${battle.words.length > 1 ? `Three right answers in a row banish it.` : word.spell ? `It is made of a fading spell: <b>${esc(KG.teach[word.spell].spell.name)}</b>. Recast it!` : 'Remember the word to banish it.'}</div>
-    <div class="wbt-q">${q.prompt}</div><div class="wbt-big gk">${esc(q.big || '')}</div>${help && q.big ? `<div class="translit">${esc(U.translit(q.big))}</div>` : ''}
-    <div class="wbt-opts">${q.options.map((o, i) => `<button class="wbt-opt ${q.greekOpts ? 'gk' : ''}" data-bo="${i}"><span class="k">${i + 1}</span>${q.greekOpts ? `<span>${esc(o)}${help ? `<small class="tl">${esc(U.translit(o))}</small>` : ''}</span>` : o}</button>`).join('')}</div>
-    <div class="wbt-pw"><button class="pw" id="wbthint" ${pw.hint ? '' : 'disabled'}>💡 Hint <b>${pw.hint}</b></button><button class="pw" id="wbtshield" ${pw.shield && !P.shield ? '' : 'disabled'}>🛡 Shield <b>${pw.shield}</b></button></div><div id="wbtfb"></div></div>`;
+    <div class="wbt-q">${q.prompt}</div><div class="wbt-big gk">${esc(q.big || '')}</div>${help && q.big ? `<div class="translit" id="wbtbigl">${line(q.big)}</div>` : ''}
+    <div class="wbt-opts">${q.options.map((o, i) => `<button class="wbt-opt ${q.greekOpts ? 'gk' : ''}" data-bo="${i}"><span class="k">${i + 1}</span>${q.greekOpts ? `<span>${esc(o)}${help ? `<small class="tl">${line(o)}</small>` : ''}</span>` : o}</button>`).join('')}</div>
+    <div class="wbt-pw"><button class="pw peek" id="wbtpeek" ${E.showMeaning(q) ? 'disabled' : ''} title="Show the English (this word won't count as remembered)">👁 Peek</button><button class="pw" id="wbthint" ${pw.hint ? '' : 'disabled'}>💡 Hint <b>${pw.hint}</b></button><button class="pw" id="wbtshield" ${pw.shield && !P.shield ? '' : 'disabled'}>🛡 Shield <b>${pw.shield}</b></button></div><div id="wbtfb"></div></div>`;
   b.classList.add('on');
   b.querySelectorAll('[data-bo]').forEach(el => el.onclick = () => answerBattle(+el.dataset.bo, el));
   $('wbthint').onclick = () => {
@@ -1496,6 +1498,13 @@ function battleQ() {
     battle.hinted = true; $('wbthint').disabled = true;
     snd('hint'); U.sample(q.options.map((_, i) => i).filter(i => i !== q.answer), 2).forEach(i => { const el = b.querySelector(`[data-bo="${i}"]`); el.disabled = true; el.classList.add('gone'); });
     updateHUD();
+  };
+  // 👁 Peek: the English appears under the Greek; banishing still works, but the word isn't counted as remembered
+  $('wbtpeek').onclick = () => {
+    if (battle.done || q.peek) return;
+    q.peek = true; $('wbtpeek').disabled = true; snd('page');
+    if (q.greekOpts) b.querySelectorAll('[data-bo]').forEach((el, k) => { const sp = el.querySelector('span:last-child'); if (sp) sp.innerHTML = `${esc(q.options[k])}<small class="tl">${line(q.options[k])}</small>`; });
+    if (q.big) { const l = $('wbtbigl'); if (l) l.textContent = E.helpLine(q.big, true); else b.querySelector('.wbt-big').insertAdjacentHTML('afterend', `<div class="translit" id="wbtbigl">${line(q.big)}</div>`); }
   };
   $('wbtshield').onclick = () => { if (battle.done || P.shield || !E.usePower('shield')) return; P.shield = true; $('wbtshield').disabled = true; snd('shield'); updateHUD(); };
   if (q.speak) KG.app.speak(q.speak);
@@ -1516,7 +1525,7 @@ function answerBattle(i, el) {
   if (!battle || battle.done) return;
   const { q, w } = battle, ok = i === q.answer, last = ok && battle.hp <= 1;
   battle.done = true;
-  E.recordAnswer(q, ok, true);
+  E.recordAnswer(q.peek ? Object.assign({}, q, { vkey: null, skey: null }) : q, ok, true);
   $('wbattle').querySelectorAll('.wbt-opt, .pw').forEach((b, k) => { b.disabled = true; if (k === q.answer) b.classList.add('right'); });
   if (!ok) el.classList.add('wrong');
   let blocked = false;
@@ -2016,7 +2025,7 @@ W.stage = {
   ask: (q, h) => stage.ask(q, h), reveal: (ok, c, r) => stage.reveal(ok, c, r), result: ok => stage.result(ok),
   teach: item => stage.teach(item), trial: foe => stage.trial(foe), mini: (q, done) => stage.mini(q, done),
   hp: f => stage.hp(f), combo: n => stage.combo(n), celebrate: w => stage.celebrate(w), orderLine: () => stage.orderLine(), lock: () => stage.lock(),
-  hint: idx => stage.hint(idx), slow: s => stage.slow(s), shield: on => stage.shield(on), stopMini: () => stage.stopMini(),
+  hint: idx => stage.hint(idx), slow: s => stage.slow(s), shield: on => stage.shield(on), stopMini: () => stage.stopMini(), peekMini: () => stage.peekMini(),
   get active() { return mode === 'stage'; },
 };
 W.onLessonDone = (node, r) => {

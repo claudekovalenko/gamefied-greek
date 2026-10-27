@@ -91,7 +91,10 @@ the wooden bridge, coins, letters that climb the scale, portals, a shade's hum a
 shattering tablets, the rain, march, anvil and clock of the mini-games, and combos that rise in pitch. Each world
 has a quiet background of its own (birds, wind, water, crickets, embers), which can be turned off.
 
-**Help with the Greek** (Profile → Settings → Greek help; Full by default): every Greek word shows how it sounds
+**Help with the Greek** (Profile → Settings → Greek help; *Sound + English* by default): English meanings show under
+Greek wherever they don't give the answer away (verses become interlinear: sound and meaning under each word), and a
+free **👁 Peek** shows them everywhere else, in lessons, the Arcade, shade battles and the villagers' games; a peeked
+word isn't counted as remembered and earns half XP. At every level every Greek word shows how it sounds
 (ἀρχή → archē): the main word, Greek answers, matching stones, Word Rain, shade battles and the side quests the
 villagers give you (fishing, word gates, Rune Circle, Courier, Word Arches). It never shows where it would give the
 answer away (alphabet and letter-sound questions). The forms in Declension Defense and Parsing Forge show their dictionary form and meaning.

@@ -239,6 +239,42 @@ export function createStage(ctx) {
     return g;
   }
 
+  // a verse on a scroll; with Sound + English help, each Greek word has its sound and meaning beneath it (interlinear)
+  function verseBanner(R, w, h) {
+    const verse = R.words.map(x => x.w + x.p).join(' ');
+    if (KG.engine.greekHelp() !== 'english') return banner(verse, w, h, true);
+    const W = 1024, H = Math.round(1024 * h / w), c = document.createElement('canvas'); c.width = W; c.height = H; const x = c.getContext('2d');
+    x.fillStyle = '#f5e9c8'; x.fillRect(0, 0, W, H); x.strokeStyle = '#a07a40'; x.lineWidth = 10; x.strokeRect(8, 8, W - 16, H - 16);
+    const toks = R.words.map(t => ({ g: t.w + t.p, s: U.translit(t.w), m: t.gloss || KG.engine.meaning(t.w) || '' })), pad = 30;
+    let size = 64, lines;
+    for (; size > 14; size -= 2) {
+      const sub = size * 0.4; lines = [[]]; let lw = 0;
+      for (const t of toks) {
+        x.font = `400 ${size}px ${GK}`; let tw = x.measureText(t.g).width;
+        x.font = `700 ${sub}px ${UI}`; tw = Math.max(tw, x.measureText(t.s).width, x.measureText(t.m).width) + size * 0.4;
+        if (lw + tw > W - pad * 2 && lw) { lines.push([]); lw = 0; }
+        lines[lines.length - 1].push(Object.assign({}, t, { tw })); lw += tw;
+      }
+      if (lines.length * size * 2.05 <= H - pad * 2) break;
+    }
+    const lh = size * 2.05, y0 = (H - lines.length * lh) / 2 + size * 0.7, sub = size * 0.4;
+    x.textAlign = 'center'; x.textBaseline = 'middle';
+    lines.forEach((ln, i) => {
+      let cx = (W - ln.reduce((n, t) => n + t.tw, 0)) / 2;
+      for (const t of ln) {
+        const mx = cx + t.tw / 2, y = y0 + i * lh;
+        x.font = `400 ${size}px ${GK}`; x.fillStyle = '#3a2610'; x.fillText(t.g, mx, y);
+        x.font = `italic 700 ${sub}px ${UI}`; x.fillStyle = '#8a6a3a'; x.fillText(t.s, mx, y + size * 0.62);
+        x.font = `700 ${sub}px ${UI}`; x.fillStyle = '#2f5f8f'; x.fillText(t.m, mx, y + size * 0.62 + sub * 1.1);
+        cx += t.tw;
+      }
+    });
+    const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+    const g = new THREE.Group();
+    g.add(new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.08), [stoneMat, stoneMat, stoneMat, stoneMat, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9 }), stoneMat]));
+    for (const sd of [-1, 1]) { const r = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, h + 0.3, 12), M(0x8a5a2a)); r.position.x = sd * (w / 2 + 0.1); g.add(r); }
+    return g;
+  }
   // a small helper line under a Greek word: its pronunciation, or its dictionary form and meaning
   function caption(text, w, h) {
     const tex = textCanvas(text, { W: 1024, H: Math.round(1024 * h / w), maxSize: 64, minSize: 18, color: '#fff8e0', weight: 700 });
@@ -383,18 +419,18 @@ export function createStage(ctx) {
       const big = new THREE.Mesh(new THREE.PlaneGeometry(bigW, bigH), new THREE.MeshBasicMaterial({ map: textCanvas(txt, { W: 1024, H: BH, greek: true, maxSize: Math.round(BH * (txt.length <= 2 ? 1 : 0.78)), minSize: 40, color: '#fff7e0', glass: true, pad: Math.round(BH * (txt.length <= 2 ? 0.03 : 0.1)) }), transparent: true, depthWrite: false }));
       const bg = new THREE.Group(); bg.add(big); bg.userData = { base: new THREE.Vector3() };
       place(bg, 0, portrait ? hh * 0.2 : hh * 0.18); introAnim(bg, 0.05);
-      if (S.h && S.h.help && /[Ͱ-Ͽἀ-῿]/.test(txt)) { const c = caption(U.translit(strip(q.big)), bigW * 0.7, bigH * 0.22); c.position.set(0, -bigH * 0.5, 0.02); bg.add(c); }
+      if (S.h && (S.h.help || S.h.meaning) && /[Ͱ-Ͽἀ-῿]/.test(txt)) { const c = caption(KG.engine.helpLine(strip(q.big), S.h.meaning), bigW * 0.9, bigH * 0.22); c.position.set(0, -bigH * 0.5, 0.02); bg.add(c); }
       S.big = bg;
     }
     const n = q.options.length;
     const cols = portrait ? 2 : Math.min(4, n), rows = Math.ceil(n / cols);
     // Greek answers carry their pronunciation underneath when Greek help is on
-    const sound = !!(S.h && S.h.help && q.greekOpts);
+    const sound = !!(S.h && (S.h.help || S.h.meaning) && q.greekOpts);
     const gap = hw * 0.04, tw = (hw * 1.92 - gap * (cols - 1)) / cols, th = portrait ? hh * 0.22 : hh * 0.3;
     const top = portrait ? -hh * 0.12 : -hh * 0.3;
     q.options.forEach((o, i) => {
       const r = Math.floor(i / cols), c = i % cols;
-      const s = slab(q.greekOpts ? o : strip(o), tw, th, { greek: !!q.greekOpts, num: i + 1, sub: sound ? U.translit(strip(o)) : '' });
+      const s = slab(q.greekOpts ? o : strip(o), tw, th, { greek: !!q.greekOpts, num: i + 1, sub: sound ? KG.engine.helpLine(strip(o), S.h.meaning) : '' });
       const x = -hw * 0.96 + tw / 2 + c * (tw + gap), y = top - r * (th + gap);
       place(s, x, y); introAnim(s, 0.08 + i * 0.06);
       s.userData.pick = { type: 'opt', i };
@@ -409,7 +445,7 @@ export function createStage(ctx) {
     const L = U.shuffle(q.pairs.map((p, i) => ({ t: p[0], i }))), R = U.shuffle(q.pairs.map((p, i) => ({ t: p[1], i })));
     S.match = { sel: null, done: 0, miss: 0, n };
     [L, R].forEach((col, side) => col.forEach((it, k) => {
-      const s = slab(it.t, tw, th, { greek: side === 0 && q.greekLeft, face: side ? '#f3e7c8' : '#e9f0f8', sub: side === 0 && q.greekLeft && S.h && S.h.help ? U.translit(it.t) : '' });
+      const s = slab(it.t, tw, th, { greek: side === 0 && q.greekLeft, face: side ? '#f3e7c8' : '#e9f0f8', sub: side === 0 && q.greekLeft && S.h && (S.h.help || S.h.meaning) ? KG.engine.helpLine(it.t, S.h.meaning) : '' });
       place(s, side ? hw * 0.5 : -hw * 0.5, hh * 0.56 - th / 2 - k * (th + gap));
       introAnim(s, k * 0.05 + side * 0.1);
       s.userData.pick = { type: 'mt', side, i: it.i };
@@ -419,8 +455,7 @@ export function createStage(ctx) {
   }
   function askOrder(q, R) {
     const { hh, hw, portrait } = frame();
-    const verse = R.words.map(w => w.w + w.p).join(' ');
-    const b = banner(verse, Math.min(hw * 1.94, 14), portrait ? hh * 0.42 : hh * 0.36, true); place(b, 0, hh * (portrait ? 0.74 : 0.76)); introAnim(b, 0);
+    const b = verseBanner(R, Math.min(hw * 1.94, 14), portrait ? hh * 0.42 : hh * 0.36); place(b, 0, hh * (portrait ? 0.74 : 0.76)); introAnim(b, 0);
     S.order = { bank: U.shuffle(q.chunks.concat(q.extras).map((t, i) => ({ t, i }))), line: [] };
     S.orderTop = portrait ? hh * 0.42 : hh * 0.28;
     layoutOrder(true);
@@ -461,8 +496,7 @@ export function createStage(ctx) {
   }
   function askFree(R) {
     const { hh, hw, portrait } = frame();
-    const verse = R.words.map(w => w.w + w.p).join(' ');
-    const b = banner(verse, Math.min(hw * 1.94, 14), portrait ? hh * 0.5 : hh * 0.42, true); place(b, 0, hh * 0.62); introAnim(b, 0);
+    const b = verseBanner(R, Math.min(hw * 1.94, 14), portrait ? hh * 0.5 : hh * 0.42); place(b, 0, hh * 0.62); introAnim(b, 0);
   }
 
   // ── picking ────────────────────────────────────────────────
@@ -617,6 +651,16 @@ export function createStage(ctx) {
   // each word caught (or missed) goes back into spaced review
   const word = (tgt, ok) => { if (MG && MG.q.onWord && tgt) MG.q.onWord(tgt.g, ok); };
   S.stopMini = () => { MG = null; clearUI(); };
+  // 👁 Peek in a mini-game: the falling words show their meanings from now on
+  S.peekMini = () => {
+    if (!MG) return; MG.q.peek = true;
+    if (MG.q.game === 'rain') for (const st of MG.items) {
+      const { hh, hw } = frame(), tw = hw * 0.44, th = hh * 0.13, g = st.userData.word;
+      if (!g) continue;
+      for (const c of [...st.children]) if (c.userData.cap) st.remove(c);
+      const c = caption(KG.engine.helpLine(g, true), tw * 1.1, th * 0.5); c.position.set(0, -th * 0.74, 0.1); c.userData.cap = true; st.add(c);
+    }
+  };
   S.mini = (q, done) => {
     clearUI(); S.q = q; S.answered = false; S.locked = false;
     MG = { q, done, hits: 0, total: 0, t: 0, over: false, items: [] };
@@ -639,7 +683,8 @@ export function createStage(ctx) {
     MG.gold = gold;
     words.forEach((g, i) => {
       const st = slab(g, tw, th, { greek: true, face: gold ? '#ffe08a' : '#f3e7c8' }); // a golden round gilds every stone, so the colour never points at the answer
-      if (KG.engine.greekHelp() === 'full' || (KG.engine.greekHelp() === 'some' && !MG.q.arcade)) { const c = caption(U.translit(g), tw * 0.8, th * 0.4); c.position.set(0, -th * 0.68, 0.1); st.add(c); }
+      if (MG.q.peek || KG.engine.greekHelp() !== 'off') { const c = caption(KG.engine.helpLine(g, !!MG.q.peek), tw * 1.1, th * 0.5); c.position.set(0, -th * 0.74, 0.1); c.userData.cap = true; st.add(c); }
+      st.userData.word = g;
       const col = i % 2, x = (col ? 1 : -1) * hw * 0.48 + (Math.random() - 0.5) * hw * 0.1;
       place(st, x, hh * 0.62 + i * hh * 0.16);
       st.userData.pick = { type: 'mini', ok: g === tgt.g };
@@ -767,7 +812,7 @@ export function createStage(ctx) {
     MG.total = MG.q.chunks.length; MG.idx = 0; MG.time = 5 + MG.q.chunks.length * 3.5; MG.left = MG.time; MG.built = [];
     const { hh, hw, portrait } = frame();
     // the verse on a scroll below the clock, your translation growing on a strip beneath it, the choices as tablets below
-    const b = banner(R.words.map(w => w.w + w.p).join(' '), Math.min(hw * 1.7, 11), portrait ? hh * 0.3 : hh * 0.26, true);
+    const b = verseBanner(R, Math.min(hw * 1.7, 11), portrait ? hh * 0.3 : hh * 0.26);
     place(b, 0, hh * (portrait ? 0.5 : 0.52)); introAnim(b, 0);
     if (!MG.q.arcade) { // the arcade has its own clock
       const bw = Math.min(hw * 1.1, 7), bar = new THREE.Mesh(new THREE.BoxGeometry(bw, hh * 0.03, 0.1), new THREE.MeshBasicMaterial({ color: 0xffd166 }));
